@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where ffmpeg *)",
+      "Bash(find /c /d /e -name \"ffmpeg.exe\" -maxdepth 6)"
+    ]
+  }
+}

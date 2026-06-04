@@ -1,0 +1,14 @@
+# AI Editor Assistant — Python Dependencies
+#
+# Install with:  pip install -r requirements.txt
+#
+# Also required (not pip-installable):
+#   ffmpeg — https://ffmpeg.org/download.html
+#   Add ffmpeg to your system PATH after installation.
+
+pydub>=0.25.1       # Audio loading and silence detection
+requests>=2.31.0    # ElevenLabs API HTTP calls
+numpy>=1.26.0       # RMS audio analysis for zoom detection
+
+# Optional — speeds up silence detection on large files:
+# librosa>=0.10.0

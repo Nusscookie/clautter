@@ -1,0 +1,19 @@
+{
+  "elevenlabs_api_key": "",
+  "default_silence_threshold_db": -35,
+  "default_min_silence_ms": 350,
+  "default_padding_ms": 120,
+  "default_zoom_amount": 1.15,
+  "default_zoom_mode": "Standard",
+  "default_max_zooms_per_minute": 4,
+  "default_pace": 5,
+  "subtitle_language": "en",
+  "subtitle_preset": "YouTube",
+  "last_broll_folder": "",
+  "stats": {
+    "total_time_saved_sec": 0.0,
+    "total_edits": 0,
+    "total_zooms_applied": 0,
+    "total_subtitles_generated": 0
+  }
+}
