@@ -22,11 +22,14 @@ Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
 ## Quick Start
 
+> **Python 3.10 / 3.11 / 3.12 only.** DaVinci Resolve's compiled scripting
+> module segfaults on 3.13+.
+
 ```
-1. Install dependencies:  pip install -r requirements.txt
+1. Install dependencies:  py -3.12 -m pip install -r requirements.txt
 2. Install ffmpeg:         https://ffmpeg.org/download.html
-3. Copy folder to:        %APPDATA%\...\DaVinci Resolve\Support\Fusion\Scripts\Utility\
-4. Open DaVinci Resolve → Workspace → Scripts → AI Editor Assistant → main
+3. Copy folder to:        %APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\
+4. Open DaVinci Resolve → Workspace → Scripts → Utility → Clutter → main
 ```
 
 See [INSTALL.md](INSTALL.md) for the full guide.
@@ -61,7 +64,7 @@ Uses ElevenLabs Scribe (Speech-to-Text) API:
 
 1. Enter API key → Save
 2. Choose language + style preset
-3. Click **Generate Transcript** → reviews transcript in the editor
+3. Click **Generate Transcript** → review transcript in the editor
 4. Click **Create Subtitle Track** → imports SRT into timeline
 5. Export SRT / TXT for external use
 
@@ -106,10 +109,24 @@ AI-powered generation (Minimax / Gemini / OpenAI) is planned for V2.
 
 ## Architecture
 
+Two-process model — the GUI is a standalone window that connects to Resolve
+via the external scripting API. This works around `UIManager` being removed
+from DaVinci Resolve free edition in v19.1.
+
+```
+DaVinci Resolve  →  main.py  (Resolve-side launcher, no UI)
+                       └─ subprocess.Popen( py -3.12, gui.py )
+                            └─ gui.py  (standalone customtkinter window)
+                                 └─ src/app.py (AIEditorApp, framework-agnostic)
+                                     ├─ src/<feature>/*.py  (business logic, no widgets)
+                                     ├─ src/ui/<tab>.py     (customtkinter widgets)
+                                     └─ src/utils/resolve_api.py  (Resolve bridge)
+```
+
 ```
 src/
-├── app.py              # Central coordinator
-├── ui/                 # DaVinci UIManager tab layouts + event handlers
+├── app.py              # Central coordinator (framework-agnostic)
+├── ui/                 # customtkinter tab layouts + event handlers
 ├── smartcuts/          # pydub silence detection + timeline reconstruction
 ├── subtitles/          # ElevenLabs STT client + SRT generator + exporter
 ├── zooms/              # Volume peak detection + SetProperty zoom applier
@@ -120,25 +137,28 @@ src/
 └── utils/              # Resolve API helpers, audio loading, logger
 ```
 
+See [CLAUDE.md](CLAUDE.md) for the full design notes and gotchas.
+
 ---
 
 ## Dependencies
 
 | Package | Purpose |
 |---|---|
+| `customtkinter` | The GUI toolkit (resolves the UIManager removal in Resolve free v19.1) |
 | `pydub` | Audio loading and silence detection |
 | `requests` | ElevenLabs API calls |
 | `numpy` | RMS computation for zoom detection |
 | `ffmpeg` (system) | Audio decoding (required by pydub) |
 
-No Qt, no tkinter — UI uses DaVinci Resolve's built-in UIManager (zero extra GUI deps).
+Install with `py -3.12 -m pip install -r requirements.txt`.
 
 ---
 
 ## Compatibility
 
 - DaVinci Resolve **free** and **Studio** (v18+)
-- Python 3.8+
+- **Python 3.10 / 3.11 / 3.12** (3.13+ segfaults on import)
 - Windows, macOS, Linux
 
 ---
