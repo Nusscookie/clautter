@@ -24,7 +24,7 @@ def _ensure_scripting_path() -> None:
         log.debug("Added Resolve scripting path: %s", _SCRIPTING_MODULES)
 
 
-def connect() -> tuple[Any, Any, Any, Any, Any]:
+def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
     """Connect to a running DaVinci Resolve instance.
 
     Returns:
@@ -35,17 +35,21 @@ def connect() -> tuple[Any, Any, Any, Any, Any]:
     """
     _ensure_scripting_path()
 
-    resolve = None
+    # Strategy 0: caller-supplied object (module global injected by Resolve Scripts menu)
+    resolve = resolve_obj
+    if resolve is not None:
+        log.debug("Connected via injected resolve global")
 
     # Strategy 1: DaVinciResolveScript module (external / standalone scripts)
-    try:
-        import DaVinciResolveScript as dvr  # type: ignore
-        resolve = dvr.scriptapp("Resolve")
-        log.debug("Connected via DaVinciResolveScript")
-    except ImportError:
-        log.debug("DaVinciResolveScript not importable — trying built-in globals")
+    if resolve is None:
+        try:
+            import DaVinciResolveScript as dvr  # type: ignore
+            resolve = dvr.scriptapp("Resolve")
+            log.debug("Connected via DaVinciResolveScript")
+        except ImportError:
+            log.debug("DaVinciResolveScript not importable — trying built-in globals")
 
-    # Strategy 2: Globals injected by Resolve when running from Scripts menu
+    # Strategy 2: builtins (some Resolve versions inject resolve there)
     if resolve is None:
         import builtins
         resolve = getattr(builtins, "resolve", None)

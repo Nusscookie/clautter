@@ -4,210 +4,176 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+import customtkinter as ctk
+
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
 
-def build(ui: Any) -> Any:
-    """Return the Smart Cuts tab VGroup layout."""
-    return ui.VGroup({"Spacing": 10, "Weight": 1}, [
+def build(parent: Any) -> None:
+    w: dict[str, Any] = {}
 
-        ui.Label({
-            "Text": "SMART CUTS  —  Remove silences from selected clips",
-            "Weight": 0,
-            "StyleSheet": "font-weight: bold; color: #aaaaaa; font-size: 11px; "
-                          "letter-spacing: 1px;",
-        }),
+    ctk.CTkLabel(
+        parent,
+        text="SMART CUTS  —  Remove silences from selected clips",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color="#aaaaaa",
+        anchor="w",
+    ).pack(fill="x", padx=12, pady=(12, 6))
 
-        # Settings
-        ui.VGroup({"Spacing": 6, "Weight": 0,
-                   "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-            ui.Label({"Text": "DETECTION SETTINGS", "Weight": 0,
-                      "StyleSheet": "font-size: 10px; color: #888888; letter-spacing: 1px;"}),
+    # ── Settings card ──
+    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card.pack(fill="x", padx=10, pady=4)
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Silence Threshold", "Weight": 1}),
-                ui.SpinBox({
-                    "ID": "SCThreshold",
-                    "Minimum": -80,
-                    "Maximum": 0,
-                    "Value": -35,
-                    "SingleStep": 1,
-                    "Weight": 0,
-                    "MinimumSize": [80, 0],
-                }),
-                ui.Label({"Text": "dB", "Weight": 0}),
-            ]),
+    ctk.CTkLabel(card, text="DETECTION SETTINGS",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Min Silence Duration", "Weight": 1}),
-                ui.SpinBox({
-                    "ID": "SCMinDuration",
-                    "Minimum": 50,
-                    "Maximum": 5000,
-                    "Value": 350,
-                    "SingleStep": 50,
-                    "Weight": 0,
-                    "MinimumSize": [80, 0],
-                }),
-                ui.Label({"Text": "ms", "Weight": 0}),
-            ]),
+    w["threshold"] = _labeled_entry(card, "Silence Threshold", "-35", "dB")
+    w["min_dur"] = _labeled_entry(card, "Min Silence Duration", "350", "ms")
+    w["padding"] = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Breathing Room (padding)", "Weight": 1}),
-                ui.SpinBox({
-                    "ID": "SCPadding",
-                    "Minimum": 0,
-                    "Maximum": 1000,
-                    "Value": 120,
-                    "SingleStep": 10,
-                    "Weight": 0,
-                    "MinimumSize": [80, 0],
-                }),
-                ui.Label({"Text": "ms each side", "Weight": 0}),
-            ]),
-        ]),
+    # ── Buttons ──
+    btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+    btn_row.pack(fill="x", padx=10, pady=6)
+    btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-        # Action buttons
-        ui.HGroup({"Spacing": 8, "Weight": 0}, [
-            ui.Button({"ID": "SCAnalyzeBtn", "Text": "Analyze Audio", "Weight": 1}),
-            ui.Button({"ID": "SCPreviewBtn", "Text": "Preview (Add Markers)", "Weight": 1,
-                       "Enabled": False}),
-            ui.Button({
-                "ID": "SCApplyBtn",
-                "Text": "Apply Cuts (New Timeline)",
-                "Weight": 1,
-                "Enabled": False,
-                "StyleSheet": "background: #1565c0; color: white; font-weight: bold;",
-            }),
-        ]),
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio")
+    w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
-        # Progress
-        ui.VGroup({"Spacing": 4, "Weight": 0}, [
-            ui.ProgressBar({
-                "ID": "SCProgress",
-                "Minimum": 0,
-                "Maximum": 100,
-                "Value": 0,
-                "Weight": 0,
-                "Visible": False,
-            }),
-            ui.Label({
-                "ID": "SCStatus",
-                "Text": "Ready. Select clips in the Edit page timeline, then click Analyze.",
-                "Weight": 0,
-                "StyleSheet": "color: #aaaaaa; font-size: 11px;",
-            }),
-        ]),
+    w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
+                                      fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                      state="disabled")
+    w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
-        ui.Label({
-            "Text": "",
-            "Weight": 0,
-            "MinimumSize": [1, 1],
-            "MaximumSize": [9999, 1],
-            "StyleSheet": "background: #444444;",
-        }),
+    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Cuts (New Timeline)",
+                                    fg_color="#1565c0", hover_color="#1976d2",
+                                    state="disabled")
+    w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
-        # Results
-        ui.VGroup({"Spacing": 6, "Weight": 0,
-                   "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-            ui.Label({"Text": "ANALYSIS RESULTS", "Weight": 0,
-                      "StyleSheet": "font-size: 10px; color: #888888; letter-spacing: 1px;"}),
-            ui.HGroup({"Spacing": 20, "Weight": 0}, [
-                ui.VGroup({"Spacing": 2, "Weight": 1}, [
-                    ui.Label({"ID": "SCFoundCount",
-                              "Text": "0",
-                              "Weight": 0,
-                              "StyleSheet": "font-size: 28px; font-weight: bold; color: #4fc3f7;",
-                              "Alignment": {"AlignHCenter": True}}),
-                    ui.Label({"Text": "Silences Found", "Weight": 0,
-                              "Alignment": {"AlignHCenter": True},
-                              "StyleSheet": "color: #888888; font-size: 10px;"}),
-                ]),
-                ui.VGroup({"Spacing": 2, "Weight": 1}, [
-                    ui.Label({"ID": "SCTimeSaved",
-                              "Text": "0.0 s",
-                              "Weight": 0,
-                              "StyleSheet": "font-size: 28px; font-weight: bold; color: #66bb6a;",
-                              "Alignment": {"AlignHCenter": True}}),
-                    ui.Label({"Text": "Estimated Time Saved", "Weight": 0,
-                              "Alignment": {"AlignHCenter": True},
-                              "StyleSheet": "color: #888888; font-size: 10px;"}),
-                ]),
-                ui.VGroup({"Spacing": 2, "Weight": 1}, [
-                    ui.Label({"ID": "SCClipsCount",
-                              "Text": "0",
-                              "Weight": 0,
-                              "StyleSheet": "font-size: 28px; font-weight: bold; color: #ffa726;",
-                              "Alignment": {"AlignHCenter": True}}),
-                    ui.Label({"Text": "Clips Analyzed", "Weight": 0,
-                              "Alignment": {"AlignHCenter": True},
-                              "StyleSheet": "color: #888888; font-size: 10px;"}),
-                ]),
-            ]),
-        ]),
+    # ── Progress ──
+    w["progress"] = ctk.CTkProgressBar(parent, height=6)
+    w["progress"].set(0)
+    w["progress_frame"] = ctk.CTkFrame(parent, height=6, fg_color="transparent")
+    w["progress_frame"].pack(fill="x", padx=10, pady=(2, 0))
 
-        ui.VGroup({"Weight": 1}, []),  # spacer
+    w["status"] = ctk.CTkLabel(
+        parent,
+        text="Ready. Select clips in the Edit page timeline, then click Analyze.",
+        font=ctk.CTkFont(size=11),
+        text_color="#aaaaaa",
+        anchor="w",
+        wraplength=800,
+    )
+    w["status"].pack(fill="x", padx=12, pady=(2, 4))
 
-        ui.Label({
-            "ID": "SCNewTimelineName",
-            "Text": "",
-            "Weight": 0,
-            "StyleSheet": "color: #66bb6a; font-size: 11px;",
-        }),
-    ])
+    _divider(parent)
+
+    # ── Results ──
+    ctk.CTkLabel(parent, text="ANALYSIS RESULTS",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=12, pady=(8, 4))
+
+    results_row = ctk.CTkFrame(parent, fg_color="transparent")
+    results_row.pack(fill="x", padx=10, pady=2)
+    results_row.grid_columnconfigure((0, 1, 2), weight=1)
+
+    w["found_count"] = _stat_card(results_row, "Silences Found", "0", "#4fc3f7")
+    w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
+    w["time_saved"] = _stat_card(results_row, "Estimated Time Saved", "0.0 s", "#66bb6a")
+    w["time_saved"].grid(row=0, column=1, padx=4, sticky="ew")
+    w["clips_count"] = _stat_card(results_row, "Clips Analyzed", "0", "#ffa726")
+    w["clips_count"].grid(row=0, column=2, padx=(4, 0), sticky="ew")
+
+    w["new_timeline_lbl"] = ctk.CTkLabel(
+        parent, text="", font=ctk.CTkFont(size=11), text_color="#66bb6a", anchor="w")
+    w["new_timeline_lbl"].pack(fill="x", padx=12, pady=(6, 12))
+
+    parent._w = w
 
 
-def setup(win: Any, app: Any, disp: Any) -> None:
-    """Connect Smart Cuts event handlers."""
+def _labeled_entry(parent: Any, label: str, default: str, unit: str) -> ctk.CTkEntry:
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    row.pack(fill="x", padx=10, pady=2)
+    row.grid_columnconfigure(0, weight=1)
 
-    # Cached analysis results for Apply step
+    ctk.CTkLabel(row, text=label, anchor="w").grid(row=0, column=0, sticky="w")
+    entry = ctk.CTkEntry(row, width=90, justify="center")
+    entry.insert(0, default)
+    entry.grid(row=0, column=1, padx=6)
+    ctk.CTkLabel(row, text=unit, text_color="#888888",
+                 font=ctk.CTkFont(size=11)).grid(row=0, column=2)
+    return entry
+
+
+def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:
+    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    val = ctk.CTkLabel(card, text=default,
+                       font=ctk.CTkFont(size=24, weight="bold"), text_color=color)
+    val.pack(pady=(8, 2))
+    ctk.CTkLabel(card, text=label, font=ctk.CTkFont(size=10),
+                 text_color="#888888").pack(pady=(0, 8))
+    card._val = val
+    return card
+
+
+def _divider(parent: Any) -> None:
+    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+        fill="x", padx=10, pady=6)
+
+
+def setup(frame: Any, app: Any) -> None:
+    w = frame._w
+
     _state: dict[str, Any] = {
-        "silence_regions": [],  # list of (clip, [SilenceRegion])
+        "silence_regions": [],
         "total_silences": 0,
         "total_time_saved": 0.0,
         "clips": [],
     }
 
-    def _set_status(msg: str, color: str = "#aaaaaa") -> None:
-        try:
-            lbl = win.Find("SCStatus")
-            lbl.SetText(msg)
-            lbl.StyleSheet = f"color: {color}; font-size: 11px;"
-        except Exception:
-            pass
+    def _ui(fn: Any) -> None:
+        frame.after(0, fn)
 
-    def _set_progress(value: int, visible: bool = True) -> None:
-        try:
-            pb = win.Find("SCProgress")
-            pb.Visible = visible
-            pb.Value = value
-        except Exception:
-            pass
+    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+        _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
-    def _on_analyze_thread() -> None:
+    def set_progress(value: float, visible: bool = True) -> None:
+        def _apply() -> None:
+            if visible:
+                w["progress"].pack(in_=w["progress_frame"], fill="x")
+                w["progress"].set(value / 100.0)
+            else:
+                w["progress"].pack_forget()
+        _ui(_apply)
+
+    def set_btn(name: str, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        _ui(lambda: w[name].configure(state=state))
+
+    def _analyze_thread() -> None:
         try:
-            from src.smartcuts.analyzer import detect_silences, SilenceRegion
+            from src.smartcuts.analyzer import detect_silences
             from src.utils.resolve_api import get_clip_file_path
 
-            win.Find("SCAnalyzeBtn").Enabled = False
-            win.Find("SCApplyBtn").Enabled = False
-            win.Find("SCPreviewBtn").Enabled = False
-            _set_progress(0, True)
-            _set_status("Refreshing timeline...", "#aaaaaa")
+            set_btn("analyze_btn", False)
+            set_btn("apply_btn", False)
+            set_btn("preview_btn", False)
+            set_progress(0, True)
+            set_status("Refreshing timeline...")
 
             app.refresh_timeline()
             clips = app.get_video_clips(1)
             if not clips:
-                _set_status("No clips found on Video Track 1.", "#ff6b6b")
-                _set_progress(0, False)
-                win.Find("SCAnalyzeBtn").Enabled = True
+                set_status("No clips found on Video Track 1.", "#ff6b6b")
+                set_progress(0, False)
+                set_btn("analyze_btn", True)
                 return
 
-            threshold = win.Find("SCThreshold").Value
-            min_dur = win.Find("SCMinDuration").Value
-            padding = win.Find("SCPadding").Value
+            threshold = float(w["threshold"].get())
+            min_dur = float(w["min_dur"].get())
+            padding = float(w["padding"].get())
 
             _state["clips"] = clips
             _state["silence_regions"] = []
@@ -215,24 +181,23 @@ def setup(win: Any, app: Any, disp: Any) -> None:
             total_ms = 0.0
 
             for i, clip in enumerate(clips):
-                _set_status(f"Analyzing clip {i + 1} / {len(clips)}...", "#aaaaaa")
-                _set_progress(int((i / len(clips)) * 90))
+                set_status(f"Analyzing clip {i + 1} / {len(clips)}...")
+                set_progress(int((i / len(clips)) * 90))
 
                 file_path = get_clip_file_path(clip)
                 if not file_path:
-                    log.warning("Clip %d: no file path, skipping", i)
                     _state["silence_regions"].append((clip, []))
                     continue
 
                 try:
                     regions = detect_silences(
                         file_path,
-                        threshold_db=float(threshold),
-                        min_duration_ms=float(min_dur),
-                        padding_ms=float(padding),
+                        threshold_db=threshold,
+                        min_duration_ms=min_dur,
+                        padding_ms=padding,
                     )
                 except Exception as e:
-                    log.error("Analysis error for clip %d: %s", i, e)
+                    log.error("Analysis error clip %d: %s", i, e)
                     regions = []
 
                 _state["silence_regions"].append((clip, regions))
@@ -242,59 +207,51 @@ def setup(win: Any, app: Any, disp: Any) -> None:
             _state["total_silences"] = total_silences
             _state["total_time_saved"] = total_ms / 1000.0
 
-            win.Find("SCFoundCount").SetText(str(total_silences))
-            win.Find("SCTimeSaved").SetText(f"{_state['total_time_saved']:.1f} s")
-            win.Find("SCClipsCount").SetText(str(len(clips)))
+            _ui(lambda: w["found_count"]._val.configure(text=str(total_silences)))
+            _ui(lambda: w["time_saved"]._val.configure(
+                text=f"{_state['total_time_saved']:.1f} s"))
+            _ui(lambda: w["clips_count"]._val.configure(text=str(len(clips))))
 
-            _set_progress(100)
+            set_progress(100)
             if total_silences > 0:
-                _set_status(
+                set_status(
                     f"Found {total_silences} silence(s) totaling "
-                    f"{_state['total_time_saved']:.1f}s across {len(clips)} clip(s). "
-                    "Click Apply Cuts to create a new trimmed timeline.",
+                    f"{_state['total_time_saved']:.1f}s. Click Apply Cuts.",
                     "#66bb6a",
                 )
-                win.Find("SCApplyBtn").Enabled = True
-                win.Find("SCPreviewBtn").Enabled = True
+                set_btn("apply_btn", True)
+                set_btn("preview_btn", True)
             else:
-                _set_status("No significant silences found. Try lowering the threshold.", "#ffa726")
-
-            _set_progress(0, False)
+                set_status("No significant silences found. Try lowering the threshold.", "#ffa726")
+            set_progress(0, False)
 
         except Exception as e:
             log.error("Analyze thread error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
-            _set_progress(0, False)
+            set_status(f"Error: {e}", "#ff6b6b")
+            set_progress(0, False)
         finally:
-            win.Find("SCAnalyzeBtn").Enabled = True
+            set_btn("analyze_btn", True)
 
-    def _on_apply_thread() -> None:
+    def _apply_thread() -> None:
         try:
             from src.smartcuts.cutter import apply_cuts
 
-            win.Find("SCApplyBtn").Enabled = False
-            win.Find("SCAnalyzeBtn").Enabled = False
-            _set_progress(0, True)
-            _set_status("Creating new timeline with silence removed...", "#aaaaaa")
+            set_btn("apply_btn", False)
+            set_btn("analyze_btn", False)
+            set_progress(0, True)
+            set_status("Creating new timeline with silence removed...")
 
             def progress_cb(current: int, total: int, msg: str) -> None:
-                pct = int((current / max(total, 1)) * 100)
-                _set_progress(pct)
-                _set_status(msg, "#aaaaaa")
-
-            # Flatten: pass all clips (not per-clip silence data — cutter re-analyzes)
-            clips = _state["clips"]
-            threshold = win.Find("SCThreshold").Value
-            min_dur = win.Find("SCMinDuration").Value
-            padding = win.Find("SCPadding").Value
+                set_progress(int((current / max(total, 1)) * 100))
+                set_status(msg)
 
             result = apply_cuts(
                 resolve=app.resolve,
                 timeline=app.timeline,
-                clips=clips,
-                threshold_db=float(threshold),
-                min_duration_ms=float(min_dur),
-                padding_ms=float(padding),
+                clips=_state["clips"],
+                threshold_db=float(w["threshold"].get()),
+                min_duration_ms=float(w["min_dur"].get()),
+                padding_ms=float(w["padding"].get()),
                 progress_callback=progress_cb,
             )
 
@@ -302,32 +259,31 @@ def setup(win: Any, app: Any, disp: Any) -> None:
             app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
             app.settings.add_stat("total_edits", 1)
 
-            _set_progress(100)
-            _set_status(
+            set_progress(100)
+            set_status(
                 f"Done! New timeline: '{result.new_timeline_name}' "
                 f"({result.time_saved_sec:.1f}s removed)",
                 "#66bb6a",
             )
-            win.Find("SCNewTimelineName").SetText(
-                f"Created: \"{result.new_timeline_name}\""
-            )
-            _set_progress(0, False)
+            _ui(lambda: w["new_timeline_lbl"].configure(
+                text=f"Created: \"{result.new_timeline_name}\""))
+            set_progress(0, False)
 
         except Exception as e:
             log.error("Apply thread error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
-            _set_progress(0, False)
+            set_status(f"Error: {e}", "#ff6b6b")
+            set_progress(0, False)
         finally:
-            win.Find("SCApplyBtn").Enabled = True
-            win.Find("SCAnalyzeBtn").Enabled = True
+            set_btn("apply_btn", True)
+            set_btn("analyze_btn", True)
 
-    def _on_preview_thread() -> None:
+    def _preview_thread() -> None:
         try:
-            win.Find("SCPreviewBtn").Enabled = False
-            _set_status("Adding markers at silence locations...", "#aaaaaa")
+            set_btn("preview_btn", False)
+            set_status("Adding markers at silence locations...")
 
             if not app.timeline:
-                _set_status("No active timeline.", "#ff6b6b")
+                set_status("No active timeline.", "#ff6b6b")
                 return
 
             marker_count = 0
@@ -336,45 +292,39 @@ def setup(win: Any, app: Any, disp: Any) -> None:
                     frame_offset = int((region.start_ms / 1000.0) * app.fps)
                     try:
                         clip.AddMarker(
-                            frame_offset,
-                            "Red",
-                            "Silence",
+                            frame_offset, "Red", "Silence",
                             f"Silence: {region.duration_ms:.0f}ms",
-                            int((region.duration_ms / 1000.0) * app.fps),
-                            "",
+                            int((region.duration_ms / 1000.0) * app.fps), "",
                         )
                         marker_count += 1
                     except Exception as me:
                         log.debug("Marker add error: %s", me)
 
-            _set_status(
-                f"Added {marker_count} marker(s) on timeline. Red markers = silences.",
-                "#66bb6a",
-            )
+            set_status(f"Added {marker_count} marker(s). Red markers = silences.", "#66bb6a")
         except Exception as e:
             log.error("Preview thread error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
+            set_status(f"Error: {e}", "#ff6b6b")
         finally:
-            win.Find("SCPreviewBtn").Enabled = True
+            set_btn("preview_btn", True)
 
-    def on_analyze(ev: Any) -> None:
+    def on_analyze() -> None:
         if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
-        threading.Thread(target=_on_analyze_thread, daemon=True).start()
+        threading.Thread(target=_analyze_thread, daemon=True).start()
 
-    def on_apply(ev: Any) -> None:
+    def on_apply() -> None:
         if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
-        threading.Thread(target=_on_apply_thread, daemon=True).start()
+        threading.Thread(target=_apply_thread, daemon=True).start()
 
-    def on_preview(ev: Any) -> None:
+    def on_preview() -> None:
         if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
-        threading.Thread(target=_on_preview_thread, daemon=True).start()
+        threading.Thread(target=_preview_thread, daemon=True).start()
 
-    win.On.SCAnalyzeBtn.Clicked = on_analyze
-    win.On.SCApplyBtn.Clicked = on_apply
-    win.On.SCPreviewBtn.Clicked = on_preview
+    w["analyze_btn"].configure(command=on_analyze)
+    w["apply_btn"].configure(command=on_apply)
+    w["preview_btn"].configure(command=on_preview)

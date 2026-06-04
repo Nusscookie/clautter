@@ -25,7 +25,7 @@ Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 ```
 1. Install dependencies:  pip install -r requirements.txt
 2. Install ffmpeg:         https://ffmpeg.org/download.html
-3. Copy folder to:        %APPDATA%\...\DaVinci Resolve\Support\Fusion\Scripts\Edit\
+3. Copy folder to:        %APPDATA%\...\DaVinci Resolve\Support\Fusion\Scripts\Utility\
 4. Open DaVinci Resolve → Workspace → Scripts → AI Editor Assistant → main
 ```
 

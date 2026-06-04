@@ -15,10 +15,10 @@ _PLUGIN_NAME = "Clutter"
 # Target directories per platform
 _TARGETS = {
     "win32": Path(os.environ.get("APPDATA", "~")) / "Blackmagic Design" / "DaVinci Resolve"
-             / "Support" / "Fusion" / "Scripts" / "Edit",
+             / "Support" / "Fusion" / "Scripts" / "Utility",
     "darwin": Path.home() / "Library" / "Application Support" / "Blackmagic Design"
-              / "DaVinci Resolve" / "Fusion" / "Scripts" / "Edit",
-    "linux": Path.home() / ".local" / "share" / "DaVinciResolve" / "Fusion" / "Scripts" / "Edit",
+              / "DaVinci Resolve" / "Fusion" / "Scripts" / "Utility",
+    "linux": Path.home() / ".local" / "share" / "DaVinciResolve" / "Fusion" / "Scripts" / "Utility",
 }
 
 
@@ -42,20 +42,27 @@ def main() -> None:
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    if dest.exists():
-        print(f"Removing old installation: {dest}")
-        shutil.rmtree(dest)
+    action = "Updating" if dest.exists() else "Installing"
+    print(f"{action}: {dest}")
 
-    shutil.copytree(str(_PLUGIN_DIR), str(dest))
+    shutil.copytree(
+        str(_PLUGIN_DIR),
+        str(dest),
+        ignore=shutil.ignore_patterns(
+            ".git", ".claude", "__pycache__", "*.pyc",
+            "install.py", "INSTALL.md", "README.md",
+        ),
+        dirs_exist_ok=True,
+    )
     print(f"\nInstalled to: {dest}")
     print()
     print("Next steps:")
-    print("  1. Install Python dependencies:")
-    print(f"     pip install -r \"{dest / 'requirements.txt'}\"")
+    print("  1. Install Python 3.12 dependencies (Python 3.13+ will segfault):")
+    print(f"     py -3.12 -m pip install -r \"{dest / 'requirements.txt'}\"")
     print("  2. Install ffmpeg and add to PATH:")
     print("     https://ffmpeg.org/download.html")
     print("  3. Open DaVinci Resolve")
-    print("  4. Go to: Workspace > Scripts > Edit > AI Editor Assistant > main")
+    print("  4. Go to: Workspace > Scripts > Utility > Clutter > main")
     print()
     print("Done!")
 

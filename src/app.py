@@ -32,7 +32,7 @@ class AIEditorApp:
     # Connection
     # ------------------------------------------------------------------
 
-    def connect(self) -> bool:
+    def connect(self, resolve_obj=None) -> bool:
         """Connect to a running DaVinci Resolve instance.
 
         Returns True on success, False on failure.
@@ -46,7 +46,7 @@ class AIEditorApp:
                 self.project,
                 self.media_pool,
                 self.timeline,
-            ) = connect()
+            ) = connect(resolve_obj=resolve_obj)
             self.fps = get_fps(self.project)
             self._connected = True
             log.info("App connected | FPS: %.2f", self.fps)

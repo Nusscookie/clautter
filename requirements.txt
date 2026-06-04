@@ -1,6 +1,9 @@
 # AI Editor Assistant — Python Dependencies
 #
-# Install with:  pip install -r requirements.txt
+# Install with:  py -3.12 -m pip install -r requirements.txt
+#
+# Python 3.10–3.12 only. DaVinci Resolve's compiled scripting module
+# (DaVinciResolveScript.pyd) segfaults on Python 3.13+.
 #
 # Also required (not pip-installable):
 #   ffmpeg — https://ffmpeg.org/download.html
@@ -9,6 +12,7 @@
 pydub>=0.25.1       # Audio loading and silence detection
 requests>=2.31.0    # ElevenLabs API HTTP calls
 numpy>=1.26.0       # RMS audio analysis for zoom detection
+customtkinter>=5.2.0  # GUI framework (replaces Fusion UIManager, removed in Resolve free v19.1)
 
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

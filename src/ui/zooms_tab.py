@@ -4,6 +4,8 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+import customtkinter as ctk
+
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -12,208 +14,189 @@ _MODES = ["Conservative", "Standard", "High Energy"]
 _MODE_SIGMA = {"Conservative": 2.0, "Standard": 1.0, "High Energy": 0.5}
 
 
-def build(ui: Any) -> Any:
-    """Return the Auto Zooms tab VGroup layout."""
-    return ui.VGroup({"Spacing": 10, "Weight": 1}, [
+def build(parent: Any) -> None:
+    w: dict[str, Any] = {}
 
-        ui.Label({
-            "Text": "AUTO ZOOMS  —  Apply dynamic zoom cuts based on audio energy",
-            "Weight": 0,
-            "StyleSheet": "font-weight: bold; color: #aaaaaa; font-size: 11px; "
-                          "letter-spacing: 1px;",
-        }),
+    ctk.CTkLabel(
+        parent,
+        text="AUTO ZOOMS  —  Apply dynamic zoom cuts based on audio energy",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color="#aaaaaa",
+        anchor="w",
+    ).pack(fill="x", padx=12, pady=(12, 6))
 
-        # Settings
-        ui.VGroup({"Spacing": 6, "Weight": 0,
-                   "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-            ui.Label({"Text": "ZOOM SETTINGS", "Weight": 0,
-                      "StyleSheet": "font-size: 10px; color: #888888; letter-spacing: 1px;"}),
+    # ── Settings card ──
+    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card.pack(fill="x", padx=10, pady=4)
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Energy Mode", "Weight": 1}),
-                ui.ComboBox({"ID": "ZoomMode", "Weight": 1}),
-            ]),
+    ctk.CTkLabel(card, text="ZOOM SETTINGS",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Zoom Amount", "Weight": 1}),
-                ui.Slider({
-                    "ID": "ZoomAmount",
-                    "Minimum": 105,
-                    "Maximum": 150,
-                    "Value": 115,
-                    "Weight": 1,
-                }),
-                ui.Label({"ID": "ZoomAmountLabel", "Text": "115%",
-                          "Weight": 0, "MinimumSize": [40, 0],
-                          "StyleSheet": "color: #4fc3f7;"}),
-            ]),
+    mode_row = ctk.CTkFrame(card, fg_color="transparent")
+    mode_row.pack(fill="x", padx=10, pady=2)
+    mode_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(mode_row, text="Energy Mode").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["mode"] = ctk.CTkComboBox(mode_row, values=_MODES, state="readonly")
+    w["mode"].set("Standard")
+    w["mode"].grid(row=0, column=1, sticky="ew")
 
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.Label({"Text": "Max Zooms Per Minute", "Weight": 1}),
-                ui.SpinBox({
-                    "ID": "ZoomMaxPerMin",
-                    "Minimum": 1,
-                    "Maximum": 20,
-                    "Value": 4,
-                    "Weight": 0,
-                    "MinimumSize": [60, 0],
-                }),
-            ]),
+    amount_row = ctk.CTkFrame(card, fg_color="transparent")
+    amount_row.pack(fill="x", padx=10, pady=2)
+    amount_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(amount_row, text="Zoom Amount").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["zoom_slider"] = ctk.CTkSlider(amount_row, from_=105, to=150, number_of_steps=45)
+    w["zoom_slider"].set(115)
+    w["zoom_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
+    w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color="#4fc3f7", width=44)
+    w["zoom_lbl"].grid(row=0, column=2)
 
-            ui.HGroup({"Spacing": 12, "Weight": 0}, [
-                ui.CheckBox({"ID": "ZoomFade", "Text": "Fade Zooms (Dynamic Zoom Ease)",
-                             "Checked": True, "Weight": 1}),
-                ui.CheckBox({"ID": "ZoomHardCut", "Text": "Hard Cut Zooms",
-                             "Checked": False, "Weight": 1}),
-            ]),
-        ]),
+    max_row = ctk.CTkFrame(card, fg_color="transparent")
+    max_row.pack(fill="x", padx=10, pady=2)
+    max_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(max_row, text="Max Zooms Per Minute").grid(row=0, column=0, sticky="w",
+                                                             padx=(0, 12))
+    w["max_per_min"] = ctk.CTkEntry(max_row, width=70, justify="center")
+    w["max_per_min"].insert(0, "4")
+    w["max_per_min"].grid(row=0, column=1, sticky="w")
 
-        # Buttons
-        ui.HGroup({"Spacing": 8, "Weight": 0}, [
-            ui.Button({"ID": "ZoomAnalyzeBtn", "Text": "Analyze Audio", "Weight": 1}),
-            ui.Button({"ID": "ZoomPreviewBtn", "Text": "Preview (Add Markers)",
-                       "Weight": 1, "Enabled": False}),
-            ui.Button({
-                "ID": "ZoomApplyBtn",
-                "Text": "Apply Zooms (New Timeline)",
-                "Weight": 1,
-                "Enabled": False,
-                "StyleSheet": "background: #6a1b9a; color: white; font-weight: bold;",
-            }),
-        ]),
+    check_row = ctk.CTkFrame(card, fg_color="transparent")
+    check_row.pack(fill="x", padx=10, pady=(2, 10))
+    w["fade_zoom"] = ctk.CTkCheckBox(check_row, text="Fade Zooms (Dynamic Zoom Ease)")
+    w["fade_zoom"].pack(side="left", padx=(0, 16))
+    w["fade_zoom"].select()
+    w["hard_cut"] = ctk.CTkCheckBox(check_row, text="Hard Cut Zooms")
+    w["hard_cut"].pack(side="left")
 
-        # Progress
-        ui.VGroup({"Spacing": 4, "Weight": 0}, [
-            ui.ProgressBar({
-                "ID": "ZoomProgress",
-                "Minimum": 0,
-                "Maximum": 100,
-                "Value": 0,
-                "Visible": False,
-            }),
-            ui.Label({
-                "ID": "ZoomStatus",
-                "Text": "Click Analyze to detect high-energy moments for zooms.",
-                "Weight": 0,
-                "StyleSheet": "color: #aaaaaa; font-size: 11px;",
-            }),
-        ]),
+    # ── Buttons ──
+    btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+    btn_row.pack(fill="x", padx=10, pady=6)
+    btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-        ui.Label({
-            "Text": "",
-            "Weight": 0,
-            "MinimumSize": [1, 1],
-            "MaximumSize": [9999, 1],
-            "StyleSheet": "background: #444444;",
-        }),
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio")
+    w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
-        # Results
-        ui.HGroup({"Spacing": 12, "Weight": 0}, [
-            ui.VGroup({"Spacing": 2, "Weight": 1,
-                       "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-                ui.Label({"ID": "ZoomFoundCount",
-                          "Text": "0",
-                          "Weight": 0,
-                          "StyleSheet": "font-size: 28px; font-weight: bold; color: #ab47bc;",
-                          "Alignment": {"AlignHCenter": True}}),
-                ui.Label({"Text": "Zoom Points Found", "Weight": 0,
-                          "Alignment": {"AlignHCenter": True},
-                          "StyleSheet": "color: #888888; font-size: 10px;"}),
-            ]),
-            ui.VGroup({"Spacing": 2, "Weight": 1,
-                       "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-                ui.Label({"ID": "ZoomAppliedCount",
-                          "Text": "0",
-                          "Weight": 0,
-                          "StyleSheet": "font-size: 28px; font-weight: bold; color: #66bb6a;",
-                          "Alignment": {"AlignHCenter": True}}),
-                ui.Label({"Text": "Zooms Applied", "Weight": 0,
-                          "Alignment": {"AlignHCenter": True},
-                          "StyleSheet": "color: #888888; font-size: 10px;"}),
-            ]),
-        ]),
+    w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
+                                      fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                      state="disabled")
+    w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
-        ui.VGroup({"Weight": 1}, []),  # spacer
+    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Zooms (New Timeline)",
+                                    fg_color="#6a1b9a", hover_color="#7b1fa2",
+                                    state="disabled")
+    w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
-        ui.Label({
-            "ID": "ZoomNewTimelineName",
-            "Text": "",
-            "Weight": 0,
-            "StyleSheet": "color: #66bb6a; font-size: 11px;",
-        }),
-    ])
+    # ── Progress ──
+    w["progress"] = ctk.CTkProgressBar(parent, height=6)
+    w["progress"].set(0)
+    w["progress_frame"] = ctk.CTkFrame(parent, height=6, fg_color="transparent")
+    w["progress_frame"].pack(fill="x", padx=10, pady=(2, 0))
+
+    w["status"] = ctk.CTkLabel(
+        parent, text="Click Analyze to detect high-energy moments for zooms.",
+        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+    w["status"].pack(fill="x", padx=12, pady=(2, 4))
+
+    _divider(parent)
+
+    # ── Results ──
+    results_row = ctk.CTkFrame(parent, fg_color="transparent")
+    results_row.pack(fill="x", padx=10, pady=4)
+    results_row.grid_columnconfigure((0, 1), weight=1)
+
+    w["found_count"] = _stat_card(results_row, "Zoom Points Found", "0", "#ab47bc")
+    w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
+    w["applied_count"] = _stat_card(results_row, "Zooms Applied", "0", "#66bb6a")
+    w["applied_count"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+    w["new_timeline_lbl"] = ctk.CTkLabel(
+        parent, text="", font=ctk.CTkFont(size=11), text_color="#66bb6a", anchor="w")
+    w["new_timeline_lbl"].pack(fill="x", padx=12, pady=(6, 12))
+
+    parent._w = w
 
 
-def setup(win: Any, app: Any, disp: Any) -> None:
-    """Connect Auto Zooms event handlers."""
+def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:
+    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    val = ctk.CTkLabel(card, text=default,
+                       font=ctk.CTkFont(size=24, weight="bold"), text_color=color)
+    val.pack(pady=(8, 2))
+    ctk.CTkLabel(card, text=label, font=ctk.CTkFont(size=10),
+                 text_color="#888888").pack(pady=(0, 8))
+    card._val = val
+    return card
 
-    # Populate mode dropdown
-    mode_combo = win.Find("ZoomMode")
-    for m in _MODES:
-        mode_combo.AddItem(m)
-    mode_combo.CurrentIndex = 1  # Standard
+
+def _divider(parent: Any) -> None:
+    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+        fill="x", padx=10, pady=6)
+
+
+def setup(frame: Any, app: Any) -> None:
+    w = frame._w
 
     _state: dict[str, Any] = {
-        "zoom_points": [],  # list of ZoomPoint
+        "zoom_points": [],
         "clips": [],
     }
 
-    def _set_status(msg: str, color: str = "#aaaaaa") -> None:
-        try:
-            lbl = win.Find("ZoomStatus")
-            lbl.SetText(msg)
-            lbl.StyleSheet = f"color: {color}; font-size: 11px;"
-        except Exception:
-            pass
+    def _ui(fn: Any) -> None:
+        frame.after(0, fn)
 
-    def _set_progress(value: int, visible: bool = True) -> None:
-        try:
-            pb = win.Find("ZoomProgress")
-            pb.Visible = visible
-            pb.Value = value
-        except Exception:
-            pass
+    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+        _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
-    def on_zoom_slider(ev: Any) -> None:
-        val = win.Find("ZoomAmount").Value
-        win.Find("ZoomAmountLabel").SetText(f"{val}%")
+    def set_progress(value: float, visible: bool = True) -> None:
+        def _apply() -> None:
+            if visible:
+                w["progress"].pack(in_=w["progress_frame"], fill="x")
+                w["progress"].set(value / 100.0)
+            else:
+                w["progress"].pack_forget()
+        _ui(_apply)
+
+    def set_btn(name: str, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        _ui(lambda: w[name].configure(state=state))
+
+    def on_zoom_slider(value: float) -> None:
+        _ui(lambda: w["zoom_lbl"].configure(text=f"{int(value)}%"))
 
     def _analyze_thread() -> None:
         try:
             from src.zooms.analyzer import detect_zoom_points
             from src.utils.resolve_api import get_clip_file_path
 
-            win.Find("ZoomAnalyzeBtn").Enabled = False
-            win.Find("ZoomApplyBtn").Enabled = False
-            win.Find("ZoomPreviewBtn").Enabled = False
-            _set_progress(0, True)
-            _set_status("Analyzing audio for high-energy moments...", "#aaaaaa")
+            set_btn("analyze_btn", False)
+            set_btn("apply_btn", False)
+            set_btn("preview_btn", False)
+            set_progress(0, True)
+            set_status("Analyzing audio for high-energy moments...")
 
             app.refresh_timeline()
             clips = app.get_video_clips(1)
             if not clips:
-                _set_status("No clips found on Video Track 1.", "#ff6b6b")
-                _set_progress(0, False)
+                set_status("No clips found on Video Track 1.", "#ff6b6b")
+                set_progress(0, False)
                 return
 
-            mode_name = win.Find("ZoomMode").CurrentText
+            mode_name = w["mode"].get()
             sigma = _MODE_SIGMA.get(mode_name, 1.0)
-            max_per_min = win.Find("ZoomMaxPerMin").Value
-            zoom_pct = win.Find("ZoomAmount").Value / 100.0
+            max_per_min = int(w["max_per_min"].get())
+            zoom_pct = w["zoom_slider"].get() / 100.0
 
             all_zoom_points = []
             _state["clips"] = clips
 
             for i, clip in enumerate(clips):
-                _set_progress(int((i / len(clips)) * 90))
+                set_progress(int((i / len(clips)) * 90))
                 file_path = get_clip_file_path(clip)
                 if not file_path:
                     continue
                 try:
-                    clip_start_frame = clip.GetStart()
                     pts = detect_zoom_points(
                         file_path=file_path,
-                        clip_start_frame=clip_start_frame,
+                        clip_start_frame=clip.GetStart(),
                         fps=app.fps,
                         max_per_minute=max_per_min,
                         sigma_multiplier=sigma,
@@ -224,43 +207,43 @@ def setup(win: Any, app: Any, disp: Any) -> None:
                     log.error("Zoom analysis error clip %d: %s", i, e)
 
             _state["zoom_points"] = all_zoom_points
-            win.Find("ZoomFoundCount").SetText(str(len(all_zoom_points)))
+            _ui(lambda: w["found_count"]._val.configure(text=str(len(all_zoom_points))))
 
-            _set_progress(100)
+            set_progress(100)
             if all_zoom_points:
-                _set_status(
+                set_status(
                     f"Found {len(all_zoom_points)} zoom point(s). "
                     "Click Apply Zooms to create a new timeline.",
                     "#66bb6a",
                 )
-                win.Find("ZoomApplyBtn").Enabled = True
-                win.Find("ZoomPreviewBtn").Enabled = True
+                set_btn("apply_btn", True)
+                set_btn("preview_btn", True)
             else:
-                _set_status("No zoom points detected. Try 'High Energy' mode.", "#ffa726")
+                set_status("No zoom points detected. Try 'High Energy' mode.", "#ffa726")
+            set_progress(0, False)
 
-            _set_progress(0, False)
         except Exception as e:
-            log.error("Zoom analyze thread error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
-            _set_progress(0, False)
+            log.error("Zoom analyze error: %s", e)
+            set_status(f"Error: {e}", "#ff6b6b")
+            set_progress(0, False)
         finally:
-            win.Find("ZoomAnalyzeBtn").Enabled = True
+            set_btn("analyze_btn", True)
 
     def _apply_thread() -> None:
         try:
             from src.zooms.applier import apply_zooms
 
-            win.Find("ZoomApplyBtn").Enabled = False
-            win.Find("ZoomAnalyzeBtn").Enabled = False
-            _set_progress(0, True)
-            _set_status("Applying zooms to new timeline...", "#aaaaaa")
+            set_btn("apply_btn", False)
+            set_btn("analyze_btn", False)
+            set_progress(0, True)
+            set_status("Applying zooms to new timeline...")
 
-            fade = win.Find("ZoomFade").Checked
-            zoom_pct = win.Find("ZoomAmount").Value / 100.0
+            fade = w["fade_zoom"].get() == 1
+            zoom_pct = w["zoom_slider"].get() / 100.0
 
             def progress_cb(cur: int, total: int, msg: str) -> None:
-                _set_progress(int((cur / max(total, 1)) * 100))
-                _set_status(msg, "#aaaaaa")
+                set_progress(int((cur / max(total, 1)) * 100))
+                set_status(msg)
 
             result = apply_zooms(
                 resolve=app.resolve,
@@ -276,76 +259,64 @@ def setup(win: Any, app: Any, disp: Any) -> None:
             app.settings.add_stat("total_zooms_applied", result.zooms_applied)
             app.settings.add_stat("total_edits", 1)
 
-            win.Find("ZoomAppliedCount").SetText(str(result.zooms_applied))
-            _set_progress(100)
-            _set_status(
+            _ui(lambda: w["applied_count"]._val.configure(text=str(result.zooms_applied)))
+            set_progress(100)
+            set_status(
                 f"Done! {result.zooms_applied} zoom(s) applied. "
                 f"New timeline: '{result.new_timeline_name}'",
                 "#66bb6a",
             )
-            win.Find("ZoomNewTimelineName").SetText(
-                f"Created: \"{result.new_timeline_name}\""
-            )
-            _set_progress(0, False)
+            _ui(lambda: w["new_timeline_lbl"].configure(
+                text=f"Created: \"{result.new_timeline_name}\""))
+            set_progress(0, False)
+
         except Exception as e:
             log.error("Zoom apply error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
-            _set_progress(0, False)
+            set_status(f"Error: {e}", "#ff6b6b")
+            set_progress(0, False)
         finally:
-            win.Find("ZoomApplyBtn").Enabled = True
-            win.Find("ZoomAnalyzeBtn").Enabled = True
+            set_btn("apply_btn", True)
+            set_btn("analyze_btn", True)
 
     def _preview_thread() -> None:
         try:
-            win.Find("ZoomPreviewBtn").Enabled = False
-            _set_status("Adding zoom markers to timeline...", "#aaaaaa")
+            set_btn("preview_btn", False)
+            set_status("Adding zoom markers to timeline...")
 
             if not _state["zoom_points"] or not app.timeline:
-                _set_status("Analyze first.", "#ff6b6b")
+                set_status("Analyze first.", "#ff6b6b")
                 return
 
             for zp in _state["zoom_points"]:
                 try:
                     app.timeline.AddMarker(
-                        int(zp.timeline_frame),
-                        "Purple",
-                        "Zoom",
+                        int(zp.timeline_frame), "Purple", "Zoom",
                         f"Zoom {int(zp.zoom_amount * 100)}%",
-                        int(zp.duration_frames),
-                        "",
+                        int(zp.duration_frames), "",
                     )
                 except Exception as me:
                     log.debug("Marker add error: %s", me)
 
-            _set_status(
+            set_status(
                 f"Added {len(_state['zoom_points'])} purple markers for zoom points.",
                 "#66bb6a",
             )
         except Exception as e:
             log.error("Preview error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
+            set_status(f"Error: {e}", "#ff6b6b")
         finally:
-            win.Find("ZoomPreviewBtn").Enabled = True
+            set_btn("preview_btn", True)
 
-    def on_analyze(ev: Any) -> None:
-        if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
-            return
-        threading.Thread(target=_analyze_thread, daemon=True).start()
-
-    def on_apply(ev: Any) -> None:
-        if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
-            return
-        threading.Thread(target=_apply_thread, daemon=True).start()
-
-    def on_preview(ev: Any) -> None:
-        if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
-            return
-        threading.Thread(target=_preview_thread, daemon=True).start()
-
-    win.On.ZoomAmount.ValueChanged = on_zoom_slider
-    win.On.ZoomAnalyzeBtn.Clicked = on_analyze
-    win.On.ZoomApplyBtn.Clicked = on_apply
-    win.On.ZoomPreviewBtn.Clicked = on_preview
+    w["zoom_slider"].configure(command=on_zoom_slider)
+    w["analyze_btn"].configure(command=lambda: (
+        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
+        app.connected and threading.Thread(target=_analyze_thread, daemon=True).start(),
+    ))
+    w["apply_btn"].configure(command=lambda: (
+        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
+        app.connected and threading.Thread(target=_apply_thread, daemon=True).start(),
+    ))
+    w["preview_btn"].configure(command=lambda: (
+        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
+        app.connected and threading.Thread(target=_preview_thread, daemon=True).start(),
+    ))

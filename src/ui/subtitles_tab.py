@@ -4,253 +4,240 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+import customtkinter as ctk
+
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
 _LANGUAGES = [
-    ("Auto-detect", ""),
-    ("English", "en"),
-    ("German", "de"),
-    ("French", "fr"),
-    ("Spanish", "es"),
-    ("Italian", "it"),
-    ("Japanese", "ja"),
-    ("Korean", "ko"),
-    ("Portuguese", "pt"),
-    ("Russian", "ru"),
-    ("Dutch", "nl"),
-    ("Swedish", "sv"),
-    ("Norwegian", "no"),
-    ("Danish", "da"),
-    ("Mandarin (Simplified)", "zh"),
+    ("Auto-detect", ""), ("English", "en"), ("German", "de"), ("French", "fr"),
+    ("Spanish", "es"), ("Italian", "it"), ("Japanese", "ja"), ("Korean", "ko"),
+    ("Portuguese", "pt"), ("Russian", "ru"), ("Dutch", "nl"), ("Swedish", "sv"),
+    ("Norwegian", "no"), ("Danish", "da"), ("Mandarin (Simplified)", "zh"),
 ]
+_LANG_LABELS = [l for l, _ in _LANGUAGES]
+_LANG_CODES  = {l: c for l, c in _LANGUAGES}
 
 _PRESETS = ["YouTube", "Standard", "TikTok", "Alex Hormozi Style"]
 
 
-def build(ui: Any) -> Any:
-    """Return the Subtitles tab VGroup layout."""
-    return ui.VGroup({"Spacing": 10, "Weight": 1}, [
+def build(parent: Any) -> None:
+    w: dict[str, Any] = {}
 
-        ui.Label({
-            "Text": "SUBTITLES  —  Generate captions via ElevenLabs Speech-to-Text",
-            "Weight": 0,
-            "StyleSheet": "font-weight: bold; color: #aaaaaa; font-size: 11px; "
-                          "letter-spacing: 1px;",
-        }),
+    ctk.CTkLabel(
+        parent,
+        text="SUBTITLES  —  Generate captions via ElevenLabs Speech-to-Text",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color="#aaaaaa",
+        anchor="w",
+    ).pack(fill="x", padx=12, pady=(12, 6))
 
-        # API key
-        ui.VGroup({"Spacing": 6, "Weight": 0,
-                   "StyleSheet": "background: #2a2a2a; border-radius: 4px; padding: 8px;"}, [
-            ui.Label({"Text": "ELEVENLABS API", "Weight": 0,
-                      "StyleSheet": "font-size: 10px; color: #888888; letter-spacing: 1px;"}),
-            ui.HGroup({"Spacing": 8, "Weight": 0}, [
-                ui.LineEdit({
-                    "ID": "SubsApiKey",
-                    "PlaceholderText": "Enter ElevenLabs API key...",
-                    "EchoMode": "Password",
-                    "Weight": 1,
-                }),
-                ui.Button({"ID": "SubsSaveKey", "Text": "Save", "Weight": 0}),
-            ]),
-            ui.Label({
-                "ID": "SubsKeyStatus",
-                "Text": "",
-                "Weight": 0,
-                "StyleSheet": "color: #aaaaaa; font-size: 10px;",
-            }),
-        ]),
+    # ── API key ──
+    api_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    api_card.pack(fill="x", padx=10, pady=4)
 
-        # Settings row
-        ui.HGroup({"Spacing": 12, "Weight": 0}, [
-            ui.VGroup({"Spacing": 4, "Weight": 1}, [
-                ui.Label({"Text": "Language", "Weight": 0,
-                          "StyleSheet": "color: #aaaaaa; font-size: 10px;"}),
-                ui.ComboBox({"ID": "SubsLanguage", "Weight": 1}),
-            ]),
-            ui.VGroup({"Spacing": 4, "Weight": 1}, [
-                ui.Label({"Text": "Style Preset", "Weight": 0,
-                          "StyleSheet": "color: #aaaaaa; font-size: 10px;"}),
-                ui.ComboBox({"ID": "SubsPreset", "Weight": 1}),
-            ]),
-        ]),
+    ctk.CTkLabel(api_card, text="ELEVENLABS API",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-        # Action buttons
-        ui.HGroup({"Spacing": 8, "Weight": 0}, [
-            ui.Button({
-                "ID": "SubsGenerateBtn",
-                "Text": "Generate Transcript",
-                "Weight": 1,
-                "StyleSheet": "background: #1565c0; color: white; font-weight: bold;",
-            }),
-            ui.Button({"ID": "SubsCreateTrackBtn", "Text": "Create Subtitle Track",
-                       "Weight": 1, "Enabled": False}),
-        ]),
-        ui.HGroup({"Spacing": 8, "Weight": 0}, [
-            ui.Button({"ID": "SubsExportSrtBtn", "Text": "Export SRT",
-                       "Weight": 1, "Enabled": False}),
-            ui.Button({"ID": "SubsExportTxtBtn", "Text": "Export TXT",
-                       "Weight": 1, "Enabled": False}),
-            ui.CheckBox({"ID": "SubsBurnIn", "Text": "Burn-in subtitles",
-                         "Checked": False, "Weight": 1}),
-        ]),
+    key_row = ctk.CTkFrame(api_card, fg_color="transparent")
+    key_row.pack(fill="x", padx=10, pady=(0, 4))
+    key_row.grid_columnconfigure(0, weight=1)
 
-        # Progress
-        ui.VGroup({"Spacing": 4, "Weight": 0}, [
-            ui.ProgressBar({
-                "ID": "SubsProgress",
-                "Minimum": 0,
-                "Maximum": 100,
-                "Value": 0,
-                "Visible": False,
-            }),
-            ui.Label({
-                "ID": "SubsStatus",
-                "Text": "Enter API key and click Generate Transcript.",
-                "Weight": 0,
-                "StyleSheet": "color: #aaaaaa; font-size: 11px;",
-            }),
-        ]),
+    w["api_key"] = ctk.CTkEntry(key_row, placeholder_text="Enter ElevenLabs API key...",
+                                 show="*")
+    w["api_key"].grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
-        ui.Label({
-            "Text": "",
-            "Weight": 0,
-            "MinimumSize": [1, 1],
-            "MaximumSize": [9999, 1],
-            "StyleSheet": "background: #444444;",
-        }),
+    w["save_key_btn"] = ctk.CTkButton(key_row, text="Save", width=70)
+    w["save_key_btn"].grid(row=0, column=1)
 
-        # Transcript panel
-        ui.VGroup({"Spacing": 4, "Weight": 1}, [
-            ui.Label({"Text": "TRANSCRIPT  (editable — click to jump to position)",
-                      "Weight": 0,
-                      "StyleSheet": "font-size: 10px; color: #888888; letter-spacing: 1px;"}),
-            ui.TextEdit({
-                "ID": "SubsTranscript",
-                "PlaceholderText": "Transcript will appear here after generation...",
-                "Weight": 1,
-                "ReadOnly": False,
-            }),
-        ]),
-    ])
+    w["key_status"] = ctk.CTkLabel(api_card, text="", font=ctk.CTkFont(size=10),
+                                    text_color="#aaaaaa", anchor="w")
+    w["key_status"].pack(fill="x", padx=10, pady=(0, 8))
+
+    # ── Settings row ──
+    settings_row = ctk.CTkFrame(parent, fg_color="transparent")
+    settings_row.pack(fill="x", padx=10, pady=4)
+    settings_row.grid_columnconfigure((0, 1), weight=1)
+
+    lang_frame = ctk.CTkFrame(settings_row, fg_color="transparent")
+    lang_frame.grid(row=0, column=0, padx=(0, 4), sticky="ew")
+    ctk.CTkLabel(lang_frame, text="Language",
+                 font=ctk.CTkFont(size=10), text_color="#aaaaaa").pack(anchor="w")
+    w["language"] = ctk.CTkComboBox(lang_frame, values=_LANG_LABELS, state="readonly")
+    w["language"].set("Auto-detect")
+    w["language"].pack(fill="x")
+
+    preset_frame = ctk.CTkFrame(settings_row, fg_color="transparent")
+    preset_frame.grid(row=0, column=1, padx=(4, 0), sticky="ew")
+    ctk.CTkLabel(preset_frame, text="Style Preset",
+                 font=ctk.CTkFont(size=10), text_color="#aaaaaa").pack(anchor="w")
+    w["preset"] = ctk.CTkComboBox(preset_frame, values=_PRESETS, state="readonly")
+    w["preset"].set("YouTube")
+    w["preset"].pack(fill="x")
+
+    # ── Action buttons ──
+    btn_row1 = ctk.CTkFrame(parent, fg_color="transparent")
+    btn_row1.pack(fill="x", padx=10, pady=(6, 2))
+    btn_row1.grid_columnconfigure((0, 1), weight=1)
+
+    w["generate_btn"] = ctk.CTkButton(btn_row1, text="Generate Transcript",
+                                       fg_color="#1565c0", hover_color="#1976d2",
+                                       font=ctk.CTkFont(weight="bold"))
+    w["generate_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+    w["create_track_btn"] = ctk.CTkButton(btn_row1, text="Create Subtitle Track",
+                                           fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                           state="disabled")
+    w["create_track_btn"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+    btn_row2 = ctk.CTkFrame(parent, fg_color="transparent")
+    btn_row2.pack(fill="x", padx=10, pady=2)
+    btn_row2.grid_columnconfigure((0, 1), weight=1)
+
+    w["export_srt_btn"] = ctk.CTkButton(btn_row2, text="Export SRT",
+                                         fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                         state="disabled")
+    w["export_srt_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+    w["export_txt_btn"] = ctk.CTkButton(btn_row2, text="Export TXT",
+                                         fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                         state="disabled")
+    w["export_txt_btn"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+    # ── Progress ──
+    w["progress"] = ctk.CTkProgressBar(parent, height=6)
+    w["progress"].set(0)
+    w["progress_frame"] = ctk.CTkFrame(parent, height=6, fg_color="transparent")
+    w["progress_frame"].pack(fill="x", padx=10, pady=(4, 0))
+
+    w["status"] = ctk.CTkLabel(
+        parent, text="Enter API key and click Generate Transcript.",
+        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+    w["status"].pack(fill="x", padx=12, pady=(2, 4))
+
+    _divider(parent)
+
+    # ── Transcript panel ──
+    ctk.CTkLabel(parent, text="TRANSCRIPT  (editable)",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=12, pady=(8, 4))
+
+    w["transcript"] = ctk.CTkTextbox(parent, height=180,
+                                      font=ctk.CTkFont(size=12))
+    w["transcript"].pack(fill="x", padx=10, pady=(0, 12))
+    w["transcript"].insert("0.0", "Transcript will appear here after generation...")
+
+    parent._w = w
 
 
-def setup(win: Any, app: Any, disp: Any) -> None:
-    """Connect Subtitles event handlers."""
+def _divider(parent: Any) -> None:
+    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+        fill="x", padx=10, pady=4)
 
-    # State
+
+def setup(frame: Any, app: Any) -> None:
+    w = frame._w
+
     _state: dict[str, Any] = {
-        "words": [],       # list of dicts: {word, start_sec, end_sec}
+        "words": [],
         "srt_content": "",
         "srt_path": "",
     }
 
-    # Populate dropdowns
-    lang_combo = win.Find("SubsLanguage")
-    for label, _ in _LANGUAGES:
-        lang_combo.AddItem(label)
+    def _ui(fn: Any) -> None:
+        frame.after(0, fn)
 
-    preset_combo = win.Find("SubsPreset")
-    for p in _PRESETS:
-        preset_combo.AddItem(p)
+    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+        _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
-    # Load saved API key (masked)
+    def set_progress(value: float, visible: bool = True) -> None:
+        def _apply() -> None:
+            if visible:
+                w["progress"].pack(in_=w["progress_frame"], fill="x")
+                w["progress"].set(value / 100.0)
+            else:
+                w["progress"].pack_forget()
+        _ui(_apply)
+
+    def set_btn(name: str, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        _ui(lambda: w[name].configure(state=state))
+
+    # Load saved API key
     saved_key = app.settings.api_key
     if saved_key:
-        win.Find("SubsApiKey").SetText(saved_key)
-        win.Find("SubsKeyStatus").SetText("API key loaded from settings.")
+        w["api_key"].insert(0, saved_key)
+        w["key_status"].configure(text="API key loaded from settings.")
 
-    # Restore saved presets
     saved_preset = app.settings.get("subtitle_preset", "YouTube")
-    try:
-        idx = _PRESETS.index(saved_preset)
-        win.Find("SubsPreset").CurrentIndex = idx
-    except ValueError:
-        pass
+    if saved_preset in _PRESETS:
+        w["preset"].set(saved_preset)
 
-    def _set_status(msg: str, color: str = "#aaaaaa") -> None:
-        try:
-            lbl = win.Find("SubsStatus")
-            lbl.SetText(msg)
-            lbl.StyleSheet = f"color: {color}; font-size: 11px;"
-        except Exception:
-            pass
-
-    def _set_progress(value: int, visible: bool = True) -> None:
-        try:
-            pb = win.Find("SubsProgress")
-            pb.Visible = visible
-            pb.Value = value
-        except Exception:
-            pass
-
-    def on_save_key(ev: Any) -> None:
-        key = win.Find("SubsApiKey").Text.strip()
+    def on_save_key() -> None:
+        key = w["api_key"].get().strip()
         if key:
             app.settings.api_key = key
-            win.Find("SubsKeyStatus").SetText("API key saved.")
+            w["key_status"].configure(text="API key saved.")
         else:
-            win.Find("SubsKeyStatus").SetText("Key is empty — not saved.")
+            w["key_status"].configure(text="Key is empty — not saved.")
 
     def _generate_thread() -> None:
         try:
             from src.subtitles.elevenlabs import ElevenLabsClient
             from src.utils.resolve_api import get_clip_file_path
 
-            win.Find("SubsGenerateBtn").Enabled = False
-            _set_progress(0, True)
-            _set_status("Checking configuration...", "#aaaaaa")
+            set_btn("generate_btn", False)
+            set_progress(0, True)
+            set_status("Checking configuration...")
 
-            api_key = win.Find("SubsApiKey").Text.strip()
+            api_key = w["api_key"].get().strip()
             if not api_key:
-                _set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
-                _set_progress(0, False)
+                set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
+                set_progress(0, False)
                 return
 
-            lang_idx = win.Find("SubsLanguage").CurrentIndex
-            lang_code = _LANGUAGES[lang_idx][1]
+            lang_label = w["language"].get()
+            lang_code = _LANG_CODES.get(lang_label, "")
 
             app.refresh_timeline()
             clips = app.get_video_clips(1)
             if not clips:
-                _set_status("No clips found on Video Track 1.", "#ff6b6b")
-                _set_progress(0, False)
+                set_status("No clips found on Video Track 1.", "#ff6b6b")
+                set_progress(0, False)
                 return
 
-            # Use the first clip's media file for transcription
-            # For multi-clip workflows, transcription covers the primary clip
-            clip = clips[0]
-            file_path = get_clip_file_path(clip)
+            file_path = get_clip_file_path(clips[0])
             if not file_path:
-                _set_status("Could not get media file path from first clip.", "#ff6b6b")
-                _set_progress(0, False)
+                set_status("Could not get media file path from first clip.", "#ff6b6b")
+                set_progress(0, False)
                 return
 
-            _set_status(f"Sending to ElevenLabs STT: {file_path.split('\\')[-1]}", "#aaaaaa")
-            _set_progress(20)
+            set_status(f"Sending to ElevenLabs STT: {file_path.split(chr(92))[-1]}")
+            set_progress(20)
 
             client = ElevenLabsClient(api_key)
             words = client.transcribe(file_path, language=lang_code)
+            set_progress(60)
 
-            _set_progress(60)
             _state["words"] = words
-            app.transcript = words  # share with other tabs
+            app.transcript = words
 
-            # Build preview text for transcript panel
-            preview = " ".join(w["word"] for w in words if w.get("type", "word") == "word")
-            win.Find("SubsTranscript").SetPlainText(preview)
+            preview = " ".join(w2["word"] for w2 in words if w2.get("type", "word") == "word")
+            _ui(lambda: (
+                w["transcript"].delete("0.0", "end"),
+                w["transcript"].insert("0.0", preview),
+            ))
 
-            # Generate SRT
             from src.subtitles.generator import words_to_srt
-            preset_name = win.Find("SubsPreset").CurrentText
+            preset_name = w["preset"].get()
             srt = words_to_srt(words, preset_name)
             _state["srt_content"] = srt
 
-            _set_progress(90)
+            set_progress(90)
 
-            # Save SRT to temp location
-            import tempfile, os
+            import tempfile
             tmp = tempfile.NamedTemporaryFile(
                 suffix=".srt", delete=False,
                 mode="w", encoding="utf-8", prefix="clutter_"
@@ -259,107 +246,96 @@ def setup(win: Any, app: Any, disp: Any) -> None:
             tmp.close()
             _state["srt_path"] = tmp.name
 
-            _set_progress(100)
-
-            word_count = len([w for w in words if w.get("type", "word") == "word"])
-            _set_status(
+            set_progress(100)
+            word_count = len([w2 for w2 in words if w2.get("type", "word") == "word"])
+            set_status(
                 f"Transcript ready: {word_count} words. "
                 "Click 'Create Subtitle Track' to add to timeline.",
                 "#66bb6a",
             )
-
-            win.Find("SubsCreateTrackBtn").Enabled = True
-            win.Find("SubsExportSrtBtn").Enabled = True
-            win.Find("SubsExportTxtBtn").Enabled = True
+            set_btn("create_track_btn", True)
+            set_btn("export_srt_btn", True)
+            set_btn("export_txt_btn", True)
             app.settings.add_stat("total_subtitles_generated", 1)
-            _set_progress(0, False)
+            set_progress(0, False)
 
         except Exception as e:
             log.error("Generate thread error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
-            _set_progress(0, False)
+            set_status(f"Error: {e}", "#ff6b6b")
+            set_progress(0, False)
         finally:
-            win.Find("SubsGenerateBtn").Enabled = True
+            set_btn("generate_btn", True)
 
     def _create_track_thread() -> None:
         try:
             from src.subtitles.generator import import_srt_to_timeline
 
-            win.Find("SubsCreateTrackBtn").Enabled = False
-            _set_status("Adding subtitle track to timeline...", "#aaaaaa")
+            set_btn("create_track_btn", False)
+            set_status("Adding subtitle track to timeline...")
 
             if not _state["srt_path"]:
-                _set_status("Generate transcript first.", "#ff6b6b")
+                set_status("Generate transcript first.", "#ff6b6b")
                 return
 
-            ok = import_srt_to_timeline(
-                app.resolve, _state["srt_path"], app.timeline
-            )
+            ok = import_srt_to_timeline(app.resolve, _state["srt_path"], app.timeline)
             if ok:
-                _set_status("Subtitle track created in timeline.", "#66bb6a")
+                set_status("Subtitle track created in timeline.", "#66bb6a")
             else:
-                _set_status(
-                    "Could not auto-import SRT. "
-                    f"File saved at: {_state['srt_path']} — import manually via Media Pool.",
+                set_status(
+                    f"Could not auto-import SRT. File saved at: {_state['srt_path']}",
                     "#ffa726",
                 )
         except Exception as e:
             log.error("Create track error: %s", e)
-            _set_status(f"Error: {e}", "#ff6b6b")
+            set_status(f"Error: {e}", "#ff6b6b")
         finally:
-            win.Find("SubsCreateTrackBtn").Enabled = True
+            set_btn("create_track_btn", True)
 
-    def _export_srt(ev: Any) -> None:
+    def on_export_srt() -> None:
         try:
             from src.subtitles.exporter import export_srt
             import os
-
             if not _state["srt_content"]:
-                _set_status("Generate transcript first.", "#ff6b6b")
+                set_status("Generate transcript first.", "#ff6b6b")
                 return
-
-            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-            path = os.path.join(desktop, "subtitles.srt")
+            path = os.path.join(os.path.expanduser("~"), "Desktop", "subtitles.srt")
             export_srt(_state["srt_content"], path)
-            _set_status(f"SRT exported to: {path}", "#66bb6a")
+            set_status(f"SRT exported to: {path}", "#66bb6a")
         except Exception as e:
-            _set_status(f"Export error: {e}", "#ff6b6b")
+            set_status(f"Export error: {e}", "#ff6b6b")
 
-    def _export_txt(ev: Any) -> None:
+    def on_export_txt() -> None:
         try:
             from src.subtitles.exporter import export_txt
             import os
-
             if not _state["words"]:
-                _set_status("Generate transcript first.", "#ff6b6b")
+                set_status("Generate transcript first.", "#ff6b6b")
                 return
-
-            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-            path = os.path.join(desktop, "transcript.txt")
-            text = " ".join(w["word"] for w in _state["words"] if w.get("type") == "word")
+            text = " ".join(w2["word"] for w2 in _state["words"] if w2.get("type") == "word")
+            path = os.path.join(os.path.expanduser("~"), "Desktop", "transcript.txt")
             export_txt(text, path)
-            _set_status(f"TXT exported to: {path}", "#66bb6a")
+            set_status(f"TXT exported to: {path}", "#66bb6a")
         except Exception as e:
-            _set_status(f"Export error: {e}", "#ff6b6b")
+            set_status(f"Export error: {e}", "#ff6b6b")
 
-    def on_generate(ev: Any) -> None:
+    def on_generate() -> None:
         if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
         threading.Thread(target=_generate_thread, daemon=True).start()
 
-    def on_create_track(ev: Any) -> None:
+    def on_create_track() -> None:
         if not app.connected:
-            _set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
         threading.Thread(target=_create_track_thread, daemon=True).start()
 
-    def on_preset_changed(ev: Any) -> None:
-        app.settings.set("subtitle_preset", win.Find("SubsPreset").CurrentText)
+    def on_preset_changed(value: str) -> None:
+        app.settings.set("subtitle_preset", value)
 
-    win.On.SubsSaveKey.Clicked = on_save_key
-    win.On.SubsGenerateBtn.Clicked = on_generate
-    win.On.SubsCreateTrackBtn.Clicked = on_create_track
-    win.On.SubsExportSrtBtn.Clicked = _export_srt
-    win.On.SubsExportTxtBtn.Clicked = _export_txt
-    win.On.SubsPreset.CurrentIndexChanged = on_preset_changed
+    w["save_key_btn"].configure(command=on_save_key)
+    w["generate_btn"].configure(command=on_generate)
+    w["create_track_btn"].configure(command=on_create_track)
+    w["export_srt_btn"].configure(command=on_export_srt)
+    w["export_txt_btn"].configure(command=on_export_txt)
+    w["preset"].configure(command=on_preset_changed)

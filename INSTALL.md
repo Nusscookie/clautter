@@ -5,20 +5,23 @@
 | Requirement | Version | Notes |
 |---|---|---|
 | DaVinci Resolve | 18+ (free or Studio) | Both editions supported |
-| Python | 3.8+ | DaVinci Resolve ships with Python 3.6+; use your system Python 3.8+ for dependencies |
+| Python | **3.10, 3.11, or 3.12** | DaVinci Resolve's `DaVinciResolveScript.pyd` is built against CPython ≤3.12 ABI. Python 3.13+ causes `import DaVinciResolveScript` to segfault. Use the `py` launcher to pin the version. |
 | ffmpeg | Any recent | Required by pydub for audio decoding |
 
 ---
 
 ## Step 1 — Install Python Dependencies
 
+**Important:** Clutter spawns its GUI in a separate Python process. The version **must** be 3.10–3.12 because DaVinci Resolve's compiled scripting module segfaults on newer interpreters. Pin the version with the `py` launcher.
+
 Open a terminal/command prompt and run:
 
 ```bash
-pip install -r requirements.txt
+py -3.12 -m pip install -r requirements.txt
 ```
 
 This installs:
+- `customtkinter` — the GUI toolkit (only used by the spawned GUI process)
 - `pydub` — audio analysis for Smart Cuts
 - `requests` — ElevenLabs API for Subtitles
 - `numpy` — RMS computation for Auto Zooms
@@ -62,19 +65,18 @@ Copy the entire `ai-editor-assistant/` folder to:
 
 | Platform | Path |
 |---|---|
-| **Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Edit\` |
-| **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Edit/` |
-| **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Edit/` |
+| **Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\` |
+| **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/` |
+| **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/` |
 
-The folder inside `Edit/` must contain `main.py` and the `src/` folder.
+The folder inside `Utility/` must contain `main.py` and the `src/` folder.
 
 ---
 
 ## Step 4 — Launch the Plugin
 
 1. Open DaVinci Resolve
-2. Go to the **Edit** page
-3. Click **Workspace → Scripts → Edit → Clutter → main**
+2. Click **Workspace → Scripts → Utility → Clutter → main**
 
 The plugin window opens.
 

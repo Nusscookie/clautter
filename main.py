@@ -1,75 +1,108 @@
-"""Clutter — DaVinci Resolve Plugin
+"""Clutter — DaVinci Resolve Plugin launcher.
 
-A mix of CLAUDE + CUTTER. Built by Claude Code.
+Place this file AND the src/ folder in DaVinci Resolve's Scripts/Utility folder:
 
-Place this file AND the src/ folder in your DaVinci Resolve Scripts directory:
+  Windows:  %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility\\
+  macOS:    ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/
+  Linux:    ~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/
 
-  Windows:  %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Edit\\
-  macOS:    ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Edit/
-  Linux:    ~/.local/share/DaVinciResolve/Fusion/Scripts/Edit/
+Then launch via:  Workspace → Scripts → Utility → Clutter → main
 
-Then launch via:  Workspace > Scripts > Clutter
-
-See INSTALL.md for full setup instructions including Python dependencies.
+This script is intentionally minimal — it just launches gui.py as a subprocess using
+system Python. The GUI connects to Resolve via DaVinciResolveScript.scriptapp("Resolve"),
+bypassing UIManager (removed from Resolve free edition in v19.1).
 """
 
 from __future__ import annotations
+import subprocess
 import sys
+import shutil
 from pathlib import Path
 
-# Ensure the plugin's src/ package is importable regardless of working directory
-_PLUGIN_DIR = Path(__file__).resolve().parent
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+try:
+    _PLUGIN_DIR = Path(__file__).resolve().parent
+except NameError:
+    _PLUGIN_DIR = Path(sys.argv[0]).resolve().parent
 
-from src.utils.logger import get_logger
-from src.app import AIEditorApp
+_GUI_SCRIPT = _PLUGIN_DIR / "gui.py"
 
-log = get_logger("main")
+
+def _find_python() -> str | None:
+    """Return the first Python interpreter that has both customtkinter AND
+    can import DaVinciResolveScript (Resolve's own scripting module).
+
+    Resolve's compiled .pyd is only stable on Python 3.10–3.12. We probe in this
+    order: py launcher with version pin → system python → direct executables.
+    """
+    # Probe scripts that we run with `-c`. Note: on Windows the `py` launcher
+    # is the most reliable way to address a specific version.
+    probe_scripts: list[list[str]] = []
+    if sys.platform == "win32":
+        for ver in ("3.12", "3.11", "3.10"):
+            probe_scripts.append(["py", f"-{ver}"])
+        for name in ("python", "python3", "py"):
+            exe = shutil.which(name)
+            if exe:
+                probe_scripts.append([exe])
+    else:
+        for name in ("python3", "python"):
+            exe = shutil.which(name)
+            if exe:
+                probe_scripts.append([exe])
+        probe_scripts.append([sys.executable])
+
+    # The probe must succeed for BOTH imports — Resolve's module is the fragile one.
+    probe_code = (
+        "import sys;"
+        "from pathlib import Path;"
+        "p=Path(r'C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting\\Modules');"
+        "sys.path.insert(0, str(p)) if p.exists() else None;"
+        "import DaVinciResolveScript;"
+        "import customtkinter"
+    )
+
+    for cmd in probe_scripts:
+        try:
+            result = subprocess.run(
+                [*cmd, "-c", probe_code],
+                timeout=8,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                # Return the launcher form for the `py` cases, the exe path otherwise
+                return cmd[0] if len(cmd) == 1 else " ".join(cmd)
+        except Exception:
+            continue
+    return None
 
 
 def main() -> None:
-    log.info("=" * 60)
-    log.info("AI Editor Assistant starting")
+    if not _GUI_SCRIPT.exists():
+        print(f"[Clutter] ERROR: gui.py not found at {_GUI_SCRIPT}")
+        return
 
-    app = AIEditorApp()
-    connected = app.connect()
-
-    if not connected:
-        log.warning("Resolve connection failed — UI will display error state")
-
-    # Get Fusion and bmd from the Resolve environment.
-    # When running from the Scripts menu, 'fusion' and 'bmd' are Resolve-injected globals.
-    # When running externally (after importing DaVinciResolveScript), bmd is in sys.modules.
-    fusion = None
-    bmd_module = None
-
-    if connected and app.resolve is not None:
-        try:
-            fusion = app.resolve.Fusion()
-        except Exception as e:
-            log.error("Failed to get Fusion object: %s", e)
-
-    # bmd is injected as a side effect of loading fusionscript (via DaVinciResolveScript import)
-    bmd_module = sys.modules.get("bmd")
-    if bmd_module is None:
-        import builtins
-        bmd_module = getattr(builtins, "bmd", None)
-
-    if fusion is None or bmd_module is None:
-        log.error(
-            "Cannot initialize UI: fusion=%s bmd=%s. "
-            "Make sure DaVinci Resolve is running.",
-            fusion, bmd_module,
+    python = _find_python()
+    if python is None:
+        print(
+            "[Clutter] ERROR: No Python interpreter with customtkinter + DaVinciResolveScript found.\n"
+            "Resolve 19.x requires Python 3.10–3.12. Install:\n"
+            "  py -3.12 -m pip install customtkinter"
         )
         return
 
-    from src.ui.main_window import MainWindow
+    if " " in python:
+        # py launcher form: "py -3.12"
+        py_args = python.split() + [str(_GUI_SCRIPT)]
+    else:
+        py_args = [python, str(_GUI_SCRIPT)]
 
-    window = MainWindow(app, fusion, bmd_module)
-    window.run()
-
-    log.info("AI Editor Assistant closed")
+    subprocess.Popen(
+        py_args,
+        cwd=str(_PLUGIN_DIR),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 if __name__ == "__main__":
