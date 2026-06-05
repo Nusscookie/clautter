@@ -160,13 +160,24 @@ def import_srt_to_timeline(resolve: Any, srt_path: str, timeline: Any) -> bool:
                         except Exception as _e:
                             log.warning("Could not clear subtitle track %d: %s", _i, _e)
 
+        # Resolve timelines start at 01:00:00:00, not frame 0 — use first video clip's
+        # actual start frame so recordFrame lands at the timeline's real beginning.
+        tl_start_frame = 0
+        try:
+            if timeline:
+                _v = timeline.GetItemListInTrack("video", 1)
+                if _v:
+                    tl_start_frame = _v[0].GetStart()
+        except Exception as _e:
+            log.debug("Could not determine timeline start frame: %s", _e)
+
         # Place SRT clip on the timeline
         if srt_item:
             appended = media_pool.AppendToTimeline([{
                 "mediaPoolItem": srt_item,
                 "trackType": "subtitle",
                 "trackIndex": 1,
-                "recordFrame": 0,
+                "recordFrame": tl_start_frame,
             }])
             if not appended:
                 log.warning(
