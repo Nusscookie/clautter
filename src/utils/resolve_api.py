@@ -1,6 +1,17 @@
 """DaVinci Resolve API helpers — connection, timeline utilities, frame math.
 
 Works with both DaVinci Resolve free and Studio editions.
+
+Connection strategy (in order):
+
+0. Caller-supplied ``resolve_obj`` (Resolve's Scripts menu can inject one).
+1. **HTTP bridge** (``~/.clutter/bridge.json``) — the recommended path on
+   the free edition. ``main.py`` starts a local HTTP server inside
+   Resolve's process; the ``gui.py`` subprocess connects to it.
+2. ``DaVinciResolveScript.scriptapp("Resolve")`` — Studio only when
+   External scripting is enabled.
+3. ``getattr(builtins, "resolve", None)`` — covers in-Resolve contexts
+   (e.g. the Resolve Scripting Console).
 """
 
 from __future__ import annotations
@@ -24,6 +35,23 @@ def _ensure_scripting_path() -> None:
         log.debug("Added Resolve scripting path: %s", _SCRIPTING_MODULES)
 
 
+def _try_bridge() -> Optional[Any]:
+    """Return a ResolveProxy rooted at the live Resolve, or None if no bridge.
+
+    Lazy import so the bridge code path is only paid for when needed.
+    """
+    try:
+        from src.utils.rpc_client import ResolveProxy, read_bridge_file
+    except ImportError as e:
+        log.debug("rpc_client unavailable: %s", e)
+        return None
+
+    http = read_bridge_file()
+    if http is None:
+        return None
+    return ResolveProxy(ref=None, http=http)
+
+
 def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
     """Connect to a running DaVinci Resolve instance.
 
@@ -35,24 +63,35 @@ def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
     """
     _ensure_scripting_path()
 
-    # Strategy 0: caller-supplied object (module global injected by Resolve Scripts menu)
+    # Strategy 0: caller-supplied object (Resolve Scripts menu can inject one).
     resolve = resolve_obj
     if resolve is not None:
         log.debug("Connected via injected resolve global")
 
-    # Strategy 1: DaVinciResolveScript module (external / standalone scripts)
+    # Strategy 1: HTTP bridge started by main.py inside Resolve's process.
+    # This is the only path that works in the free edition from a
+    # separate subprocess — ``scriptapp`` returns None there.
+    if resolve is None:
+        resolve = _try_bridge()
+        if resolve is not None:
+            log.debug("Connected via HTTP bridge")
+
+    # Strategy 2: DaVinciResolveScript module (Studio with external scripting).
     if resolve is None:
         try:
             import DaVinciResolveScript as dvr  # type: ignore
             resolve = dvr.scriptapp("Resolve")
-            log.debug("Connected via DaVinciResolveScript")
+            if resolve is not None:
+                log.debug("Connected via DaVinciResolveScript")
         except ImportError:
             log.debug("DaVinciResolveScript not importable — trying built-in globals")
 
-    # Strategy 2: builtins (some Resolve versions inject resolve there)
+    # Strategy 3: builtins (in-Resolve contexts, e.g. Scripting Console).
     if resolve is None:
         import builtins
         resolve = getattr(builtins, "resolve", None)
+        if resolve is not None:
+            log.debug("Connected via builtins.resolve")
 
     if resolve is None:
         raise RuntimeError(

@@ -131,6 +131,7 @@ def setup(frame: Any, app: Any) -> None:
         "total_silences": 0,
         "total_time_saved": 0.0,
         "clips": [],
+        "timeline_choice": ("new", None),
     }
 
     def _ui(fn: Any) -> None:
@@ -236,10 +237,14 @@ def setup(frame: Any, app: Any) -> None:
         try:
             from src.smartcuts.cutter import apply_cuts
 
+            _mode, _target_tl = _state["timeline_choice"]
             set_btn("apply_btn", False)
             set_btn("analyze_btn", False)
             set_progress(0, True)
-            set_status("Creating new timeline with silence removed...")
+            if _target_tl is not None:
+                set_status(f"Appending cuts to '{_target_tl.GetName()}'...")
+            else:
+                set_status("Creating new timeline with silence removed...")
 
             def progress_cb(current: int, total: int, msg: str) -> None:
                 set_progress(int((current / max(total, 1)) * 100))
@@ -253,6 +258,7 @@ def setup(frame: Any, app: Any) -> None:
                 min_duration_ms=float(w["min_dur"].get()),
                 padding_ms=float(w["padding"].get()),
                 progress_callback=progress_cb,
+                target_timeline=_target_tl,
             )
 
             app.refresh_timeline()
@@ -317,6 +323,16 @@ def setup(frame: Any, app: Any) -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
+        try:
+            from src.ui.timeline_dialog import show_timeline_dialog
+            choice = show_timeline_dialog(frame, app.project)
+        except Exception as e:
+            log.error("Timeline dialog error: %s", e)
+            set_status(f"Dialog error: {e}", "#ff6b6b")
+            return
+        if choice is None:
+            return
+        _state["timeline_choice"] = choice
         threading.Thread(target=_apply_thread, daemon=True).start()
 
     def on_preview() -> None:

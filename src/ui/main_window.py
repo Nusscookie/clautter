@@ -49,6 +49,16 @@ class MainWindow:
         root.resizable(True, True)
         root.configure(fg_color="#141414")
 
+        try:
+            from PIL import Image, ImageTk
+            from pathlib import Path
+            _icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.png"
+            if _icon_path.exists():
+                self._icon_img = ImageTk.PhotoImage(Image.open(str(_icon_path)))
+                root.iconphoto(False, self._icon_img)
+        except Exception as _e:
+            log.debug("Icon load failed: %s", _e)
+
         # ── Top bar ──
         top = ctk.CTkFrame(root, height=38, fg_color="#1a1a1a", corner_radius=0)
         top.pack(fill="x", side="top")

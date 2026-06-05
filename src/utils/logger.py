@@ -1,4 +1,4 @@
-"""Logging setup for AI Editor Assistant."""
+"""Logging setup for Clutter."""
 
 from __future__ import annotations
 import logging
@@ -18,7 +18,7 @@ def get_logger(name: str) -> logging.Logger:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     fh = logging.handlers.RotatingFileHandler(
-        log_dir / "ai_editor.log",
+        log_dir / "clutter.log",
         maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",

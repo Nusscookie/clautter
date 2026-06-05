@@ -1,4 +1,4 @@
-"""JSON-backed settings persistence for AI Editor Assistant."""
+"""JSON-backed settings persistence for Clutter."""
 
 from __future__ import annotations
 import json

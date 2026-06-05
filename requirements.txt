@@ -14,5 +14,7 @@ requests>=2.31.0    # ElevenLabs API HTTP calls
 numpy>=1.26.0       # RMS audio analysis for zoom detection
 customtkinter>=5.2.0  # GUI framework (replaces Fusion UIManager, removed in Resolve free v19.1)
 
+Pillow>=10.0.0      # Icon generation (generate_icon.py) and any future image ops
+
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

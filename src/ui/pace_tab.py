@@ -147,8 +147,13 @@ def _mini_stat(parent: Any, label: str, default: str, color: str,
 def setup(frame: Any, app: Any) -> None:
     w = frame._w
 
+    _state: dict[str, Any] = {"timeline_choice": ("new", None)}
+
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
+
+    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+        _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
     def _update(level: int) -> None:
         p = _PACE_PRESETS.get(level, _PACE_PRESETS[5])
@@ -166,8 +171,7 @@ def setup(frame: Any, app: Any) -> None:
     def _apply_thread() -> None:
         from src.smartcuts.cutter import apply_cuts
 
-        set_status = lambda msg: _ui(lambda: w["status"].configure(text=msg))
-
+        _mode, _target_tl = _state["timeline_choice"]
         _ui(lambda: w["apply_btn"].configure(state="disabled"))
         try:
             level = int(round(w["slider"].get()))
@@ -176,11 +180,16 @@ def setup(frame: Any, app: Any) -> None:
             app.refresh_timeline()
             clips = app.get_video_clips(1)
             if not clips:
-                set_status("No clips found on Video Track 1.")
+                set_status("No clips found on Video Track 1.", "#ff6b6b")
                 return
 
             def progress_cb(cur: int, total: int, msg: str) -> None:
                 set_status(msg)
+
+            if _target_tl is not None:
+                set_status(f"Appending cuts to '{_target_tl.GetName()}'...")
+            else:
+                set_status("Creating new timeline with silence removed...")
 
             result = apply_cuts(
                 resolve=app.resolve,
@@ -190,24 +199,35 @@ def setup(frame: Any, app: Any) -> None:
                 min_duration_ms=float(p["min_silence_ms"]),
                 padding_ms=120.0,
                 progress_callback=progress_cb,
+                target_timeline=_target_tl,
             )
             app.refresh_timeline()
             app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
             app.settings.add_stat("total_edits", 1)
             set_status(
-                f"Done! Timeline '{result.new_timeline_name}' created. "
-                f"{result.time_saved_sec:.1f}s removed."
+                f"Done! Timeline '{result.new_timeline_name}' — {result.time_saved_sec:.1f}s removed.",
+                "#66bb6a",
             )
         except Exception as e:
             log.error("Pace apply error: %s", e)
-            set_status(f"Error: {e}")
+            set_status(f"Error: {e}", "#ff6b6b")
         finally:
             _ui(lambda: w["apply_btn"].configure(state="normal"))
 
     def on_apply() -> None:
         if not app.connected:
-            w["status"].configure(text="Not connected to DaVinci Resolve.")
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
+        try:
+            from src.ui.timeline_dialog import show_timeline_dialog
+            choice = show_timeline_dialog(frame, app.project)
+        except Exception as e:
+            log.error("Timeline dialog error: %s", e)
+            set_status(f"Dialog error: {e}", "#ff6b6b")
+            return
+        if choice is None:
+            return
+        _state["timeline_choice"] = choice
         threading.Thread(target=_apply_thread, daemon=True).start()
 
     w["slider"].configure(command=on_slider)

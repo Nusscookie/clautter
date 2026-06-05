@@ -141,15 +141,24 @@ def import_srt_to_timeline(resolve: Any, srt_path: str, timeline: Any) -> bool:
 
         # Import SRT into media pool
         imported = media_pool.ImportMedia([srt_path])
-        if not imported:
+        srt_item = imported[0] if imported else None
+        if not srt_item:
             log.warning("ImportMedia returned empty list for SRT: %s", srt_path)
 
         # Ensure a subtitle track exists
         if timeline:
-            count = timeline.GetTrackCount("subtitle")
-            if count == 0:
+            if timeline.GetTrackCount("subtitle") == 0:
                 timeline.AddTrack("subtitle")
                 log.info("Added subtitle track to timeline")
+
+        # Place SRT clip on the timeline
+        if srt_item:
+            appended = media_pool.AppendToTimeline([{"mediaPoolItem": srt_item}])
+            if not appended:
+                log.warning(
+                    "AppendToTimeline returned empty — drag '%s' from Media Pool to subtitle track",
+                    srt_path,
+                )
 
         log.info("SRT imported to media pool: %s", srt_path)
         return True

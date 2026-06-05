@@ -9,7 +9,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-class AIEditorApp:
+class ClutterApp:
     """Wires all modules together and holds shared state."""
 
     def __init__(self) -> None:

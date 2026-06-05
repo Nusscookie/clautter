@@ -16,7 +16,7 @@ def build(parent: Any) -> None:
     # ── Title ──
     ctk.CTkLabel(
         parent,
-        text="AI EDITOR ASSISTANT",
+        text="CLUTTER",
         font=ctk.CTkFont(size=18, weight="bold"),
         text_color="#ffffff",
     ).pack(pady=(16, 2))

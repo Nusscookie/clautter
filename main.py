@@ -8,15 +8,33 @@ Place this file AND the src/ folder in DaVinci Resolve's Scripts/Utility folder:
 
 Then launch via:  Workspace → Scripts → Utility → Clutter → main
 
-This script is intentionally minimal — it just launches gui.py as a subprocess using
-system Python. The GUI connects to Resolve via DaVinciResolveScript.scriptapp("Resolve"),
-bypassing UIManager (removed from Resolve free edition in v19.1).
+What this does:
+
+1. Acquires the live ``resolve`` object from Resolve's process.
+   Free edition: ``getattr(builtins, "resolve", None)`` works.
+   Studio:        ``DaVinciResolveScript.scriptapp("Resolve")`` as fallback.
+2. Starts a local HTTP bridge in a daemon thread so the spawned
+   ``gui.py`` subprocess can call Resolve methods (free edition has no
+   external scripting; the subprocess can't talk to Resolve directly).
+3. Spawns ``gui.py`` with the system Python that has ``customtkinter``.
+4. **Blocks** until ``gui.py`` exits. The daemon thread holds the live
+   ``resolve`` object alive in Resolve's process; if this launcher
+   returned, the thread would die and the bridge would go down. The
+   Resolve script entry stays "busy" for the lifetime of the GUI, which
+   is the intended behavior — clicking "main" again before the GUI
+   closes is a no-op anyway because Resolve only allows one execution
+   per script at a time.
+
+The HTTP server writes its port to ``~/.clutter/bridge.json``; the
+client (gui.py) reads the file and connects. If the file is stale
+(Resolve restarted), the client's ``/ping`` fails and the connect
+falls through to other strategies.
 """
 
 from __future__ import annotations
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
 
 try:
@@ -28,14 +46,13 @@ _GUI_SCRIPT = _PLUGIN_DIR / "gui.py"
 
 
 def _find_python() -> str | None:
-    """Return the first Python interpreter that has both customtkinter AND
-    can import DaVinciResolveScript (Resolve's own scripting module).
+    """Return the first Python interpreter that has ``customtkinter``.
 
-    Resolve's compiled .pyd is only stable on Python 3.10–3.12. We probe in this
-    order: py launcher with version pin → system python → direct executables.
+    Resolve's compiled scripting module is no longer required here — the
+    bridge runs inside Resolve's process, so the spawned GUI just needs
+    a Python that can import ``customtkinter``. We probe in this order:
+    ``py -3.12/-3.11/-3.10`` (Windows), then ``python3`` / ``python``.
     """
-    # Probe scripts that we run with `-c`. Note: on Windows the `py` launcher
-    # is the most reliable way to address a specific version.
     probe_scripts: list[list[str]] = []
     if sys.platform == "win32":
         for ver in ("3.12", "3.11", "3.10"):
@@ -51,30 +68,51 @@ def _find_python() -> str | None:
                 probe_scripts.append([exe])
         probe_scripts.append([sys.executable])
 
-    # The probe must succeed for BOTH imports — Resolve's module is the fragile one.
-    probe_code = (
-        "import sys;"
-        "from pathlib import Path;"
-        "p=Path(r'C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting\\Modules');"
-        "sys.path.insert(0, str(p)) if p.exists() else None;"
-        "import DaVinciResolveScript;"
-        "import customtkinter"
-    )
-
+    _no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for cmd in probe_scripts:
         try:
             result = subprocess.run(
-                [*cmd, "-c", probe_code],
-                timeout=8,
+                [*cmd, "-c", "import customtkinter"],
+                timeout=5,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                creationflags=_no_window,
             )
             if result.returncode == 0:
-                # Return the launcher form for the `py` cases, the exe path otherwise
                 return cmd[0] if len(cmd) == 1 else " ".join(cmd)
         except Exception:
             continue
     return None
+
+
+def _acquire_resolve():
+    """Return the live ``resolve`` object, or None if unavailable.
+
+    Resolve injects ``resolve`` into the running script's module globals
+    (not builtins) when executing from the Scripts menu. We capture it
+    there first, then try builtins (some versions), then Studio's external
+    scripting API as a last resort.
+    """
+    # Primary path: Resolve injects into this module's globals at script
+    # launch time. Must be captured here (same module) so globals() is
+    # main.py's namespace, which is where the injection lands.
+    resolve = globals().get("resolve")
+    if resolve is not None:
+        return resolve
+
+    # Some Resolve versions / launch modes inject into builtins instead.
+    import builtins
+    resolve = getattr(builtins, "resolve", None)
+    if resolve is not None:
+        return resolve
+
+    try:
+        import DaVinciResolveScript as dvr  # type: ignore
+        resolve = dvr.scriptapp("Resolve")
+    except ImportError:
+        resolve = None
+
+    return resolve
 
 
 def main() -> None:
@@ -82,27 +120,61 @@ def main() -> None:
         print(f"[Clutter] ERROR: gui.py not found at {_GUI_SCRIPT}")
         return
 
+    # 1. Acquire the live resolve object.
+    resolve = _acquire_resolve()
+    if resolve is None:
+        print(
+            "[Clutter] ERROR: Cannot reach DaVinci Resolve from this script context.\n"
+            "Make sure you launched this from Workspace > Scripts > Utility > Clutter."
+        )
+        return
+
+    # 2. Start the HTTP bridge so the spawned GUI can call Resolve.
+    #    Make sure the plugin's src/ is on sys.path for the rpc_server import.
+    if str(_PLUGIN_DIR) not in sys.path:
+        sys.path.insert(0, str(_PLUGIN_DIR))
+
+    try:
+        from src.utils.rpc_server import start_server
+        # _server is intentionally unused here — the daemon thread holds
+        # the only reference it needs to stay alive. We bind it just so
+        # the variable isn't garbage-collected mid-call.
+        _server, port = start_server(resolve)
+    except Exception as e:
+        print(f"[Clutter] ERROR: Failed to start HTTP bridge: {e!r}")
+        return
+
+    # 3. Find a Python that has customtkinter and spawn the GUI.
     python = _find_python()
     if python is None:
         print(
-            "[Clutter] ERROR: No Python interpreter with customtkinter + DaVinciResolveScript found.\n"
+            "[Clutter] ERROR: No Python interpreter with customtkinter found.\n"
             "Resolve 19.x requires Python 3.10–3.12. Install:\n"
             "  py -3.12 -m pip install customtkinter"
         )
         return
 
     if " " in python:
-        # py launcher form: "py -3.12"
         py_args = python.split() + [str(_GUI_SCRIPT)]
     else:
         py_args = [python, str(_GUI_SCRIPT)]
 
-    subprocess.Popen(
+    proc = subprocess.Popen(
         py_args,
         cwd=str(_PLUGIN_DIR),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
+
+    # 4. Block until the user closes the GUI. The bridge thread needs
+    #    this process to stay alive — once main() returns, the daemon
+    #    thread dies and the GUI loses its connection to Resolve.
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait()
 
 
 if __name__ == "__main__":

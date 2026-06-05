@@ -56,10 +56,11 @@ def apply_zooms(
     fade: bool = True,
     zoom_amount: float = 1.15,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    target_timeline: Optional[Any] = None,
 ) -> ZoomResult:
-    """Create a new timeline with zoom effects applied at the detected points.
+    """Create a timeline with zoom effects applied at the detected points.
 
-    Non-destructive: original timeline untouched.
+    Non-destructive when creating a new timeline; appends to target_timeline if provided.
 
     Args:
         resolve:           DaVinci Resolve object.
@@ -69,6 +70,7 @@ def apply_zooms(
         fade:              If True, use DynamicZoomEase (smooth transition).
         zoom_amount:       Scale factor for zoom segments (e.g. 1.15 = 115%).
         progress_callback: Optional progress fn(current, total, message).
+        target_timeline:   If set, append clips here instead of creating a new timeline.
 
     Returns:
         ZoomResult with stats.
@@ -81,8 +83,12 @@ def apply_zooms(
     except Exception:
         fps = 25.0
 
-    new_name = _unique_timeline_name(project, f"{timeline.GetName()}_zooms")
-    log.info("Creating zoom timeline '%s' | %d zoom points", new_name, len(zoom_points))
+    if target_timeline is not None:
+        new_name = target_timeline.GetName()
+        log.info("Appending zooms to existing timeline '%s' | %d zoom points", new_name, len(zoom_points))
+    else:
+        new_name = _unique_timeline_name(project, f"{timeline.GetName()}_zooms")
+        log.info("Creating zoom timeline '%s' | %d zoom points", new_name, len(zoom_points))
 
     # Build a frame-indexed set of zoom regions: {start_frame: (end_frame, zoom_factor)}
     zoom_map: dict[int, tuple[int, float]] = {}
@@ -126,7 +132,6 @@ def apply_zooms(
                     "mediaPoolItem": media_item,
                     "startFrame": src_start,
                     "endFrame": src_end,
-                    "mediaType": 1,
                 })
                 zoom_meta.append({"is_zoom": False})
             clips_processed += 1
@@ -144,7 +149,6 @@ def apply_zooms(
                     "mediaPoolItem": media_item,
                     "startFrame": cursor_src,
                     "endFrame": cursor_src + pre_tl_frames - 1,
-                    "mediaType": 1,
                 })
                 zoom_meta.append({"is_zoom": False})
 
@@ -157,7 +161,6 @@ def apply_zooms(
                     "mediaPoolItem": media_item,
                     "startFrame": zoom_src_start,
                     "endFrame": zoom_src_start + zoom_frames - 1,
-                    "mediaType": 1,
                 })
                 zoom_meta.append({
                     "is_zoom": True,
@@ -176,7 +179,6 @@ def apply_zooms(
                 "mediaPoolItem": media_item,
                 "startFrame": cursor_src,
                 "endFrame": cursor_src + tail_frames - 1,
-                "mediaType": 1,
             })
             zoom_meta.append({"is_zoom": False})
 
@@ -186,14 +188,17 @@ def apply_zooms(
         raise RuntimeError("No clip segments found for zoom timeline.")
 
     if progress_callback:
-        progress_callback(total, total, f"Creating timeline '{new_name}'...")
+        progress_callback(total, total, f"Building timeline '{new_name}'...")
 
-    # Create new timeline
-    new_timeline = media_pool.CreateEmptyTimeline(new_name)
-    if new_timeline is None:
-        raise RuntimeError(f"Failed to create timeline '{new_name}'.")
+    if target_timeline is not None:
+        dest_timeline = target_timeline
+        project.SetCurrentTimeline(dest_timeline)
+    else:
+        dest_timeline = media_pool.CreateEmptyTimeline(new_name)
+        if dest_timeline is None:
+            raise RuntimeError(f"Failed to create timeline '{new_name}'.")
+        project.SetCurrentTimeline(dest_timeline)
 
-    project.SetCurrentTimeline(new_timeline)
     appended = media_pool.AppendToTimeline(clip_infos)
 
     if appended and isinstance(appended, (list, tuple)):

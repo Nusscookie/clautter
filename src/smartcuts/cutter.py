@@ -93,10 +93,11 @@ def apply_cuts(
     min_duration_ms: float = 350.0,
     padding_ms: float = 120.0,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    target_timeline: Optional[Any] = None,
 ) -> CutResult:
-    """Remove silences by building a new timeline with only non-silent clip segments.
+    """Remove silences by building a timeline with only non-silent clip segments.
 
-    Non-destructive: the original timeline and all source media are untouched.
+    Non-destructive when creating a new timeline; appends to target_timeline if provided.
 
     Args:
         resolve:           DaVinci Resolve object.
@@ -106,9 +107,10 @@ def apply_cuts(
         min_duration_ms:   Minimum silence duration to remove (ms).
         padding_ms:        Breathing room at each cut edge (ms).
         progress_callback: Optional fn(current, total, message) for UI updates.
+        target_timeline:   If set, append clips here instead of creating a new timeline.
 
     Returns:
-        CutResult with stats about the new timeline.
+        CutResult with stats about the timeline.
 
     Raises:
         RuntimeError on critical failures.
@@ -121,8 +123,12 @@ def apply_cuts(
     except Exception:
         fps = 25.0
 
-    new_name = _unique_timeline_name(project, f"{timeline.GetName()}_cuts")
-    log.info("Target new timeline: '%s' | FPS: %.2f", new_name, fps)
+    if target_timeline is not None:
+        new_name = target_timeline.GetName()
+        log.info("Appending to existing timeline: '%s' | FPS: %.2f", new_name, fps)
+    else:
+        new_name = _unique_timeline_name(project, f"{timeline.GetName()}_cuts")
+        log.info("Target new timeline: '%s' | FPS: %.2f", new_name, fps)
 
     clip_infos: list[dict] = []
     total_silence_ms = 0.0
@@ -184,7 +190,6 @@ def apply_cuts(
                 "mediaPoolItem": media_item,
                 "startFrame": start_frame,
                 "endFrame": end_frame,
-                "mediaType": 1,  # 1 = video + audio
             })
 
         clips_processed += 1
@@ -196,18 +201,19 @@ def apply_cuts(
         )
 
     if progress_callback:
-        progress_callback(total, total, f"Creating timeline '{new_name}'...")
+        progress_callback(total, total, f"Building timeline '{new_name}'...")
 
-    # Create the new timeline
-    new_timeline = media_pool.CreateEmptyTimeline(new_name)
-    if new_timeline is None:
-        raise RuntimeError(
-            f"DaVinci Resolve could not create timeline '{new_name}'.\n"
-            "Check that a project is open and the name is valid."
-        )
-
-    # Switch to new timeline so AppendToTimeline targets it
-    project.SetCurrentTimeline(new_timeline)
+    if target_timeline is not None:
+        dest_timeline = target_timeline
+        project.SetCurrentTimeline(dest_timeline)
+    else:
+        dest_timeline = media_pool.CreateEmptyTimeline(new_name)
+        if dest_timeline is None:
+            raise RuntimeError(
+                f"DaVinci Resolve could not create timeline '{new_name}'.\n"
+                "Check that a project is open and the name is valid."
+            )
+        project.SetCurrentTimeline(dest_timeline)
 
     result = media_pool.AppendToTimeline(clip_infos)
     if not result:

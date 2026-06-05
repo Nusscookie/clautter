@@ -137,6 +137,22 @@ def _divider(parent: Any) -> None:
         fill="x", padx=10, pady=4)
 
 
+def _unique_name(project: Any, base: str) -> str:
+    try:
+        existing = {
+            project.GetTimelineByIndex(i + 1).GetName()
+            for i in range(project.GetTimelineCount())
+        }
+    except Exception:
+        existing = set()
+    name = base
+    i = 2
+    while name in existing:
+        name = f"{base}_{i}"
+        i += 1
+    return name
+
+
 def setup(frame: Any, app: Any) -> None:
     w = frame._w
 
@@ -144,6 +160,7 @@ def setup(frame: Any, app: Any) -> None:
         "words": [],
         "srt_content": "",
         "srt_path": "",
+        "timeline_choice": ("new", None),
     }
 
     def _ui(fn: Any) -> None:
@@ -271,15 +288,36 @@ def setup(frame: Any, app: Any) -> None:
             from src.subtitles.generator import import_srt_to_timeline
 
             set_btn("create_track_btn", False)
-            set_status("Adding subtitle track to timeline...")
 
             if not _state["srt_path"]:
                 set_status("Generate transcript first.", "#ff6b6b")
                 return
 
+            _mode, _target_tl = _state["timeline_choice"]
+            if _mode == "existing" and _target_tl is not None:
+                app.project.SetCurrentTimeline(_target_tl)
+                app.refresh_timeline()
+                set_status(f"Adding subtitle track to '{_target_tl.GetName()}'...")
+            elif _mode == "new":
+                base = app.timeline.GetName() if app.timeline else "subtitles"
+                new_name = _unique_name(app.project, f"{base}_subtitled")
+                new_tl = app.media_pool.CreateEmptyTimeline(new_name)
+                if new_tl:
+                    app.project.SetCurrentTimeline(new_tl)
+                    app.refresh_timeline()
+                    set_status(f"Created timeline '{new_name}', adding subtitle track...")
+                else:
+                    set_status("Failed to create new timeline.", "#ff6b6b")
+                    return
+            else:
+                set_status("Adding subtitle track to current timeline...")
+
             ok = import_srt_to_timeline(app.resolve, _state["srt_path"], app.timeline)
             if ok:
-                set_status("Subtitle track created in timeline.", "#66bb6a")
+                set_status(
+                    "Subtitle track created. If empty, drag SRT from Media Pool onto the track.",
+                    "#66bb6a",
+                )
             else:
                 set_status(
                     f"Could not auto-import SRT. File saved at: {_state['srt_path']}",
@@ -328,6 +366,16 @@ def setup(frame: Any, app: Any) -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
+        try:
+            from src.ui.timeline_dialog import show_timeline_dialog
+            choice = show_timeline_dialog(frame, app.project)
+        except Exception as e:
+            log.error("Timeline dialog error: %s", e)
+            set_status(f"Dialog error: {e}", "#ff6b6b")
+            return
+        if choice is None:
+            return
+        _state["timeline_choice"] = choice
         threading.Thread(target=_create_track_thread, daemon=True).start()
 
     def on_preset_changed(value: str) -> None:

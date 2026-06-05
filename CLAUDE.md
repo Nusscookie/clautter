@@ -24,28 +24,48 @@ py -3.12 -c "import customtkinter, DaVinciResolveScript; print('ok')"
 
 If this segfaults, the Python version is wrong. Do not proceed.
 
+The GUI subprocess only needs `customtkinter`. The bridge server runs
+inside Resolve's process, so it uses Resolve's own Python (which has
+`DaVinciResolveScript` available). The sanity check above is still
+useful for verifying that the system Python 3.12 is sane; if you
+want to test the bridge end-to-end you also need `requests` in the
+subprocess's Python (already in `requirements.txt`).
+
 ---
 
-## Architecture (two-process — do not collapse)
+## Architecture (two-process via HTTP bridge — do not collapse)
 
 ```
 DaVinci Resolve → main.py (Resolve-side launcher, no UI)
-                     └─ subprocess.Popen(system_python, gui.py)
-                          └─ gui.py (standalone CTk window, external scripting API)
-                               └─ src/app.py (AIEditorApp, framework-agnostic)
-                                    ├─ src/<feature>/*.py  (business logic, no widgets)
-                                    ├─ src/ui/<tab>.py     (CTk widgets)
-                                    └─ src/utils/resolve_api.py  (Resolve bridge)
+                     ├─ acquires _G.resolve (or scriptapp fallback)
+                     ├─ starts src/utils/rpc_server.py in a daemon thread
+                     │     └─ http://127.0.0.1:<random>  +  writes ~/.clutter/bridge.json
+                     └─ subprocess.Popen(system_python, gui.py)  [then .wait()s]
+                          └─ gui.py (standalone CTk window)
+                               └─ src/utils/rpc_client.py reads bridge.json
+                                    └─ src/utils/resolve_api.connect() returns a ResolveProxy
+                                         └─ src/app.py stores it as self.resolve
+                                              └─ feature modules (unchanged) use it
 ```
+
+The HTTP bridge exists because **DaVinci Resolve free** disables external
+scripting — `DaVinciResolveScript.scriptapp("Resolve")` returns `None` from
+any process outside Resolve itself. By running the server inside Resolve's
+process, the live `resolve` object is reachable via
+`getattr(builtins, "resolve", None)`, and the spawned `gui.py` subprocess
+talks to it through a localhost proxy that looks identical to a real
+`resolve` object to all downstream code.
 
 | File | Role |
 |---|---|
-| `main.py` | Minimal launcher in `Scripts/Utility/Clutter/`. Probes `py -3.10/3.11/3.12` for one that imports both `customtkinter` and `DaVinciResolveScript`. Spawns `gui.py` via `subprocess.Popen` (never `run`/`wait` — the Scripts menu must return). |
-| `gui.py` | CTk window. Connects to Resolve via `DaVinciResolveScript.scriptapp("Resolve")`. **Connect runs on a daemon thread with a 5s timeout** so the UI opens even without Resolve. |
+| `main.py` | Resolve-side launcher. Acquires `_G.resolve`, starts `rpc_server`, spawns `gui.py`, then **blocks** on `proc.wait()` so the daemon thread stays alive. |
+| `gui.py` | CTk window. Connects to the bridge on startup. **Connect runs on a daemon thread with a 5s timeout** so the UI opens even without Resolve. |
+| `src/utils/rpc_server.py` | Local HTTP server in Resolve's process. POST `/call` proxies method calls; `/ping` for liveness. Tracks object refs by uuid. |
+| `src/utils/rpc_client.py` | `ResolveProxy` (duck-typed Resolve object) + `ResolveHTTP` (requests.Session). `read_bridge_file()` reads `~/.clutter/bridge.json`. |
+| `src/utils/resolve_api.py` | `connect()` tries strategies in order: injected obj → bridge → scriptapp → builtins. Returns either a real `resolve` or a `ResolveProxy` — same shape to callers. |
 | `src/app.py` | `AIEditorApp` — framework-agnostic, no tkinter import. Holds `resolve`, `project`, `timeline`, `transcript`, `settings`. |
-| `src/<feature>/*` | Pure logic. No widgets. Only uses `app.resolve`, `app.project`, etc. |
+| `src/<feature>/*` | Pure logic. No widgets. Only uses `app.resolve`, `app.project`, etc. Works unchanged through the proxy. |
 | `src/ui/<tab>.py` | Each tab has two functions: `build(parent)` (layout) and `setup(parent, app)` (callbacks). Widget refs live in `parent._w = {}`. |
-| `src/utils/resolve_api.py` | All Resolve API calls funnel through here. |
 | `src/settings/manager.py` | JSON at `~/.clutter/config.json` (API keys, prefs, stats). |
 | `src/utils/logger.py` | stderr + rotating file at `~/.clutter/logs/ai_editor.log`. Use `log.info/warn/error` — not `print()`. |
 
@@ -106,15 +126,28 @@ def _work_thread():
 
 ---
 
+## Reference: AutoSubs (working free-edition Resolve script)
+
+AutoSubs (tmoroney/auto-subs) is installed alongside Clutter at:
+
+```
+%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\AutoSubs\
+```
+
+It is a working example of a DaVinci Resolve script that runs in the **free edition**. It works because it runs inside Resolve's process (Scripts menu), where `resolve` is available as a module global — the same mechanism Clutter's `main.py` uses. Consult it when debugging in-Resolve scripting behaviour or verifying a Resolve API call.
+
+---
+
 ## Critical gotchas
 
-1. **UIManager is gone** (Resolve free v19.1+). Don't try to bring it back — the plugin is a separate desktop app connected via external scripting.
-2. **Python ≥ 3.13 segfaults** on `import DaVinciResolveScript`. `main.py` must probe 3.10/3.11/3.12 first.
-3. **`scriptapp("Resolve")` blocks**. If Resolve isn't running it can hang 30s+. Always connect on a daemon thread with a timeout — never on the Tk main thread.
-4. **Don't import DaVinciResolveScript before Tk** — race on Windows COM init. Order: connect → import ctk → build window → `mainloop()`.
-5. **Install path is `Scripts/Utility/`**, not `Scripts/Edit/`. The Edit page gives remote Fusion proxies with no usable methods.
-6. **`main.py` must NOT block** the Scripts menu. Always `Popen`, never `run`/`call`/`wait`.
+1. **UIManager is gone** (Resolve free v19.1+). Don't try to bring it back — the plugin is a separate desktop app connected through the HTTP bridge.
+2. **External scripting is gone in free** (Resolve free v19.1+). `scriptapp("Resolve")` from outside Resolve returns `None`. This is why the bridge exists — the server runs INSIDE Resolve's process and proxies method calls over localhost.
+3. **Python ≥ 3.13 segfaults** on `import DaVinciResolveScript`. The GUI subprocess doesn't need it (only the bridge does, and the bridge runs in Resolve's own Python), but the sanity check above is still a good idea.
+4. **`main.py` blocks** on `proc.wait()` after spawning `gui.py`. The bridge daemon thread is bound to this process; if `main.py` returned, the thread would die and the GUI would lose its connection. The Scripts entry stays "busy" while the GUI is open — this is intentional.
+5. **Don't import DaVinciResolveScript before Tk** — race on Windows COM init. Order: connect → import ctk → build window → `mainloop()`. The bridge handles connection on a daemon thread with a 5s timeout, so the UI opens even without Resolve.
+6. **Install path is `Scripts/Utility/`**, not `Scripts/Edit/`. The Edit page gives remote Fusion proxies with no usable methods.
 7. **Widget refs live on the parent** (`parent._w = {}` in `build()`). Don't return the dict.
+8. **`resolve` is in module globals, not builtins.** Resolve injects `resolve` into the running script's module namespace. Use `globals().get("resolve")` in `_acquire_resolve()` — `getattr(builtins, "resolve", None)` will always return `None` in free edition.
 
 ---
 

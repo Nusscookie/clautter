@@ -138,6 +138,7 @@ def setup(frame: Any, app: Any) -> None:
     _state: dict[str, Any] = {
         "zoom_points": [],
         "clips": [],
+        "timeline_choice": ("new", None),
     }
 
     def _ui(fn: Any) -> None:
@@ -233,10 +234,14 @@ def setup(frame: Any, app: Any) -> None:
         try:
             from src.zooms.applier import apply_zooms
 
+            _mode, _target_tl = _state["timeline_choice"]
             set_btn("apply_btn", False)
             set_btn("analyze_btn", False)
             set_progress(0, True)
-            set_status("Applying zooms to new timeline...")
+            if _target_tl is not None:
+                set_status(f"Appending zooms to '{_target_tl.GetName()}'...")
+            else:
+                set_status("Applying zooms to new timeline...")
 
             fade = w["fade_zoom"].get() == 1
             zoom_pct = w["zoom_slider"].get() / 100.0
@@ -253,6 +258,7 @@ def setup(frame: Any, app: Any) -> None:
                 fade=fade,
                 zoom_amount=zoom_pct,
                 progress_callback=progress_cb,
+                target_timeline=_target_tl,
             )
 
             app.refresh_timeline()
@@ -307,16 +313,35 @@ def setup(frame: Any, app: Any) -> None:
         finally:
             set_btn("preview_btn", True)
 
+    def on_analyze() -> None:
+        if not app.connected:
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            return
+        threading.Thread(target=_analyze_thread, daemon=True).start()
+
+    def on_apply() -> None:
+        if not app.connected:
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            return
+        try:
+            from src.ui.timeline_dialog import show_timeline_dialog
+            choice = show_timeline_dialog(frame, app.project)
+        except Exception as e:
+            log.error("Timeline dialog error: %s", e)
+            set_status(f"Dialog error: {e}", "#ff6b6b")
+            return
+        if choice is None:
+            return
+        _state["timeline_choice"] = choice
+        threading.Thread(target=_apply_thread, daemon=True).start()
+
+    def on_preview() -> None:
+        if not app.connected:
+            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            return
+        threading.Thread(target=_preview_thread, daemon=True).start()
+
     w["zoom_slider"].configure(command=on_zoom_slider)
-    w["analyze_btn"].configure(command=lambda: (
-        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
-        app.connected and threading.Thread(target=_analyze_thread, daemon=True).start(),
-    ))
-    w["apply_btn"].configure(command=lambda: (
-        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
-        app.connected and threading.Thread(target=_apply_thread, daemon=True).start(),
-    ))
-    w["preview_btn"].configure(command=lambda: (
-        app.connected or set_status("Not connected to DaVinci Resolve.", "#ff6b6b"),
-        app.connected and threading.Thread(target=_preview_thread, daemon=True).start(),
-    ))
+    w["analyze_btn"].configure(command=on_analyze)
+    w["apply_btn"].configure(command=on_apply)
+    w["preview_btn"].configure(command=on_preview)

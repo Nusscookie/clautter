@@ -22,7 +22,7 @@ if str(_PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_DIR))
 
 from src.utils.logger import get_logger
-from src.app import AIEditorApp
+from src.app import ClutterApp
 
 log = get_logger("gui")
 
@@ -62,7 +62,7 @@ def _connect_with_timeout(app: Any, timeout: float = 5.0) -> None:
 def main() -> None:
     log.info("Clutter GUI starting")
 
-    app = AIEditorApp()
+    app = ClutterApp()
     _connect_with_timeout(app, timeout=5.0)
 
     try:
