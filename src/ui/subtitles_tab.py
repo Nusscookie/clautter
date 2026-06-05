@@ -299,16 +299,10 @@ def setup(frame: Any, app: Any) -> None:
                 app.refresh_timeline()
                 set_status(f"Adding subtitle track to '{_target_tl.GetName()}'...")
             elif _mode == "new":
-                base = app.timeline.GetName() if app.timeline else "subtitles"
-                new_name = _unique_name(app.project, f"{base}_subtitled")
-                new_tl = app.media_pool.CreateEmptyTimeline(new_name)
-                if new_tl:
-                    app.project.SetCurrentTimeline(new_tl)
-                    app.refresh_timeline()
-                    set_status(f"Created timeline '{new_name}', adding subtitle track...")
-                else:
-                    set_status("Failed to create new timeline.", "#ff6b6b")
+                if not app.timeline:
+                    set_status("No active timeline. Open a timeline in Resolve first.", "#ff6b6b")
                     return
+                set_status(f"Adding subtitle track to '{app.timeline.GetName()}'...")
             else:
                 set_status("Adding subtitle track to current timeline...")
 

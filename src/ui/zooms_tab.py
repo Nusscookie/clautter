@@ -198,6 +198,8 @@ def setup(frame: Any, app: Any) -> None:
                     pts = detect_zoom_points(
                         file_path=file_path,
                         clip_start_frame=clip.GetStart(),
+                        src_start_frame=clip.GetSourceStartFrame(),
+                        src_end_frame=clip.GetSourceEndFrame(),
                         fps=app.fps,
                         max_per_minute=max_per_min,
                         sigma_multiplier=sigma,

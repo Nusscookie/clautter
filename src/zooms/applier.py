@@ -193,6 +193,15 @@ def apply_zooms(
     if target_timeline is not None:
         dest_timeline = target_timeline
         project.SetCurrentTimeline(dest_timeline)
+        for _ttype in ("video", "audio"):
+            try:
+                _count = dest_timeline.GetTrackCount(_ttype)
+                for _i in range(1, _count + 1):
+                    _items = dest_timeline.GetItemListInTrack(_ttype, _i)
+                    if _items:
+                        dest_timeline.DeleteClips(_items)
+            except Exception as _e:
+                log.warning("Could not clear %s tracks: %s", _ttype, _e)
     else:
         dest_timeline = media_pool.CreateEmptyTimeline(new_name)
         if dest_timeline is None:

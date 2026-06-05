@@ -50,12 +50,20 @@ class MainWindow:
         root.configure(fg_color="#141414")
 
         try:
+            import sys, tempfile
             from PIL import Image, ImageTk
             from pathlib import Path
             _icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.png"
             if _icon_path.exists():
-                self._icon_img = ImageTk.PhotoImage(Image.open(str(_icon_path)))
-                root.iconphoto(False, self._icon_img)
+                img = Image.open(str(_icon_path)).convert("RGBA")
+                if sys.platform == "win32":
+                    _tmp = Path(tempfile.gettempdir()) / "clutter_icon.ico"
+                    img.save(str(_tmp), format="ICO",
+                             sizes=[(256, 256), (64, 64), (32, 32), (16, 16)])
+                    root.iconbitmap(str(_tmp))
+                else:
+                    self._icon_img = ImageTk.PhotoImage(img)
+                    root.iconphoto(False, self._icon_img)
         except Exception as _e:
             log.debug("Icon load failed: %s", _e)
 

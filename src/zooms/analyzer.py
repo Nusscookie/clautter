@@ -35,6 +35,8 @@ class ZoomPoint:
 def detect_zoom_points(
     file_path: str,
     clip_start_frame: int = 0,
+    src_start_frame: int = 0,
+    src_end_frame: int = -1,
     fps: float = 25.0,
     max_per_minute: int = 4,
     sigma_multiplier: float = 1.0,
@@ -84,6 +86,10 @@ def detect_zoom_points(
         log.info("No peaks above threshold in '%s'", os.path.basename(file_path))
         return []
 
+    # Source window in ms — filter peaks to only the portion this clip uses
+    src_start_ms = (src_start_frame / fps) * 1000.0
+    src_end_ms = (src_end_frame / fps) * 1000.0 if src_end_frame >= 0 else float("inf")
+
     # Min spacing between zooms to enforce max_per_minute
     min_spacing_ms = (60_000.0 / max(max_per_minute, 1)) if max_per_minute > 0 else 99_999.0
     zoom_dur_frames = max(1, int((zoom_duration_ms / 1000.0) * fps))
@@ -92,10 +98,12 @@ def detect_zoom_points(
     last_accepted_ms = -min_spacing_ms  # Allow first point immediately
 
     for peak_ms, peak_dbfs in sorted(peak_times, key=lambda x: x[0]):
+        if not (src_start_ms <= peak_ms < src_end_ms):
+            continue
         if peak_ms - last_accepted_ms < min_spacing_ms:
             continue
 
-        timeline_frame = clip_start_frame + int((peak_ms / 1000.0) * fps)
+        timeline_frame = clip_start_frame + int(((peak_ms - src_start_ms) / 1000.0) * fps)
 
         points.append(ZoomPoint(
             timeline_frame=timeline_frame,
