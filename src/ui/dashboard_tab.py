@@ -23,7 +23,7 @@ def build(parent: Any) -> None:
 
     ctk.CTkLabel(
         parent,
-        text="DaVinci Resolve Plugin  •  v1.0.0",
+        text="DaVinci Resolve Plugin  •  v0.1.0-alpha",
         font=ctk.CTkFont(size=11),
         text_color="#888888",
     ).pack(pady=(0, 8))

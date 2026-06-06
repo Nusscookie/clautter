@@ -3,7 +3,9 @@
 # Clutter
 
 **CLAUDE + CUTTER** — built by Claude Code.
-A professional DaVinci Resolve plugin for editing talking-head videos faster.
+A DaVinci Resolve plugin for editing talking-head videos faster.
+
+> **Status: v0.1.0-alpha** — core features work, rough edges expected. Not production-ready.
 
 Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
