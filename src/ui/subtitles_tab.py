@@ -358,6 +358,29 @@ def setup(frame: Any, app: Any) -> None:
                 set_status("Generate transcript first.", "#ff6b6b")
                 return
 
+            # Merge textbox edits back into word list (keeps timestamps, updates text).
+            # If token count matches, do 1:1 replacement. Otherwise use original.
+            _edited_text = w["transcript"].get("0.0", "end").strip()
+            _placeholder = "Transcript will appear here after generation..."
+            _orig_words = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
+            if _edited_text and _edited_text != _placeholder:
+                _tokens = _edited_text.split()
+                if len(_tokens) == len(_orig_words):
+                    _tok_iter = iter(_tokens)
+                    _words_src: list[Any] = [
+                        {**wd, "word": next(_tok_iter)} if wd.get("type", "word") == "word" else wd
+                        for wd in _state["words"]
+                    ]
+                    log.info("Applied %d transcript edits to subtitle words", len(_tokens))
+                else:
+                    log.warning(
+                        "Edited word count (%d) != original (%d) — edits ignored",
+                        len(_tokens), len(_orig_words),
+                    )
+                    _words_src = _state["words"]
+            else:
+                _words_src = _state["words"]
+
             _mode, _target_tl = _state["timeline_choice"]
             if _mode == "existing" and _target_tl is not None:
                 app.project.SetCurrentTimeline(_target_tl)
@@ -377,13 +400,13 @@ def setup(frame: Any, app: Any) -> None:
                 try:
                     clips = app.get_video_clips(1)
                     tl_start = app.timeline.GetStartFrame()
-                    remapped = remap_words_to_timeline(_state["words"], clips, app.fps, tl_start)
+                    remapped = remap_words_to_timeline(_words_src, clips, app.fps, tl_start)
                     log.info("Remapped %d words to current timeline", len(remapped))
                 except Exception as _e:
                     log.warning("Word remap failed, using original timestamps: %s", _e)
-                    remapped = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
+                    remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
             else:
-                remapped = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
+                remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
 
             preset_name = w["preset"].get()
             _tmp = _tempfile.NamedTemporaryFile(
