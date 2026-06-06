@@ -22,6 +22,16 @@ def build(parent: Any) -> None:
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
+    ctk.CTkLabel(
+        parent,
+        text="⚠  BETA — B-Roll matching is experimental. Auto Place coming in a future update.",
+        font=ctk.CTkFont(size=11),
+        text_color="#ff8f00",
+        fg_color="#1a1200",
+        corner_radius=4,
+        anchor="w",
+    ).pack(fill="x", padx=10, pady=4, ipady=6, ipadx=8)
+
     # ── Folder selection ──
     folder_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
     folder_card.pack(fill="x", padx=10, pady=4)

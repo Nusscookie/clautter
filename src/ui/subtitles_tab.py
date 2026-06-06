@@ -285,11 +285,12 @@ def setup(frame: Any, app: Any) -> None:
 
     def _create_track_thread() -> None:
         try:
-            from src.subtitles.generator import import_srt_to_timeline
+            from src.subtitles.generator import import_srt_to_timeline, words_to_srt, remap_words_to_timeline
+            import tempfile as _tempfile
 
             set_btn("create_track_btn", False)
 
-            if not _state["srt_path"]:
+            if not _state["words"]:
                 set_status("Generate transcript first.", "#ff6b6b")
                 return
 
@@ -306,7 +307,30 @@ def setup(frame: Any, app: Any) -> None:
             else:
                 set_status("Adding subtitle track to current timeline...")
 
-            ok = import_srt_to_timeline(app.resolve, _state["srt_path"], app.timeline)
+            # Remap word timestamps to the current (possibly cut) timeline so
+            # subtitles align correctly after smart cuts have been applied.
+            if app.timeline:
+                try:
+                    clips = app.get_video_clips(1)
+                    tl_start = app.timeline.GetStartFrame()
+                    remapped = remap_words_to_timeline(_state["words"], clips, app.fps, tl_start)
+                    log.info("Remapped %d words to current timeline", len(remapped))
+                except Exception as _e:
+                    log.warning("Word remap failed, using original timestamps: %s", _e)
+                    remapped = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
+            else:
+                remapped = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
+
+            preset_name = w["preset"].get()
+            _tmp = _tempfile.NamedTemporaryFile(
+                suffix=".srt", delete=False, mode="w", encoding="utf-8",
+                prefix="clutter_remapped_",
+            )
+            _tmp.write(words_to_srt(remapped, preset_name))
+            _tmp.close()
+            srt_path_for_import = _tmp.name
+
+            ok = import_srt_to_timeline(app.resolve, srt_path_for_import, app.timeline)
             if ok:
                 set_status(
                     "Subtitle track created. If empty, drag SRT from Media Pool onto the track.",
