@@ -265,7 +265,63 @@ def apply_cuts(
     retake_placements: list[tuple[int, int, Any, int]] = []  # (start_frame, end_frame, media_item, record_frame)
     for s in all_segment_records:
         dur = s.end_frame - s.start_frame + 1
-        if s.is_retake:
+
+        if s.is_retake and s.retake_region is not None:
+            # Partial retake: only a sub-range of this clip is the retake.
+            # Split into [pre | retake | post] and advance cursor for each piece.
+            r_start_ms, r_end_ms = s.retake_region
+            retake_sf = s.start_frame + round((r_start_ms - s.start_ms) * fps / 1000)
+            retake_ef = s.start_frame + round((r_end_ms   - s.start_ms) * fps / 1000)
+            # Clamp to segment bounds to guard against floating-point drift
+            retake_sf = max(s.start_frame, min(retake_sf, s.end_frame))
+            retake_ef = max(retake_sf,     min(retake_ef, s.end_frame))
+
+            cur = cursor
+
+            # Pre portion: everything before the retake
+            if retake_sf > s.start_frame:
+                track1_entries.append({
+                    "mediaPoolItem": s.media_item,
+                    "startFrame":    s.start_frame,
+                    "endFrame":      retake_sf,          # exclusive end = first retake frame
+                    "recordFrame":   cur,
+                    "trackIndex":    1,
+                })
+                cur += retake_sf - s.start_frame
+
+            # Retake portion: black placeholder on Track 1 + real clip on Track 2
+            retake_dur = retake_ef - retake_sf + 1
+            if black_item is not None:
+                track1_entries.append({
+                    "mediaPoolItem": black_item,
+                    "mediaType":     1,
+                    "startFrame":    0,
+                    "endFrame":      retake_dur,
+                    "recordFrame":   cur,
+                    "trackIndex":    1,
+                })
+            else:
+                log.warning(
+                    "No black Solid Color — partial retake at recordFrame=%d omitted from Track 1.", cur
+                )
+            retake_placements.append((retake_sf, retake_ef, s.media_item, cur))
+            cur += retake_dur
+
+            # Post portion: everything after the retake
+            if retake_ef < s.end_frame:
+                track1_entries.append({
+                    "mediaPoolItem": s.media_item,
+                    "startFrame":    retake_ef + 1,
+                    "endFrame":      s.end_frame + 1,    # exclusive
+                    "recordFrame":   cur,
+                    "trackIndex":    1,
+                })
+                cur += s.end_frame - retake_ef
+
+            cursor = cur
+
+        elif s.is_retake:
+            # Full retake: entire clip goes to Track 2
             if black_item is not None:
                 track1_entries.append({
                     "mediaPoolItem": black_item,
@@ -282,6 +338,8 @@ def apply_cuts(
                     cursor, dur / fps,
                 )
             retake_placements.append((s.start_frame, s.end_frame, s.media_item, cursor))
+            cursor += dur
+
         else:
             track1_entries.append({
                 "mediaPoolItem": s.media_item,
@@ -290,7 +348,7 @@ def apply_cuts(
                 "recordFrame":   cursor,
                 "trackIndex":    1,
             })
-        cursor += dur
+            cursor += dur
 
     result = media_pool.AppendToTimeline(track1_entries)
     if not result:

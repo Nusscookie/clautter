@@ -3,6 +3,11 @@
 Identifies segments where the speaker re-recorded the same content.
 The LAST attempt in each duplicate group is kept; earlier attempts are
 tagged as retakes so the caller can route them to a separate timeline track.
+
+When the retake phrase occupies only part of a segment (common at moderate/slow
+pace where silence cutting makes fewer, longer clips), `retake_region` carries
+the sub-range (start_ms, end_ms) so cutter.py can split the clip at those
+boundaries and move only the retake portion to Track 2.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ log = get_logger(__name__)
 _WIN_WORDS            = 4        # sliding window size (content words); 4 is robust to compound-word transcription variance in Whisper base
 _SIMILARITY_THRESHOLD = 0.70     # SequenceMatcher ratio to call two windows retakes
 _PROXIMITY_WINDOW_MS  = 120_000  # only compare windows within 2 minutes of each other
+_FULL_RETAKE_COVERAGE = 0.90     # retake region covering ≥ 90% of a segment → full retake, no split needed
 
 _FILLERS = frozenset({
     "um", "uh", "like", "so", "okay", "ok", "well", "right",
@@ -29,15 +35,18 @@ _FILLERS = frozenset({
 class SegmentRecord:
     """One non-silent segment, enriched with source metadata and transcript text."""
 
-    clip_idx:    int
-    media_item:  Any
-    file_path:   str
-    start_ms:    float   # absolute position in source file
-    end_ms:      float
-    start_frame: int
-    end_frame:   int
-    text:        str  = field(default="", compare=False)
-    is_retake:   bool = field(default=False, compare=False)
+    clip_idx:      int
+    media_item:    Any
+    file_path:     str
+    start_ms:      float   # absolute position in source file
+    end_ms:        float
+    start_frame:   int
+    end_frame:     int
+    text:          str                        = field(default="",   compare=False)
+    is_retake:     bool                       = field(default=False, compare=False)
+    retake_region: tuple[float, float] | None = field(default=None,  compare=False)
+    # retake_region: (start_ms, end_ms) of just the retake sub-range within this segment.
+    # None when is_retake is False, or when the retake covers the full segment (no split needed).
 
 
 @dataclass
@@ -80,13 +89,13 @@ def find_retakes(
 
     Algorithm:
     1. Transcribe each unique source file (lazy Whisper import).
-    2. Map word timestamps → segment text (for logging) and flat word timeline.
-    3. Slide a window of _WIN_WORDS content words across the timeline.
-       For each window, compare to all later windows within PROXIMITY_WINDOW_MS.
-       When similarity >= SIMILARITY_THRESHOLD, mark the earlier window's segments
-       as retakes. Clip boundaries are irrelevant — the window spans them naturally,
-       so both multi-clip retakes (Problem 2) and retakes embedded mid-clip (Problem 1)
-       are detected.
+    2. Build a flat word timeline (content words only, fillers excluded).
+    3. Slide a window of _WIN_WORDS words across the timeline.
+       When two windows match, extend the match greedily forward to find the
+       full repeated phrase.  Map the phrase's ms range onto segments:
+       - Segments fully inside the phrase → is_retake=True, retake_region=None
+       - Segments partially overlapping   → is_retake=True, retake_region=(start,end)
+       Partial-retake segments are split by cutter.py at the stored sub-range.
 
     Args:
         segments:          All SegmentRecord objects in source-timeline order.
@@ -145,45 +154,78 @@ def find_retakes(
         return 0
 
     # Sliding-window comparison
-    # retake_covered[i] = True when flat[i] is already part of a marked retake window
+    # retake_covered[i] = True when flat[i] is already part of a marked retake phrase
     retake_covered: list[bool] = [False] * len(flat)
     retake_count = 0
+    n = len(flat)
 
-    for i in range(len(flat) - _WIN_WORDS + 1):
+    for i in range(n - _WIN_WORDS + 1):
         # Skip if this window is already fully inside a marked retake
         if all(retake_covered[i : i + _WIN_WORDS]):
             continue
 
-        win_a = flat[i : i + _WIN_WORDS]
+        win_a   = flat[i : i + _WIN_WORDS]
         words_a = [e.word for e in win_a]
         t_end_a = win_a[-1].time_ms
 
-        for j in range(i + _WIN_WORDS, len(flat) - _WIN_WORDS + 1):
+        for j in range(i + _WIN_WORDS, n - _WIN_WORDS + 1):
             # Proximity guard: stop when window_b starts too far away
             if flat[j].time_ms - t_end_a > _PROXIMITY_WINDOW_MS:
                 break
 
-            win_b = flat[j : j + _WIN_WORDS]
-            words_b = [e.word for e in win_b]
+            words_b = [flat[j + k].word for k in range(_WIN_WORDS)]
+            ratio   = difflib.SequenceMatcher(None, words_a, words_b).ratio()
 
-            ratio = difflib.SequenceMatcher(None, words_a, words_b).ratio()
-            if ratio >= _SIMILARITY_THRESHOLD:
-                # Mark all segments touched by window_a as retakes
-                for k, entry in enumerate(win_a):
-                    seg = segments[entry.seg_idx]
-                    if not seg.is_retake:
-                        seg.is_retake = True
-                        retake_count += 1
-                        log.debug(
-                            "Retake: seg %d [%.1fs–%.1fs] '%s...' → superseded at %.1fs (sim=%.2f)",
-                            entry.seg_idx,
-                            seg.start_ms / 1000, seg.end_ms / 1000,
-                            seg.text[:40],
-                            flat[j].time_ms / 1000,
-                            ratio,
-                        )
-                    retake_covered[i + k] = True
-                break  # window_a matched — move to next i
+            if ratio < _SIMILARITY_THRESHOLD:
+                continue
+
+            # Extend the match greedily — find the full repeated phrase
+            ext     = 0
+            max_ext = min(n - i - _WIN_WORDS, n - j - _WIN_WORDS)
+            while ext < max_ext:
+                na = [flat[i + ext + k + 1].word for k in range(_WIN_WORDS)]
+                nb = [flat[j + ext + k + 1].word for k in range(_WIN_WORDS)]
+                if difflib.SequenceMatcher(None, na, nb).ratio() >= _SIMILARITY_THRESHOLD:
+                    ext += 1
+                else:
+                    break
+
+            total_len      = _WIN_WORDS + ext
+            retake_start_ms = flat[i].time_ms
+            retake_end_ms   = flat[i + total_len - 1].time_ms
+
+            # Mark all segments touched by [retake_start_ms, retake_end_ms]
+            seen_segs: set[int] = set()
+            for k in range(total_len):
+                fi = i + k
+                retake_covered[fi] = True
+                si = flat[fi].seg_idx
+                if si in seen_segs:
+                    continue
+                seen_segs.add(si)
+                seg = segments[si]
+                if seg.is_retake:
+                    continue
+
+                seg_dur  = max(seg.end_ms - seg.start_ms, 1.0)
+                overlap  = min(seg.end_ms, retake_end_ms) - max(seg.start_ms, retake_start_ms)
+                coverage = max(0.0, overlap) / seg_dur
+
+                seg.is_retake = True
+                seg.retake_region = None if coverage >= _FULL_RETAKE_COVERAGE else (
+                    max(seg.start_ms, retake_start_ms),
+                    min(seg.end_ms,   retake_end_ms),
+                )
+                retake_count += 1
+                log.debug(
+                    "Retake: seg %d [%.1fs–%.1fs] '%s...' → superseded at %.1fs "
+                    "(sim=%.2f, coverage=%.0f%%, %s)",
+                    si, seg.start_ms / 1000, seg.end_ms / 1000, seg.text[:40],
+                    flat[j].time_ms / 1000, ratio, coverage * 100,
+                    "full" if seg.retake_region is None else "partial",
+                )
+
+            break  # window_a matched — move to next i
 
     log.info("Retake detection complete: %d retake(s) in %d segment(s)", retake_count, len(segments))
     return retake_count
