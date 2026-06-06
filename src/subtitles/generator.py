@@ -160,30 +160,50 @@ def import_srt_to_timeline(resolve: Any, srt_path: str, timeline: Any) -> bool:
                         except Exception as _e:
                             log.warning("Could not clear subtitle track %d: %s", _i, _e)
 
-        # Resolve timelines start at 01:00:00:00, not frame 0 — use first video clip's
-        # actual start frame so recordFrame lands at the timeline's real beginning.
-        tl_start_frame = 0
+        # Get the timeline's real start frame. DaVinci timelines start at 01:00:00:00
+        # (~frame 90000), not frame 0. recordFrame: 0 is before the timeline exists
+        # and gets silently ignored. Use GetStartFrame() — same method AutoSubs uses.
+        tl_start = 0
         try:
             if timeline:
+                tl_start = timeline.GetStartFrame()
+        except Exception as _e:
+            log.debug("GetStartFrame failed, falling back to first clip: %s", _e)
+            try:
                 _v = timeline.GetItemListInTrack("video", 1)
                 if _v:
-                    tl_start_frame = _v[0].GetStart()
-        except Exception as _e:
-            log.debug("Could not determine timeline start frame: %s", _e)
+                    tl_start = _v[0].GetStart()
+            except Exception:
+                pass
+        log.info("Placing SRT at timeline frame %d", tl_start)
 
-        # Place SRT clip on the timeline
+        # Place SRT clip on the timeline.
+        # trackType/trackIndex are undocumented keys — Resolve detects SRT media
+        # type automatically and places on the subtitle track. Omitting them avoids
+        # potential conflicts with recordFrame handling.
         if srt_item:
             appended = media_pool.AppendToTimeline([{
                 "mediaPoolItem": srt_item,
-                "trackType": "subtitle",
-                "trackIndex": 1,
-                "recordFrame": tl_start_frame,
+                "recordFrame": tl_start,
             }])
             if not appended:
                 log.warning(
                     "AppendToTimeline returned empty — drag '%s' from Media Pool to subtitle track",
                     srt_path,
                 )
+            else:
+                try:
+                    _placed = timeline.GetItemListInTrack("subtitle", 1)
+                    if _placed:
+                        actual = _placed[0].GetStart()
+                        log.info("Subtitle clip landed at frame %d (wanted %d)", actual, tl_start)
+                        if actual != tl_start:
+                            log.warning(
+                                "recordFrame ignored by Resolve for subtitle clips — "
+                                "drag subtitle clip to frame %d manually", tl_start
+                            )
+                except Exception as _e:
+                    log.debug("Post-placement check failed: %s", _e)
 
         log.info("SRT imported to media pool: %s", srt_path)
         return True
