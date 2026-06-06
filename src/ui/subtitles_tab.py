@@ -377,6 +377,7 @@ def setup(frame: Any, app: Any) -> None:
         "srt_content": "",
         "srt_path": "",
         "timeline_choice": ("new", None),
+        "words_are_remapped": False,
     }
 
     # Mutable closure vars for color picker state (list wrapper allows reassignment)
@@ -386,6 +387,61 @@ def setup(frame: Any, app: Any) -> None:
 
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
+
+    def _extract_cut_audio(clips: list, tmp_dir: str) -> str | None:
+        """ffmpeg-extract kept audio from timeline clips and concatenate into one WAV.
+
+        Returns path to the WAV (inside tmp_dir) or None if extraction fails.
+        The caller is responsible for cleaning up tmp_dir.
+        """
+        import subprocess, os as _os
+        from src.utils.resolve_api import get_clip_file_path as _gcfp
+
+        segments: list[str] = []
+        for i, clip in enumerate(clips):
+            try:
+                src = _gcfp(clip)
+                if not src or not _os.path.exists(src):
+                    continue
+                start_s = clip.GetSourceStartFrame() / app.fps
+                end_s   = clip.GetSourceEndFrame()   / app.fps
+                dur     = end_s - start_s
+                if dur < 0.05:
+                    continue
+                seg = _os.path.join(tmp_dir, f"seg_{i:04d}.wav")
+                r = subprocess.run(
+                    ["ffmpeg", "-y", "-loglevel", "error",
+                     "-i", src, "-ss", str(start_s), "-t", str(dur),
+                     "-vn", "-ac", "1", "-ar", "16000", seg],
+                    capture_output=True, timeout=120,
+                )
+                if r.returncode == 0:
+                    segments.append(seg)
+                else:
+                    log.debug("ffmpeg seg %d: %s", i,
+                              r.stderr.decode(errors="replace")[:200])
+            except Exception as _e:
+                log.debug("_extract_cut_audio clip %d: %s", i, _e)
+
+        if not segments:
+            return None
+        if len(segments) == 1:
+            return segments[0]
+
+        lst = _os.path.join(tmp_dir, "concat.txt")
+        with open(lst, "w", encoding="utf-8") as f:
+            for s in segments:
+                f.write(f"file '{s.replace(chr(92), '/')}'\n")
+        out = _os.path.join(tmp_dir, "cut_audio.wav")
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error",
+             "-f", "concat", "-safe", "0", "-i", lst, out],
+            capture_output=True, timeout=120,
+        )
+        if r.returncode == 0:
+            return out
+        log.warning("_extract_cut_audio concat failed — using first segment only")
+        return segments[0]
 
     def set_status(msg: str, color: str = "#aaaaaa") -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
@@ -543,33 +599,49 @@ def setup(frame: Any, app: Any) -> None:
                 set_progress(0, False)
                 return
 
-            file_path = get_clip_file_path(clips[0])
-            if not file_path:
-                set_status("Could not get media file path from first clip.", "#ff6b6b")
-                set_progress(0, False)
-                return
+            import shutil, tempfile as _tmpmod
 
-            set_progress(20)
+            _stt_tmp = _tmpmod.mkdtemp(prefix="clutter_stt_")
+            try:
+                set_status("Extracting timeline audio...")
+                _cut = _extract_cut_audio(clips, _stt_tmp)
+                if _cut:
+                    audio_for_stt = _cut
+                    _state["words_are_remapped"] = True
+                    log.info("Using cut timeline audio (%d clips)", len(clips))
+                else:
+                    audio_for_stt = get_clip_file_path(clips[0])
+                    _state["words_are_remapped"] = False
+                    if not audio_for_stt:
+                        set_status("Could not get media file path.", "#ff6b6b")
+                        set_progress(0, False)
+                        return
+                    log.info("Using full source file (cut extraction unavailable)")
 
-            if provider == "Local Whisper":
-                from src.subtitles.whisper_client import WhisperClient
-                model_label = w["whisper_model"].get()
-                model_name = _WHISPER_MODEL_MAP.get(model_label, "base")
-                set_status(
-                    f"Loading Whisper {model_label} — first run downloads model automatically..."
-                )
-                client = WhisperClient(model_name)
-                words = client.transcribe(file_path, language=lang_code)
-            else:
-                from src.subtitles.elevenlabs import ElevenLabsClient
-                api_key = w["api_key"].get().strip()
-                if not api_key:
-                    set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
-                    set_progress(0, False)
-                    return
-                set_status(f"Sending to ElevenLabs STT: {file_path.split(chr(92))[-1]}")
-                client = ElevenLabsClient(api_key)
-                words = client.transcribe(file_path, language=lang_code)
+                set_progress(20)
+
+                if provider == "Local Whisper":
+                    from src.subtitles.whisper_client import WhisperClient
+                    model_label = w["whisper_model"].get()
+                    model_name = _WHISPER_MODEL_MAP.get(model_label, "base")
+                    set_status(
+                        f"Loading Whisper {model_label} — first run downloads model automatically..."
+                    )
+                    client = WhisperClient(model_name)
+                    words = client.transcribe(audio_for_stt, language=lang_code)
+                else:
+                    from src.subtitles.elevenlabs import ElevenLabsClient
+                    api_key = w["api_key"].get().strip()
+                    if not api_key:
+                        set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
+                        set_progress(0, False)
+                        return
+                    _name = audio_for_stt.replace("\\", "/").split("/")[-1]
+                    set_status(f"Sending to ElevenLabs STT: {_name}")
+                    client = ElevenLabsClient(api_key)
+                    words = client.transcribe(audio_for_stt, language=lang_code)
+            finally:
+                shutil.rmtree(_stt_tmp, ignore_errors=True)
 
             set_progress(60)
 
@@ -688,7 +760,12 @@ def setup(frame: Any, app: Any) -> None:
                 set_status("Adding subtitle track to current timeline...")
 
             # Remap word timestamps to the current (possibly cut) timeline.
-            if app.timeline:
+            if _state.get("words_are_remapped"):
+                # Audio was extracted from cut timeline clips — timestamps are already
+                # relative to the start of the kept content (0 = first clip start).
+                remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
+                log.info("Words already timeline-relative (%d words)", len(remapped))
+            elif app.timeline:
                 try:
                     clips = app.get_video_clips(1)
                     tl_start = app.timeline.GetStartFrame()
