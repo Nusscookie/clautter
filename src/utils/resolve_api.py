@@ -1,4 +1,4 @@
-"""DaVinci Resolve API helpers — connection, timeline utilities, frame math.
+"""DaVinci Resolve connection — tries four strategies in order.
 
 Works with both DaVinci Resolve free and Studio editions.
 
@@ -12,6 +12,9 @@ Connection strategy (in order):
    External scripting is enabled.
 3. ``getattr(builtins, "resolve", None)`` — covers in-Resolve contexts
    (e.g. the Resolve Scripting Console).
+
+Utility helpers (get_fps, ms_to_frames, etc.) live in resolve_utils.py
+and are re-exported here for backwards compatibility.
 """
 
 from __future__ import annotations
@@ -23,7 +26,6 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# Standard Windows path for the DaVinci scripting module
 _SCRIPTING_MODULES = Path(
     r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\Modules"
 )
@@ -36,10 +38,7 @@ def _ensure_scripting_path() -> None:
 
 
 def _try_bridge() -> Optional[Any]:
-    """Return a ResolveProxy rooted at the live Resolve, or None if no bridge.
-
-    Lazy import so the bridge code path is only paid for when needed.
-    """
+    """Return a ResolveProxy rooted at the live Resolve, or None if no bridge."""
     try:
         from src.utils.rpc_client import ResolveProxy, read_bridge_file
     except ImportError as e:
@@ -63,20 +62,15 @@ def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
     """
     _ensure_scripting_path()
 
-    # Strategy 0: caller-supplied object (Resolve Scripts menu can inject one).
     resolve = resolve_obj
     if resolve is not None:
         log.debug("Connected via injected resolve global")
 
-    # Strategy 1: HTTP bridge started by main.py inside Resolve's process.
-    # This is the only path that works in the free edition from a
-    # separate subprocess — ``scriptapp`` returns None there.
     if resolve is None:
         resolve = _try_bridge()
         if resolve is not None:
             log.debug("Connected via HTTP bridge")
 
-    # Strategy 2: DaVinciResolveScript module (Studio with external scripting).
     if resolve is None:
         try:
             import DaVinciResolveScript as dvr  # type: ignore
@@ -86,7 +80,6 @@ def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
         except ImportError:
             log.debug("DaVinciResolveScript not importable — trying built-in globals")
 
-    # Strategy 3: builtins (in-Resolve contexts, e.g. Scripting Console).
     if resolve is None:
         import builtins
         resolve = getattr(builtins, "resolve", None)
@@ -121,85 +114,29 @@ def connect(resolve_obj=None) -> tuple[Any, Any, Any, Any, Any]:
     return resolve, pm, project, media_pool, timeline
 
 
-def get_fps(project: Any) -> float:
-    """Return the current timeline frame rate as a float."""
-    try:
-        return float(project.GetSetting("timelineFrameRate"))
-    except (TypeError, ValueError):
-        log.warning("Could not read timelineFrameRate, defaulting to 25.0")
-        return 25.0
+# ---------------------------------------------------------------------------
+# Re-exports from resolve_utils for backwards compatibility
+# ---------------------------------------------------------------------------
 
+from src.utils.resolve_utils import (  # noqa: E402
+    get_fps,
+    ms_to_frames,
+    frames_to_ms,
+    get_clip_file_path,
+    get_all_video_clips,
+    get_timeline_names,
+    ensure_subtitle_track,
+    get_bmd,
+)
 
-def ms_to_frames(ms: float, fps: float) -> int:
-    """Convert milliseconds to frame count (floored)."""
-    return int((ms / 1000.0) * fps)
-
-
-def frames_to_ms(frames: int, fps: float) -> float:
-    """Convert frame count to milliseconds."""
-    return (frames / fps) * 1000.0
-
-
-def get_clip_file_path(clip: Any) -> Optional[str]:
-    """Return the source media file path for a timeline clip, or None."""
-    try:
-        media_item = clip.GetMediaPoolItem()
-        if media_item is None:
-            return None
-        props = media_item.GetClipProperty()
-        if not isinstance(props, dict):
-            return None
-        for key in ("File Path", "FilePath", "Clip Path", "clipPath"):
-            val = props.get(key)
-            if val:
-                return str(val)
-    except Exception as e:
-        log.debug("get_clip_file_path error: %s", e)
-    return None
-
-
-def get_all_video_clips(timeline: Any, track_index: int = 1) -> list[Any]:
-    """Return all TimelineItems from a video track (1-based index)."""
-    try:
-        items = timeline.GetItemListInTrack("video", track_index)
-        return list(items) if items else []
-    except Exception as e:
-        log.error("get_all_video_clips error: %s", e)
-        return []
-
-
-def get_timeline_names(project: Any) -> list[str]:
-    """Return list of all timeline names in the project."""
-    names = []
-    try:
-        count = project.GetTimelineCount()
-        for i in range(1, count + 1):
-            tl = project.GetTimelineByIndex(i)
-            if tl:
-                names.append(tl.GetName())
-    except Exception as e:
-        log.debug("get_timeline_names error: %s", e)
-    return names
-
-
-def ensure_subtitle_track(timeline: Any) -> bool:
-    """Add a subtitle track if none exists. Returns True on success."""
-    try:
-        count = timeline.GetTrackCount("subtitle")
-        if count == 0:
-            return timeline.AddTrack("subtitle")
-        return True
-    except Exception as e:
-        log.error("ensure_subtitle_track error: %s", e)
-        return False
-
-
-def get_bmd() -> Any:
-    """Return the bmd module injected by DaVinci Resolve's scripting environment."""
-    # bmd is registered in sys.modules as a side effect of loading fusionscript
-    bmd = sys.modules.get("bmd")
-    if bmd is not None:
-        return bmd
-    # Fallback: check builtins (some Resolve versions inject it there)
-    import builtins
-    return getattr(builtins, "bmd", None)
+__all__ = [
+    "connect",
+    "get_fps",
+    "ms_to_frames",
+    "frames_to_ms",
+    "get_clip_file_path",
+    "get_all_video_clips",
+    "get_timeline_names",
+    "ensure_subtitle_track",
+    "get_bmd",
+]

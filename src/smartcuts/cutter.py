@@ -6,6 +6,9 @@ Strategy: non-destructive new-timeline approach.
   3. Create a new empty timeline and AppendToTimeline() with all segments.
 
 The original timeline is never modified.
+
+Segment extraction lives in cutter_segments.py.
+Retake timeline placement lives in cutter_retakes.py.
 """
 
 from __future__ import annotations
@@ -13,8 +16,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from src.utils.logger import get_logger
-from src.utils.resolve_api import get_clip_file_path, ms_to_frames
-from src.smartcuts.analyzer import SilenceRegion, detect_silences
+from src.utils.timeline_utils import _unique_timeline_name
+from src.smartcuts.cutter_segments import _collect_segments
+from src.smartcuts.cutter_retakes import _build_timeline_entries, _create_retake_track
 
 log = get_logger(__name__)
 
@@ -27,64 +31,6 @@ class CutResult:
     total_clips_processed: int
     retakes_found: int = 0
     retake_track_index: int = 0  # 0 = no retake track created
-
-
-def _non_silent_segments(
-    clip_source_start_ms: float,
-    clip_source_end_ms: float,
-    all_silence_regions: list[SilenceRegion],
-) -> list[tuple[float, float]]:
-    """Return keep-segments (in absolute source ms) for a clip's source range.
-
-    Clips silence regions to the clip's own source window, then inverts them.
-    Returns list of (start_ms, end_ms) pairs representing non-silent content.
-    """
-    # Filter and clamp silence regions to this clip's window
-    clipped: list[SilenceRegion] = []
-    for region in all_silence_regions:
-        clamped_start = max(region.start_ms, clip_source_start_ms)
-        clamped_end = min(region.end_ms, clip_source_end_ms)
-        if clamped_end > clamped_start:
-            clipped.append(SilenceRegion(clamped_start, clamped_end))
-
-    if not clipped:
-        # No silences in this clip — keep everything
-        return [(clip_source_start_ms, clip_source_end_ms)]
-
-    clipped.sort(key=lambda r: r.start_ms)
-
-    segments: list[tuple[float, float]] = []
-    cursor = clip_source_start_ms
-
-    for silence in clipped:
-        if silence.start_ms > cursor + 10:  # 10ms minimum segment to avoid micro-clips
-            segments.append((cursor, silence.start_ms))
-        cursor = silence.end_ms
-
-    # Trailing content after last silence
-    if cursor < clip_source_end_ms - 10:
-        segments.append((cursor, clip_source_end_ms))
-
-    return segments
-
-
-def _unique_timeline_name(project: Any, base_name: str) -> str:
-    """Return a name that does not collide with existing timelines."""
-    try:
-        count = project.GetTimelineCount()
-        existing = {
-            project.GetTimelineByIndex(i + 1).GetName()
-            for i in range(count)
-        }
-    except Exception:
-        existing = set()
-
-    name = base_name
-    i = 2
-    while name in existing:
-        name = f"{base_name}_{i}"
-        i += 1
-    return name
 
 
 def apply_cuts(
@@ -133,75 +79,9 @@ def apply_cuts(
         new_name = _unique_timeline_name(project, f"{timeline.GetName()}_cuts")
         log.info("Target new timeline: '%s' | FPS: %.2f", new_name, fps)
 
-    from src.smartcuts.retake_detector import SegmentRecord, find_retakes as _find_retakes
-
-    all_segment_records: list[SegmentRecord] = []
-    total_silence_ms = 0.0
-    clips_processed = 0
-
-    total = len(clips)
-    for idx, clip in enumerate(clips):
-        if progress_callback:
-            progress_callback(idx, total, f"Analyzing clip {idx + 1}/{total}...")
-
-        file_path = get_clip_file_path(clip)
-        if not file_path:
-            log.warning("Clip %d: no file path found, skipping", idx)
-            continue
-
-        media_item = clip.GetMediaPoolItem()
-        if media_item is None:
-            log.warning("Clip %d: no MediaPoolItem, skipping", idx)
-            continue
-
-        # Source frame range this clip uses
-        src_start_frame: int = clip.GetSourceStartFrame()
-        src_end_frame: int = clip.GetSourceEndFrame()
-
-        src_start_ms = (src_start_frame / fps) * 1000.0
-        src_end_ms = (src_end_frame / fps) * 1000.0
-
-        # Analyze the full source file; silence positions are absolute from file start
-        try:
-            all_regions = detect_silences(
-                file_path,
-                threshold_db=threshold_db,
-                min_duration_ms=min_duration_ms,
-                padding_ms=padding_ms,
-            )
-        except Exception as e:
-            log.error("Clip %d analysis failed (%s): %s — keeping whole clip", idx, file_path, e)
-            all_regions = []
-
-        # Accumulate silence for stats (only within this clip's window)
-        for region in all_regions:
-            overlap_start = max(region.start_ms, src_start_ms)
-            overlap_end = min(region.end_ms, src_end_ms)
-            if overlap_end > overlap_start:
-                total_silence_ms += overlap_end - overlap_start
-
-        # Get non-silent source windows
-        keep_segments = _non_silent_segments(src_start_ms, src_end_ms, all_regions)
-        log.debug("Clip %d: %d keep segment(s) from %d silence(s)", idx, len(keep_segments), len(all_regions))
-
-        for seg_start_ms, seg_end_ms in keep_segments:
-            start_frame = ms_to_frames(seg_start_ms, fps)
-            end_frame = ms_to_frames(seg_end_ms, fps) - 1
-
-            if end_frame <= start_frame:
-                continue
-
-            all_segment_records.append(SegmentRecord(
-                clip_idx=idx,
-                media_item=media_item,
-                file_path=file_path,
-                start_ms=seg_start_ms,
-                end_ms=seg_end_ms,
-                start_frame=start_frame,
-                end_frame=end_frame,
-            ))
-
-        clips_processed += 1
+    all_segment_records, total_silence_ms, clips_processed = _collect_segments(
+        clips, fps, threshold_db, min_duration_ms, padding_ms, progress_callback,
+    )
 
     if not all_segment_records:
         raise RuntimeError(
@@ -209,12 +89,13 @@ def apply_cuts(
             "Check that the media files are accessible and that ffmpeg is installed."
         )
 
-    # Retake detection — tags each SegmentRecord.is_retake in-place
     retakes_found = 0
     if detect_retakes:
+        from src.smartcuts.retake_detector import find_retakes as _find_retakes
+
         def _retake_progress(msg: str) -> None:
             if progress_callback:
-                progress_callback(clips_processed, total, msg)
+                progress_callback(clips_processed, len(clips), msg)
         try:
             retakes_found = _find_retakes(all_segment_records, progress_callback=_retake_progress)
         except Exception as e:
@@ -224,7 +105,7 @@ def apply_cuts(
     retake_count = sum(1 for s in all_segment_records if s.is_retake)
 
     if progress_callback:
-        progress_callback(total, total, f"Building timeline '{new_name}'...")
+        progress_callback(len(clips), len(clips), f"Building timeline '{new_name}'...")
 
     if target_timeline is not None:
         dest_timeline = target_timeline
@@ -247,168 +128,25 @@ def apply_cuts(
             )
         project.SetCurrentTimeline(dest_timeline)
 
-    # Black Solid Color MediaPoolItem for retake gaps on Track 1.
-    # Only attempt when retakes exist — no need to spend the bootstrap if we won't use it.
     from src.utils.black_clip import get_black_media_item
     black_item: Any | None = None
     if retake_count > 0:
         black_item = get_black_media_item(resolve)
 
-    # Unified stream walk: best-takes go to Track 1; retakes leave a black gap
-    # on Track 1 of the same duration AND go to Track 2 at the same recordFrame.
-    # NOTE: Resolve's AppendToTimeline interprets endFrame EXCLUSIVELY for
-    # explicit recordFrame entries (placed_length = endFrame - startFrame).
-    # So endFrame = startFrame + placed_length, not startFrame + placed_length - 1.
     tl_start = dest_timeline.GetStartFrame()
-    cursor = tl_start
-    track1_entries: list[dict] = []
-    retake_placements: list[tuple[int, int, Any, int]] = []  # (start_frame, end_frame, media_item, record_frame)
-    for s in all_segment_records:
-        dur = s.end_frame - s.start_frame + 1
-
-        if s.is_retake and s.retake_region is not None:
-            # Partial retake: only a sub-range of this clip is the retake.
-            # Split into [pre | retake | post] and advance cursor for each piece.
-            r_start_ms, r_end_ms = s.retake_region
-            retake_sf = s.start_frame + round((r_start_ms - s.start_ms) * fps / 1000)
-            retake_ef = s.start_frame + round((r_end_ms   - s.start_ms) * fps / 1000)
-            # Clamp to segment bounds to guard against floating-point drift
-            retake_sf = max(s.start_frame, min(retake_sf, s.end_frame))
-            retake_ef = max(retake_sf,     min(retake_ef, s.end_frame))
-
-            cur = cursor
-
-            # Pre portion: everything before the retake
-            if retake_sf > s.start_frame:
-                track1_entries.append({
-                    "mediaPoolItem": s.media_item,
-                    "startFrame":    s.start_frame,
-                    "endFrame":      retake_sf,          # exclusive end = first retake frame
-                    "recordFrame":   cur,
-                    "trackIndex":    1,
-                })
-                cur += retake_sf - s.start_frame
-
-            # Retake portion: black placeholder on Track 1 + real clip on Track 2
-            retake_dur = retake_ef - retake_sf + 1
-            if black_item is not None:
-                track1_entries.append({
-                    "mediaPoolItem": black_item,
-                    "mediaType":     1,
-                    "startFrame":    0,
-                    "endFrame":      retake_dur,
-                    "recordFrame":   cur,
-                    "trackIndex":    1,
-                })
-            else:
-                log.warning(
-                    "No black Solid Color — partial retake at recordFrame=%d omitted from Track 1.", cur
-                )
-            retake_placements.append((retake_sf, retake_ef, s.media_item, cur))
-            cur += retake_dur
-
-            # Post portion: everything after the retake
-            if retake_ef < s.end_frame:
-                track1_entries.append({
-                    "mediaPoolItem": s.media_item,
-                    "startFrame":    retake_ef + 1,
-                    "endFrame":      s.end_frame + 1,    # exclusive
-                    "recordFrame":   cur,
-                    "trackIndex":    1,
-                })
-                cur += s.end_frame - retake_ef
-
-            cursor = cur
-
-        elif s.is_retake:
-            # Full retake: entire clip goes to Track 2
-            if black_item is not None:
-                track1_entries.append({
-                    "mediaPoolItem": black_item,
-                    "mediaType":     1,
-                    "startFrame":    0,
-                    "endFrame":      dur,
-                    "recordFrame":   cursor,
-                    "trackIndex":    1,
-                })
-            else:
-                log.warning(
-                    "No black Solid Color — retake at recordFrame=%d (%.2fs) "
-                    "omitted from Track 1; drag it manually from Track 2.",
-                    cursor, dur / fps,
-                )
-            retake_placements.append((s.start_frame, s.end_frame, s.media_item, cursor))
-            cursor += dur
-
-        else:
-            track1_entries.append({
-                "mediaPoolItem": s.media_item,
-                "startFrame":    s.start_frame,
-                "endFrame":      s.end_frame + 1,  # exclusive: +1 to get dur frames
-                "recordFrame":   cursor,
-                "trackIndex":    1,
-            })
-            cursor += dur
+    track1_entries, retake_placements = _build_timeline_entries(
+        all_segment_records, black_item, fps, tl_start,
+    )
 
     result = media_pool.AppendToTimeline(track1_entries)
     if not result:
-        log.warning(
-            "AppendToTimeline returned falsy — timeline '%s' may be incomplete.", new_name
-        )
+        log.warning("AppendToTimeline returned falsy — timeline '%s' may be incomplete.", new_name)
 
-    # Place retakes on a separate disabled track when requested
     retake_track_index = 0
     if retake_placements:
-        try:
-            dest_timeline.AddTrack("video")
-            retake_track_index = dest_timeline.GetTrackCount("video")
-
-            # Ensure a matching audio track exists at the same index BEFORE placing clips,
-            # so Resolve routes the clips' linked audio to the retake audio track.
-            audio_count = dest_timeline.GetTrackCount("audio")
-            while audio_count < retake_track_index:
-                dest_timeline.AddTrack("audio")
-                audio_count += 1
-
-            track2_entries: list[dict] = [
-                {
-                    "mediaPoolItem": mi,
-                    "startFrame":    sf,
-                    "endFrame":      ef + 1,  # exclusive — same convention as track 1
-                    "recordFrame":   rf,
-                    "trackIndex":    retake_track_index,
-                }
-                for (sf, ef, mi, rf) in retake_placements
-            ]
-            retake_result = media_pool.AppendToTimeline(track2_entries)
-            if not retake_result:
-                log.warning("AppendToTimeline for retake track returned falsy")
-
-            try:
-                dest_timeline.SetTrackName("video", retake_track_index, "Retakes")
-            except Exception as e:
-                log.debug("SetTrackName video retake track failed: %s", e)
-            try:
-                dest_timeline.SetTrackEnable("video", retake_track_index, False)
-            except Exception as e:
-                log.warning("SetTrackEnable video retake track failed: %s", e)
-
-            try:
-                dest_timeline.SetTrackName("audio", retake_track_index, "Retakes")
-            except Exception as e:
-                log.debug("SetTrackName audio retake track failed: %s", e)
-            try:
-                dest_timeline.SetTrackEnable("audio", retake_track_index, False)
-            except Exception as e:
-                log.warning("SetTrackEnable audio retake track failed: %s", e)
-
-            log.info(
-                "Retake track %d created on '%s': %d retake(s)",
-                retake_track_index, new_name, len(retake_placements),
-            )
-        except Exception as e:
-            log.error("Failed to create retake track: %s", e)
-            retake_track_index = 0
+        retake_track_index = _create_retake_track(
+            dest_timeline, retake_placements, media_pool, new_name,
+        )
 
     log.info(
         "Created '%s': %d segment(s), %.2fs silence removed from %d clip(s), %d retake(s)",
