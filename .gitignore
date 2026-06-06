@@ -21,6 +21,9 @@ venv/
 Thumbs.db
 desktop.ini
 
+# Personal notes (not for repo)
+FUTURE.md
+
 # Editor
 .vscode/
 .idea/
