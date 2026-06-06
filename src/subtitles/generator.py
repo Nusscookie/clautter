@@ -56,17 +56,30 @@ def _format_timestamp(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def words_to_srt(words: list[dict], preset_name: str = "YouTube") -> str:
+def words_to_srt(
+    words: list[dict],
+    preset_name: str = "YouTube",
+    *,
+    words_per_line: int | None = None,
+    lines_per_block: int | None = None,
+    uppercase: bool | None = None,
+) -> str:
     """Convert word-timing entries to an SRT subtitle file string.
 
     Args:
-        words:       List of {word, start_sec, end_sec, type} dicts.
-        preset_name: One of the _PRESETS keys.
+        words:         List of {word, start_sec, end_sec, type} dicts.
+        preset_name:   One of the _PRESETS keys (sets defaults).
+        words_per_line: Override preset's words-per-line (1–12).
+        lines_per_block: Override preset's lines-per-block (1–3).
+        uppercase:     Override preset's uppercase flag.
 
     Returns:
         SRT file content as a string.
     """
     preset = _PRESETS.get(preset_name, _PRESETS["YouTube"])
+    effective_wpl   = words_per_line  if words_per_line  is not None else preset.words_per_line
+    effective_lpb   = lines_per_block if lines_per_block is not None else preset.lines_per_block
+    effective_upper = uppercase       if uppercase       is not None else preset.uppercase
 
     # Keep only actual words (skip spacing / audio_event entries)
     word_entries = [w for w in words if w.get("type", "word") == "word" and w.get("word", "").strip()]
@@ -81,28 +94,28 @@ def words_to_srt(words: list[dict], preset_name: str = "YouTube") -> str:
     if preset.word_by_word:
         # One subtitle entry per word (Hormozi style)
         for w in word_entries:
-            text = w["word"].upper() if preset.uppercase else w["word"]
+            text = w["word"].upper() if effective_upper else w["word"]
             start = _format_timestamp(w["start_sec"])
             end = _format_timestamp(w["end_sec"])
             lines.extend([str(block_index), f"{start} --> {end}", text, ""])
             block_index += 1
     else:
         # Group words into blocks
-        max_words = preset.words_per_line * preset.lines_per_block
+        max_words = effective_wpl * effective_lpb
         for i in range(0, len(word_entries), max_words):
             block_words = word_entries[i : i + max_words]
             start_sec = block_words[0]["start_sec"]
             end_sec = block_words[-1]["end_sec"]
 
             text_words = [
-                (w["word"].upper() if preset.uppercase else w["word"])
+                (w["word"].upper() if effective_upper else w["word"])
                 for w in block_words
             ]
 
             # Split into lines
             chunks: list[str] = []
-            for j in range(0, len(text_words), preset.words_per_line):
-                chunks.append(" ".join(text_words[j : j + preset.words_per_line]))
+            for j in range(0, len(text_words), effective_wpl):
+                chunks.append(" ".join(text_words[j : j + effective_wpl]))
             text = "\n".join(chunks)
 
             start = _format_timestamp(start_sec)

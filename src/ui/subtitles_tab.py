@@ -77,6 +77,46 @@ def build(parent: Any) -> None:
     w["preset"].set("YouTube")
     w["preset"].pack(fill="x")
 
+    # ── Style controls ──
+    style_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    style_card.pack(fill="x", padx=10, pady=4)
+
+    ctk.CTkLabel(style_card, text="STYLE CONTROLS",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    wpl_row = ctk.CTkFrame(style_card, fg_color="transparent")
+    wpl_row.pack(fill="x", padx=10, pady=(0, 4))
+    wpl_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(wpl_row, text="Words per line",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=120, anchor="w").grid(row=0, column=0, sticky="w")
+    w["wpl_slider"] = ctk.CTkSlider(wpl_row, from_=1, to=12, number_of_steps=11)
+    w["wpl_slider"].set(7)
+    w["wpl_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    w["wpl_label"] = ctk.CTkLabel(wpl_row, text="7",
+                                   font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                   width=24, anchor="e")
+    w["wpl_label"].grid(row=0, column=2, sticky="e")
+
+    lpb_row = ctk.CTkFrame(style_card, fg_color="transparent")
+    lpb_row.pack(fill="x", padx=10, pady=(0, 4))
+    lpb_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(lpb_row, text="Lines per block",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=120, anchor="w").grid(row=0, column=0, sticky="w")
+    w["lpb_slider"] = ctk.CTkSlider(lpb_row, from_=1, to=3, number_of_steps=2)
+    w["lpb_slider"].set(2)
+    w["lpb_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    w["lpb_label"] = ctk.CTkLabel(lpb_row, text="2",
+                                   font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                   width=24, anchor="e")
+    w["lpb_label"].grid(row=0, column=2, sticky="e")
+
+    w["caps_check"] = ctk.CTkCheckBox(style_card, text="ALL CAPS",
+                                       font=ctk.CTkFont(size=11))
+    w["caps_check"].pack(anchor="w", padx=10, pady=(0, 8))
+
     # ── Action buttons ──
     btn_row1 = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row1.pack(fill="x", padx=10, pady=(6, 2))
@@ -153,6 +193,14 @@ def _unique_name(project: Any, base: str) -> str:
     return name
 
 
+_PRESET_DEFAULTS: dict[str, tuple[int, int, bool]] = {
+    "Standard":           (8, 2, False),
+    "YouTube":            (7, 2, False),
+    "TikTok":             (5, 1, True),
+    "Alex Hormozi Style": (3, 1, True),
+}
+
+
 def setup(frame: Any, app: Any) -> None:
     w = frame._w
 
@@ -181,6 +229,22 @@ def setup(frame: Any, app: Any) -> None:
     def set_btn(name: str, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
         _ui(lambda: w[name].configure(state=state))
+
+    def _get_style_overrides() -> dict:
+        return {
+            "words_per_line":  int(w["wpl_slider"].get()),
+            "lines_per_block": int(w["lpb_slider"].get()),
+            "uppercase":       w["caps_check"].get() == 1,
+        }
+
+    def on_wpl(val: float) -> None:
+        w["wpl_label"].configure(text=str(int(val)))
+
+    def on_lpb(val: float) -> None:
+        w["lpb_label"].configure(text=str(int(val)))
+
+    w["wpl_slider"].configure(command=on_wpl)
+    w["lpb_slider"].configure(command=on_lpb)
 
     # Load saved API key
     saved_key = app.settings.api_key
@@ -249,7 +313,7 @@ def setup(frame: Any, app: Any) -> None:
 
             from src.subtitles.generator import words_to_srt
             preset_name = w["preset"].get()
-            srt = words_to_srt(words, preset_name)
+            srt = words_to_srt(words, preset_name, **_get_style_overrides())
             _state["srt_content"] = srt
 
             set_progress(90)
@@ -326,7 +390,7 @@ def setup(frame: Any, app: Any) -> None:
                 suffix=".srt", delete=False, mode="w", encoding="utf-8",
                 prefix="clutter_remapped_",
             )
-            _tmp.write(words_to_srt(remapped, preset_name))
+            _tmp.write(words_to_srt(remapped, preset_name, **_get_style_overrides()))
             _tmp.close()
             srt_path_for_import = _tmp.name
 
@@ -398,6 +462,15 @@ def setup(frame: Any, app: Any) -> None:
 
     def on_preset_changed(value: str) -> None:
         app.settings.set("subtitle_preset", value)
+        wpl, lpb, caps = _PRESET_DEFAULTS.get(value, (7, 2, False))
+        w["wpl_slider"].set(wpl)
+        w["wpl_label"].configure(text=str(wpl))
+        w["lpb_slider"].set(lpb)
+        w["lpb_label"].configure(text=str(lpb))
+        if caps:
+            w["caps_check"].select()
+        else:
+            w["caps_check"].deselect()
 
     w["save_key_btn"].configure(command=on_save_key)
     w["generate_btn"].configure(command=on_generate)
@@ -405,3 +478,4 @@ def setup(frame: Any, app: Any) -> None:
     w["export_srt_btn"].configure(command=on_export_srt)
     w["export_txt_btn"].configure(command=on_export_txt)
     w["preset"].configure(command=on_preset_changed)
+    on_preset_changed(w["preset"].get())
