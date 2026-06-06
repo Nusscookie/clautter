@@ -268,39 +268,135 @@ def remap_words_to_timeline(
 # Fusion Title placement (primary subtitle path)
 # ──────────────────────────────────────────────────────────────────────
 
+# Localized "Fusion Title" type strings from DaVinci Resolve's Media Pool.
+# Matches AutoSubs' titleStrings list so we recognise templates in any locale.
+_FUSION_TITLE_TYPES: frozenset[str] = frozenset({
+    "Fusion Title", "Generator",          # en (+ older en)
+    "Fusion Titles",                       # th
+    "Título – Fusion", "Título Fusion",    # es, pt
+    "Titre Fusion",                        # fr
+    "Титры на стр. Fusion",               # ru
+    "Fusion Titel",                        # de
+    "Titolo Fusion",                       # it
+    "Fusionタイトル",                      # ja
+    "Fusion标题",                          # zh
+    "퓨전 타이틀",                         # ko
+    "Tiêu đề Fusion",                     # vi
+})
+
+
+def _walk_media_pool(folder: Any):
+    """Yield all MediaPoolItem objects in folder tree."""
+    try:
+        for clip in (folder.GetClipList() or []):
+            yield clip
+    except Exception:
+        pass
+    try:
+        for sub in (folder.GetSubFolderList() or []):
+            yield from _walk_media_pool(sub)
+    except Exception:
+        pass
+
+
+def _find_fusion_title_template(media_pool: Any) -> Any | None:
+    """Return first Fusion Title item from Media Pool.
+
+    If none found, tries to auto-import AutoSubs' caption-bin.drb so the user
+    doesn't need a manual setup step. Falls back gracefully on any error.
+    """
+    def _scan():
+        for clip in _walk_media_pool(media_pool.GetRootFolder()):
+            try:
+                if clip.GetClipProperty().get("Type") in _FUSION_TITLE_TYPES:
+                    log.debug("Fusion Title template: %s", clip.GetClipProperty().get("Clip Name"))
+                    return clip
+            except Exception:
+                pass
+        return None
+
+    result = _scan()
+    if result:
+        return result
+
+    # AutoSubs ships a caption-bin.drb we can import as a template source.
+    drb = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""),
+        "AutoSubs", "resources", "AutoSubs", "caption-bin.drb",
+    )
+    if os.path.exists(drb):
+        log.info("No Fusion Title in Media Pool — importing AutoSubs template from %s", drb)
+        for attempt in (
+            lambda: media_pool.ImportFolderFromFile(drb, ""),
+            lambda: media_pool.ImportFolderFromFile(drb),
+        ):
+            try:
+                attempt()
+                break
+            except Exception:
+                pass
+        return _scan()
+
+    return None
+
+
 def _apply_fusion_text_style(
     item: Any,
     text: str,
     style: dict,
     highlight_color: str | None = None,
 ) -> None:
-    """Set text content and visual style on a Fusion TextPlus clip."""
+    """Set text content and visual style on a Fusion Title clip.
+
+    Handles both plain TextPlus clips (tool ID "TextPlus", input "StyledText")
+    and AutoSubs Caption macro clips (tool name "Template", input "Text").
+    Each SetInput is individually guarded so a missing input doesn't abort styling.
+    """
     try:
         comp = item.GetFusionCompByIndex(1)
         if not comp:
             return
-        tool = comp.FindToolByID("TextPlus")
+        # AutoSubs Caption macro names its TextPlus "Template"; plain clips use tool ID
+        tool = comp.FindTool("Template") or comp.FindToolByID("TextPlus")
         if not tool:
+            log.debug("_apply_fusion_text_style: no TextPlus tool found in comp")
             return
-        tool.SetInput("StyledText", text)
-        if style.get("font_family"):
-            tool.SetInput("Font", style["font_family"])
-        if style.get("font_size"):
-            tool.SetInput("Size", style["font_size"] / 360.0)
+
+        # Text content — AutoSubs Caption uses "Text", plain TextPlus uses "StyledText"
+        for input_name in ("StyledText", "Text"):
+            try:
+                tool.SetInput(input_name, text)
+                break
+            except Exception:
+                pass
+
         color_hex = (highlight_color or style.get("primary_color", "#FFFFFF")).lstrip("#")
-        tool.SetInput("Red1",   int(color_hex[0:2], 16) / 255.0)
-        tool.SetInput("Green1", int(color_hex[2:4], 16) / 255.0)
-        tool.SetInput("Blue1",  int(color_hex[4:6], 16) / 255.0)
-        if style.get("bold"):
-            tool.SetInput("Bold", 1)
-        if style.get("italic"):
-            tool.SetInput("Italic", 1)
+        for attr, val in (
+            ("Font",   style.get("font_family", "Arial")),
+            ("Size",   style.get("font_size", 36) / 360.0),
+            ("Red1",   int(color_hex[0:2], 16) / 255.0),
+            ("Green1", int(color_hex[2:4], 16) / 255.0),
+            ("Blue1",  int(color_hex[4:6], 16) / 255.0),
+        ):
+            try:
+                tool.SetInput(attr, val)
+            except Exception:
+                pass
+
+        for flag, attr in (("bold", "Bold"), ("italic", "Italic")):
+            if style.get(flag):
+                try:
+                    tool.SetInput(attr, 1)
+                except Exception:
+                    pass
+
         ow = style.get("outline_width", 0)
         if ow:
             try:
                 tool.SetInput("BorderWidth", ow / 100.0)
             except Exception:
                 pass
+
     except Exception as e:
         log.debug("_apply_fusion_text_style: %s", e)
 
@@ -317,14 +413,12 @@ def place_fusion_titles(
     lines_per_block: int | None = None,
     uppercase: bool | None = None,
 ) -> bool:
-    """Place subtitle blocks as Fusion Title (Text+) clips on a new video track.
+    """Place subtitle blocks as Fusion Title clips on a new video track.
 
-    Uses InsertFusionTitleIntoTimeline to bootstrap a MediaPoolItem for the
-    Text+ generator, then AppendToTimeline to place each block at the correct
-    position. Full style is applied via the Fusion composition after placement.
-
-    Returns True on success. Returns False on any Resolve API failure so the
-    caller can fall back to SRT import.
+    Finds a Fusion Title template in the Media Pool (auto-importing AutoSubs'
+    caption-bin.drb if needed), then uses AppendToTimeline(mediaType=1) to place
+    one clip per subtitle block. Style and text are applied via the Fusion comp
+    after placement. Returns False on any failure so the caller can fall back to SRT.
     """
     if not timeline:
         log.warning("place_fusion_titles: no timeline")
@@ -349,53 +443,6 @@ def place_fusion_titles(
     except Exception:
         tl_start = 0
 
-    # ── Bootstrap: insert Text+ once to get a reusable MediaPoolItem ──
-    try:
-        bootstrap = timeline.InsertFusionTitleIntoTimeline("Text+")
-        if not bootstrap:
-            log.warning("place_fusion_titles: InsertFusionTitleIntoTimeline returned None")
-            return False
-    except Exception as e:
-        log.warning("place_fusion_titles: InsertFusionTitleIntoTimeline failed: %s", e)
-        return False
-
-    try:
-        template_mp = bootstrap.GetMediaPoolItem()
-    except Exception as e:
-        log.warning("place_fusion_titles: GetMediaPoolItem failed: %s", e)
-        template_mp = None
-
-    try:
-        timeline.DeleteClips([bootstrap])
-    except Exception as e:
-        log.debug("place_fusion_titles: DeleteClips bootstrap failed: %s", e)
-
-    if not template_mp:
-        log.warning("place_fusion_titles: could not obtain Text+ MediaPoolItem")
-        return False
-
-    # ── Determine template FPS for endFrame calculation ──
-    template_fps = fps
-    try:
-        _bc = bootstrap.GetFusionCompByIndex(1)
-        if _bc:
-            _rate = _bc.GetPrefs("Comp.FrameFormat.Rate")
-            if _rate:
-                template_fps = float(_rate)
-    except Exception:
-        pass
-
-    # ── Add a new video track for subtitles ──
-    try:
-        existing_tracks = timeline.GetTrackCount("video")
-        timeline.AddTrack("video")
-        subtitle_track = existing_tracks + 1
-        log.info("place_fusion_titles: added video track %d for subtitles", subtitle_track)
-    except Exception as e:
-        log.warning("place_fusion_titles: AddTrack failed: %s", e)
-        return False
-
-    # ── Place each block via AppendToTimeline ──
     try:
         project = resolve.GetProjectManager().GetCurrentProject()
         media_pool = project.GetMediaPool()
@@ -403,11 +450,39 @@ def place_fusion_titles(
         log.warning("place_fusion_titles: cannot get media pool: %s", e)
         return False
 
+    # ── Find Fusion Title template (scan Media Pool; import AutoSubs .drb as fallback) ──
+    template_mp = _find_fusion_title_template(media_pool)
+    if not template_mp:
+        log.warning(
+            "place_fusion_titles: no Fusion Title template found. "
+            "Drag a Text+ title from the Titles panel into the Media Pool, or install AutoSubs."
+        )
+        return False
+
+    # Template FPS for endFrame calculation (may differ from timeline FPS)
+    template_fps = fps
+    try:
+        _fps_str = template_mp.GetClipProperty().get("FPS")
+        if _fps_str:
+            template_fps = float(_fps_str)
+    except Exception:
+        pass
+
+    # ── Add new video track for subtitle clips ──
+    try:
+        existing_tracks = timeline.GetTrackCount("video")
+        timeline.AddTrack("video")
+        subtitle_track = existing_tracks + 1
+        log.info("place_fusion_titles: subtitle clips on video track %d", subtitle_track)
+    except Exception as e:
+        log.warning("place_fusion_titles: AddTrack failed: %s", e)
+        return False
+
+    # ── Build clip list and place ──
     clip_list = []
     for block in blocks:
         record_frame = tl_start + int(block["start"] * fps)
-        duration_sec = block["end"] - block["start"]
-        end_frame    = max(1, int(duration_sec * template_fps))
+        end_frame    = max(1, int((block["end"] - block["start"]) * template_fps))
         clip_list.append({
             "mediaPoolItem": template_mp,
             "mediaType":     1,
@@ -422,28 +497,22 @@ def place_fusion_titles(
         if not placed:
             log.warning("place_fusion_titles: AppendToTimeline returned empty")
             return False
-        log.info("place_fusion_titles: placed %d clips", len(placed))
+        log.info("place_fusion_titles: placed %d clips on track %d", len(placed), subtitle_track)
     except Exception as e:
         log.warning("place_fusion_titles: AppendToTimeline failed: %s", e)
         return False
 
-    # ── Apply text + style to each placed clip ──
+    # ── Apply text + style — use AppendToTimeline return value (ordered, 1:1 with clip_list) ──
     highlight = preset.highlight_color if preset.word_by_word else None
-    # Allow UI override of highlight color
     if style.get("highlight_color") and preset.word_by_word:
         highlight = style["highlight_color"]
 
-    try:
-        placed_items = timeline.GetItemListInTrack("video", subtitle_track) or []
-    except Exception:
-        placed_items = []
-
-    for i, (block, item) in enumerate(zip(blocks, placed_items)):
+    for block, item in zip(blocks, placed):
         _apply_fusion_text_style(item, block["text"], style, highlight_color=highlight)
 
     log.info(
-        "place_fusion_titles: styled %d/%d clips (preset=%s, highlight=%s)",
-        min(len(blocks), len(placed_items)), len(blocks), preset_name, highlight,
+        "place_fusion_titles: done — %d clips, preset=%s, highlight=%s",
+        min(len(blocks), len(placed)), preset_name, highlight,
     )
     return True
 
