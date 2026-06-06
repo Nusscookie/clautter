@@ -26,10 +26,10 @@ _DEFAULTS: dict[str, Any] = {
     "last_broll_folder": "",
     "active_subtitle_style": "YouTube",
     "subtitle_style_presets": {
-        "Clean White": {"font_family": "Open Sans", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 2, "shadow": 1},
-        "YouTube":     {"font_family": "Open Sans", "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 3, "shadow": 1},
-        "TikTok Bold": {"font_family": "Open Sans", "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 4, "shadow": 0},
-        "Minimal":     {"font_family": "Open Sans", "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 1, "shadow": 0},
+        "Clean White": {"font_family": "Open Sans", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 2, "shadow": 1},
+        "YouTube":     {"font_family": "Open Sans", "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 3, "shadow": 1},
+        "TikTok Bold": {"font_family": "Open Sans", "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 4, "shadow": 0},
+        "Minimal":     {"font_family": "Open Sans", "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 1, "shadow": 0},
     },
     "stats": {
         "total_time_saved_sec": 0.0,

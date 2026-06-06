@@ -251,8 +251,13 @@ def build(parent: Any) -> None:
         border_width=2, border_color="#555555",
     )
     w["text_color_btn"].pack(side="left", padx=(0, 16))
-    ctk.CTkLabel(color_row, text="Outline",
-                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(0, 4))
+    w["outline_enabled_check"] = ctk.CTkCheckBox(
+        color_row, text="Outline",
+        font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+        width=20,
+    )
+    w["outline_enabled_check"].select()
+    w["outline_enabled_check"].pack(side="left", padx=(0, 6))
     w["outline_color_btn"] = ctk.CTkButton(
         color_row, text="", width=36, height=26, corner_radius=4,
         fg_color="#000000", hover_color="#000000",
@@ -406,6 +411,7 @@ def setup(frame: Any, app: Any) -> None:
         }
 
     def _get_text_style() -> dict:
+        _outline_on = w["outline_enabled_check"].get() == 1
         return {
             "font_family":     w["font_family"].get(),
             "font_size":       int(w["font_size_slider"].get()),
@@ -413,8 +419,9 @@ def setup(frame: Any, app: Any) -> None:
             "italic":          w["italic_check"].get() == 1,
             "underline":       w["underline_check"].get() == 1,
             "primary_color":   _text_color[0],
+            "outline_enabled": _outline_on,
             "outline_color":   _outline_color[0],
-            "outline_width":   int(w["outline_width_slider"].get()),
+            "outline_width":   int(w["outline_width_slider"].get()) if _outline_on else 0,
             "shadow":          1 if w["shadow_check"].get() == 1 else 0,
             "highlight_color": _highlight_color[0],
         }
@@ -449,6 +456,14 @@ def setup(frame: Any, app: Any) -> None:
         ow = int(style.get("outline_width", 3))
         w["outline_width_slider"].set(ow)
         w["outline_width_lbl"].configure(text=str(ow))
+        _oe = style.get("outline_enabled", ow > 0)
+        if _oe:
+            w["outline_enabled_check"].select()
+        else:
+            w["outline_enabled_check"].deselect()
+        _outline_ctrl_state = "normal" if _oe else "disabled"
+        w["outline_color_btn"].configure(state=_outline_ctrl_state)
+        w["outline_width_slider"].configure(state=_outline_ctrl_state)
         if "highlight_color" in style:
             hc = style["highlight_color"]
             _highlight_color[0] = hc
@@ -947,6 +962,12 @@ def setup(frame: Any, app: Any) -> None:
                 style["outline_color"] = "#{:02X}{:02X}{:02X}".format(
                     int(float(br) * 255), int(float(bg) * 255), int(float(bb) * 255))
 
+            enabled2 = text_tool.GetInput("Enabled2")
+            if enabled2 is not None:
+                style["outline_enabled"] = float(enabled2) > 0.5
+            else:
+                style["outline_enabled"] = style.get("outline_width", 0) > 0
+
             shadow = text_tool.GetInput("Enabled3")
             if shadow is not None:
                 style["shadow"] = 1 if float(shadow) > 0.5 else 0
@@ -991,6 +1012,12 @@ def setup(frame: Any, app: Any) -> None:
         w["bold_check"].configure(state=state_bold)
         w["italic_check"].configure(state=state_italic)
 
+    def on_outline_toggle() -> None:
+        enabled = w["outline_enabled_check"].get() == 1
+        state = "normal" if enabled else "disabled"
+        w["outline_color_btn"].configure(state=state)
+        w["outline_width_slider"].configure(state=state)
+
     # ── Wire up all callbacks ──
     w["save_key_btn"].configure(command=on_save_key)
     w["generate_btn"].configure(command=on_generate)
@@ -1008,6 +1035,7 @@ def setup(frame: Any, app: Any) -> None:
     w["style_preset"].configure(command=on_style_preset_changed)
     w["style_import_btn"].configure(command=on_import_style)
     w["font_family"].configure(command=on_font_changed)
+    w["outline_enabled_check"].configure(command=on_outline_toggle)
 
     # Apply saved settings
     on_preset_changed(w["preset"].get())
@@ -1024,3 +1052,4 @@ def setup(frame: Any, app: Any) -> None:
         w["style_preset"].set(active_style)
     on_style_preset_changed(w["style_preset"].get())
     on_font_changed(w["font_family"].get())
+    on_outline_toggle()

@@ -311,8 +311,13 @@ def _find_fusion_title_template(media_pool: Any) -> Any | None:
     def _scan():
         for clip in _walk_media_pool(media_pool.GetRootFolder()):
             try:
-                if clip.GetClipProperty().get("Type") in _FUSION_TITLE_TYPES:
-                    log.debug("Fusion Title template: %s", clip.GetClipProperty().get("Clip Name"))
+                props = clip.GetClipProperty()
+                clip_name = props.get("Clip Name", "").lower()
+                if (props.get("Type") in _FUSION_TITLE_TYPES
+                        or "text+" in clip_name
+                        or "clutter" in clip_name):
+                    log.debug("Fusion Title template: %s (type=%s)",
+                              props.get("Clip Name"), props.get("Type"))
                     return clip
             except Exception:
                 pass
@@ -331,9 +336,11 @@ def _find_fusion_title_template(media_pool: Any) -> Any | None:
 
     result = _scan()
     if result:
+        log.info("Reusing Fusion Title template from Media Pool: %s",
+                 result.GetClipProperty().get("Clip Name", "?"))
         return result
 
-    # Try Clutter's own bundled template first (autonomous — no AutoSubs dependency).
+    # Try Clutter's own bundled template (one-time import per Resolve project).
     _own_drb = str(
         pathlib.Path(__file__).resolve().parent.parent.parent / "assets" / "subtitle_template.drb"
     )
@@ -344,16 +351,10 @@ def _find_fusion_title_template(media_pool: Any) -> Any | None:
         if result:
             return result
 
-    # AutoSubs fallback (if bundled asset somehow missing).
-    _autosubs_drb = os.path.join(
-        os.environ.get("LOCALAPPDATA", ""),
-        "AutoSubs", "resources", "AutoSubs", "caption-bin.drb",
+    log.warning(
+        "place_fusion_titles: no Fusion Title template found and bundled DRB unavailable. "
+        "Run assets/build_template.py inside Resolve Studio to regenerate subtitle_template.drb."
     )
-    if os.path.exists(_autosubs_drb):
-        log.info("Bundled template failed — importing AutoSubs template: %s", _autosubs_drb)
-        _import_drb(_autosubs_drb)
-        return _scan()
-
     return None
 
 
@@ -427,8 +428,9 @@ def _apply_fusion_text_style(
         # Fusion TextPlus element 2 = Outline. Color inputs follow {Key}{N} convention
         # matching element 1's Red1/Green1/Blue1 → element 2 is Red2/Green2/Blue2.
         # Enabled2 explicitly enables/disables — width=0 alone doesn't kill the element.
+        _outline_on = style.get("outline_enabled", True) and ow > 0
         try:
-            tool.SetInput("Enabled2", 1 if ow > 0 else 0)
+            tool.SetInput("Enabled2", 1 if _outline_on else 0)
         except Exception:
             pass
         oc_hex = style.get("outline_color", "#000000").lstrip("#")
@@ -543,8 +545,9 @@ def _bootstrap_textplus_template(
                 except Exception:
                     pass
                 # Enabled2/Red2/Green2/Blue2 — element 2 (Outline) inputs.
+                _outline_on = style.get("outline_enabled", True) and ow > 0
                 try:
-                    tool.SetInput("Enabled2", 1 if ow > 0 else 0)
+                    tool.SetInput("Enabled2", 1 if _outline_on else 0)
                 except Exception:
                     pass
                 oc_hex = style.get("outline_color", "#000000").lstrip("#")
