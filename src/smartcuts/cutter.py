@@ -316,7 +316,7 @@ def apply_cuts(
                 {
                     "mediaPoolItem": mi,
                     "startFrame":    sf,
-                    "endFrame":      ef,
+                    "endFrame":      ef + 1,  # exclusive — same convention as track 1
                     "recordFrame":   rf,
                     "trackIndex":    retake_track_index,
                 }

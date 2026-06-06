@@ -13,6 +13,12 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+if sys.platform == "win32":
+    import ctypes
+    # Must be called before any window is created. Separates this process from
+    # python.exe in the Windows taskbar so iconbitmap() applies to the correct app.
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Clutter.Plugin.1")
+
 try:
     _PLUGIN_DIR = Path(__file__).resolve().parent
 except NameError:

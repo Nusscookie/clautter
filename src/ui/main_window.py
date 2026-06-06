@@ -62,8 +62,9 @@ class MainWindow:
                 root.iconphoto(False, self._icon_img)
                 if sys.platform == "win32":
                     _tmp = Path(tempfile.gettempdir()) / "clutter_icon.ico"
-                    img.save(str(_tmp), format="ICO",
-                             sizes=[(256, 256), (64, 64), (32, 32), (16, 16)])
+                    # NEAREST keeps pixel art crisp. Single 256px frame — Windows
+                    # downscales for taskbar without blurring.
+                    img.resize((256, 256), Image.NEAREST).save(str(_tmp), format="ICO")
                     root.iconbitmap(str(_tmp))
         except Exception as _e:
             log.debug("Icon load failed: %s", _e)

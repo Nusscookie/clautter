@@ -61,22 +61,45 @@ python install.py
 
 ### Option B — Manual
 
-Copy the entire `ai-editor-assistant/` folder to:
+1. Copy the entire `clutter/` project folder to the app-data directory:
 
-| Platform | Path |
-|---|---|
-| **Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\` |
-| **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/` |
-| **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/` |
+   | Platform | Path |
+   |---|---|
+   | **Windows** | `%LOCALAPPDATA%\Clutter\` |
+   | **macOS** | `~/Library/Application Support/Clutter/` |
+   | **Linux** | `~/.local/share/Clutter/` |
 
-The folder inside `Utility/` must contain `main.py` and the `src/` folder.
+2. Create a stub file at the Scripts/Utility folder. Replace `<APP_DIR>` with the path from step 1:
+
+   | Platform | Stub path |
+   |---|---|
+   | **Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\Clutter.py` |
+   | **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/Clutter.py` |
+   | **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/Clutter.py` |
+
+   ```python
+   import sys
+   from pathlib import Path
+
+   _APP_DIR = Path("<APP_DIR>")
+   if str(_APP_DIR) not in sys.path:
+       sys.path.insert(0, str(_APP_DIR))
+
+   import main as _clutter_main
+
+   _resolve_obj = globals().get("resolve")
+   if _resolve_obj is not None:
+       _clutter_main.resolve = _resolve_obj
+
+   _clutter_main.main()
+   ```
 
 ---
 
 ## Step 4 — Launch the Plugin
 
 1. Open DaVinci Resolve
-2. Click **Workspace → Scripts → Utility → Clutter → main**
+2. Click **Workspace → Scripts → Utility → Clutter**
 
 The plugin window opens.
 

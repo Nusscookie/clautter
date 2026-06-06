@@ -15,9 +15,9 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_SIMILARITY_THRESHOLD = 0.70   # SequenceMatcher ratio (word-level) to call two segments retakes
-_PROXIMITY_WINDOW_MS  = 120_000  # only compare segments within 2 minutes of each other
-_MIN_WORDS            = 4        # skip segments shorter than this (after filler stripping)
+_WIN_WORDS            = 4        # sliding window size (content words); 4 is robust to compound-word transcription variance in Whisper base
+_SIMILARITY_THRESHOLD = 0.70     # SequenceMatcher ratio to call two windows retakes
+_PROXIMITY_WINDOW_MS  = 120_000  # only compare windows within 2 minutes of each other
 
 _FILLERS = frozenset({
     "um", "uh", "like", "so", "okay", "ok", "well", "right",
@@ -40,6 +40,14 @@ class SegmentRecord:
     is_retake:   bool = field(default=False, compare=False)
 
 
+@dataclass
+class _WordEntry:
+    """One content word (filler-stripped) with its timestamp and owning segment index."""
+    word:    str    # normalized: lowercase, no punctuation, not a filler
+    time_ms: float
+    seg_idx: int
+
+
 def _words_in_range(words: list[dict], start_ms: float, end_ms: float) -> str:
     """Return space-joined text of words whose timestamps fall inside [start_ms, end_ms]."""
     return " ".join(
@@ -55,6 +63,14 @@ def _normalize(text: str) -> list[str]:
     return [w for w in words if w not in _FILLERS]
 
 
+def _normalize_word(raw: str) -> str | None:
+    """Normalize a single word. Returns None if it's a filler or empty after stripping."""
+    cleaned = re.sub(r"[^\w]", "", raw.lower())
+    if not cleaned or cleaned in _FILLERS:
+        return None
+    return cleaned
+
+
 def find_retakes(
     segments: list[SegmentRecord],
     language: str = "",
@@ -64,9 +80,13 @@ def find_retakes(
 
     Algorithm:
     1. Transcribe each unique source file (lazy Whisper import).
-    2. Map word timestamps → segment text.
-    3. Compare adjacent segments within PROXIMITY_WINDOW_MS; if text similarity
-       exceeds SIMILARITY_THRESHOLD, mark the EARLIER one as a retake.
+    2. Map word timestamps → segment text (for logging) and flat word timeline.
+    3. Slide a window of _WIN_WORDS content words across the timeline.
+       For each window, compare to all later windows within PROXIMITY_WINDOW_MS.
+       When similarity >= SIMILARITY_THRESHOLD, mark the earlier window's segments
+       as retakes. Clip boundaries are irrelevant — the window spans them naturally,
+       so both multi-clip retakes (Problem 2) and retakes embedded mid-clip (Problem 1)
+       are detected.
 
     Args:
         segments:          All SegmentRecord objects in source-timeline order.
@@ -96,44 +116,74 @@ def find_retakes(
             log.error("Retake detector: transcription failed for %s: %s", path, e)
             words_by_path[path] = []
 
-    # Fill text for each segment
+    # Sort segments by source position
+    segments.sort(key=lambda s: s.start_ms)
+
+    # Fill .text on each segment (used for logging only)
     for seg in segments:
         words = words_by_path.get(seg.file_path, [])
         seg.text = _words_in_range(words, seg.start_ms, seg.end_ms)
 
-    # Sort by source position (should already be, but ensure stability)
-    segments.sort(key=lambda s: s.start_ms)
+    # Build flat word timeline — content words only (fillers excluded)
+    flat: list[_WordEntry] = []
+    for seg_idx, seg in enumerate(segments):
+        raw_words = words_by_path.get(seg.file_path, [])
+        for w in raw_words:
+            t_start = w["start_sec"] * 1000.0
+            t_end   = w["end_sec"]   * 1000.0
+            if t_start < seg.start_ms or t_end > seg.end_ms:
+                continue
+            norm = _normalize_word(w["word"])
+            if norm is None:
+                continue
+            flat.append(_WordEntry(word=norm, time_ms=t_start, seg_idx=seg_idx))
 
+    log.info("Retake detector: %d content words across %d segments", len(flat), len(segments))
+
+    if len(flat) < _WIN_WORDS * 2:
+        log.info("Retake detection: not enough words for window comparison")
+        return 0
+
+    # Sliding-window comparison
+    # retake_covered[i] = True when flat[i] is already part of a marked retake window
+    retake_covered: list[bool] = [False] * len(flat)
     retake_count = 0
 
-    for i, seg_a in enumerate(segments):
-        if seg_a.is_retake:
-            continue  # already marked — skip as anchor
-        nw_a = _normalize(seg_a.text)
-        if len(nw_a) < _MIN_WORDS:
+    for i in range(len(flat) - _WIN_WORDS + 1):
+        # Skip if this window is already fully inside a marked retake
+        if all(retake_covered[i : i + _WIN_WORDS]):
             continue
 
-        for seg_b in segments[i + 1:]:
-            if seg_b.start_ms - seg_a.end_ms > _PROXIMITY_WINDOW_MS:
-                break  # segments sorted; no point checking further
-            nw_b = _normalize(seg_b.text)
-            if len(nw_b) < _MIN_WORDS:
-                continue
+        win_a = flat[i : i + _WIN_WORDS]
+        words_a = [e.word for e in win_a]
+        t_end_a = win_a[-1].time_ms
 
-            # Word-level comparison on filler-stripped lists
-            ratio = difflib.SequenceMatcher(None, nw_a, nw_b).ratio()
+        for j in range(i + _WIN_WORDS, len(flat) - _WIN_WORDS + 1):
+            # Proximity guard: stop when window_b starts too far away
+            if flat[j].time_ms - t_end_a > _PROXIMITY_WINDOW_MS:
+                break
 
+            win_b = flat[j : j + _WIN_WORDS]
+            words_b = [e.word for e in win_b]
+
+            ratio = difflib.SequenceMatcher(None, words_a, words_b).ratio()
             if ratio >= _SIMILARITY_THRESHOLD:
-                seg_a.is_retake = True
-                retake_count += 1
-                log.debug(
-                    "Retake: [%.1fs–%.1fs] '%s...' → replaced by [%.1fs–%.1fs] (sim=%.2f)",
-                    seg_a.start_ms / 1000, seg_a.end_ms / 1000,
-                    seg_a.text[:40],
-                    seg_b.start_ms / 1000, seg_b.end_ms / 1000,
-                    ratio,
-                )
-                break  # seg_a is a retake — no need to keep comparing it
+                # Mark all segments touched by window_a as retakes
+                for k, entry in enumerate(win_a):
+                    seg = segments[entry.seg_idx]
+                    if not seg.is_retake:
+                        seg.is_retake = True
+                        retake_count += 1
+                        log.debug(
+                            "Retake: seg %d [%.1fs–%.1fs] '%s...' → superseded at %.1fs (sim=%.2f)",
+                            entry.seg_idx,
+                            seg.start_ms / 1000, seg.end_ms / 1000,
+                            seg.text[:40],
+                            flat[j].time_ms / 1000,
+                            ratio,
+                        )
+                    retake_covered[i + k] = True
+                break  # window_a matched — move to next i
 
     log.info("Retake detection complete: %d retake(s) in %d segment(s)", retake_count, len(segments))
     return retake_count
