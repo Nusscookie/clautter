@@ -22,8 +22,8 @@ _LANG_CODES  = {l: c for l, c in _LANGUAGES}
 _PRESETS = ["YouTube", "Standard", "TikTok", "Alex Hormozi Style"]
 
 _FONT_FAMILIES = [
-    "Arial", "Calibri", "Georgia", "Impact", "Montserrat",
-    "Open Sans", "Roboto", "Times New Roman", "Trebuchet MS", "Verdana",
+    "Open Sans", "Arial", "Calibri", "Georgia", "Impact",
+    "Montserrat", "Roboto", "Times New Roman", "Trebuchet MS", "Verdana",
 ]
 
 _WHISPER_MODELS = ["Tiny (fast)", "Base", "Small", "Medium", "Large v2", "Large v3"]
@@ -212,7 +212,7 @@ def build(parent: Any) -> None:
                  font=ctk.CTkFont(size=11), text_color="#aaaaaa",
                  width=60, anchor="w").grid(row=0, column=0, sticky="w")
     w["font_family"] = ctk.CTkComboBox(font_row, values=_FONT_FAMILIES)
-    w["font_family"].set("Arial")
+    w["font_family"].set("Open Sans")
     w["font_family"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
     ctk.CTkLabel(font_row, text="Size",
                  font=ctk.CTkFont(size=11), text_color="#aaaaaa",
@@ -236,7 +236,10 @@ def build(parent: Any) -> None:
     w["italic_check"].pack(side="left", padx=(0, 14))
     w["underline_check"] = ctk.CTkCheckBox(check_row, text="Underline",
                                             font=ctk.CTkFont(size=11))
-    w["underline_check"].pack(side="left")
+    w["underline_check"].pack(side="left", padx=(0, 14))
+    w["shadow_check"] = ctk.CTkCheckBox(check_row, text="Shadow",
+                                         font=ctk.CTkFont(size=11))
+    w["shadow_check"].pack(side="left")
 
     color_row = ctk.CTkFrame(ts_card, fg_color="transparent")
     color_row.pack(fill="x", padx=10, pady=(0, 10))
@@ -412,12 +415,12 @@ def setup(frame: Any, app: Any) -> None:
             "primary_color":   _text_color[0],
             "outline_color":   _outline_color[0],
             "outline_width":   int(w["outline_width_slider"].get()),
-            "shadow":          1,
+            "shadow":          1 if w["shadow_check"].get() == 1 else 0,
             "highlight_color": _highlight_color[0],
         }
 
     def _apply_text_style(style: dict) -> None:
-        w["font_family"].set(style.get("font_family", "Arial"))
+        w["font_family"].set(style.get("font_family", "Open Sans"))
         size = int(style.get("font_size", 36))
         w["font_size_slider"].set(size)
         w["font_size_lbl"].configure(text=str(size))
@@ -433,6 +436,10 @@ def setup(frame: Any, app: Any) -> None:
             w["underline_check"].select()
         else:
             w["underline_check"].deselect()
+        if style.get("shadow", 0):
+            w["shadow_check"].select()
+        else:
+            w["shadow_check"].deselect()
         tc = style.get("primary_color", "#FFFFFF")
         oc = style.get("outline_color", "#000000")
         _text_color[0]    = tc
@@ -882,8 +889,9 @@ def setup(frame: Any, app: Any) -> None:
                 return
 
             comp = item.GetFusionCompByIndex(1)
-            # Handle both AutoSubs Caption macro (tool name "Template") and plain TextPlus
-            text_tool = comp.FindTool("Template") or comp.FindToolByID("TextPlus")
+            # Prefer inner TextPlus (FindToolByID searches inside macros).
+            # AutoSubs macro wrapper only publishes a subset — border attrs not accessible.
+            text_tool = comp.FindToolByID("TextPlus") or comp.FindTool("Template")
             if not text_tool:
                 set_status(
                     "No Text+ tool in selected clip. Select a Fusion Title or Text+ generator.",
@@ -908,18 +916,40 @@ def setup(frame: Any, app: Any) -> None:
                 style["primary_color"] = "#{:02X}{:02X}{:02X}".format(
                     int(float(r) * 255), int(float(g) * 255), int(float(b) * 255))
 
-            # Read bold/italic flags (Fusion uses 1/0, not bool)
-            bold = text_tool.GetInput("Bold")
-            if bold is not None:
-                style["bold"] = bool(int(float(bold)))
-            italic = text_tool.GetInput("Italic")
-            if italic is not None:
-                style["italic"] = bool(int(float(italic)))
+            # Style input ("Bold", "Italic", "Bold Italic", "Regular") is authoritative.
+            # Bool inputs Bold/Italic apply a synthetic effect and don't reflect face selection.
+            style_val = text_tool.GetInput("Style")
+            if style_val:
+                _sv = str(style_val).lower()
+                style["bold"]   = "bold" in _sv
+                style["italic"] = "italic" in _sv
+            else:
+                bold = text_tool.GetInput("Bold")
+                if bold is not None:
+                    style["bold"] = bool(int(float(bold)))
+                italic = text_tool.GetInput("Italic")
+                if italic is not None:
+                    style["italic"] = bool(int(float(italic)))
+
+            underline = text_tool.GetInput("Underline")
+            if underline is not None:
+                style["underline"] = bool(int(float(underline)))
 
             # Read outline width (Fusion BorderWidth is 0–1 range)
             bw = text_tool.GetInput("BorderWidth")
             if bw is not None:
                 style["outline_width"] = max(0, min(6, round(float(bw) * 100)))
+
+            br = text_tool.GetInput("Red2")
+            bg = text_tool.GetInput("Green2")
+            bb = text_tool.GetInput("Blue2")
+            if all(v is not None for v in (br, bg, bb)):
+                style["outline_color"] = "#{:02X}{:02X}{:02X}".format(
+                    int(float(br) * 255), int(float(bg) * 255), int(float(bb) * 255))
+
+            shadow = text_tool.GetInput("Enabled3")
+            if shadow is not None:
+                style["shadow"] = 1 if float(shadow) > 0.5 else 0
 
             if not style:
                 try:
@@ -945,6 +975,22 @@ def setup(frame: Any, app: Any) -> None:
             return
         threading.Thread(target=_import_style_thread, daemon=True).start()
 
+    def _font_has_variant(family: str, *, bold: bool = False, italic: bool = False) -> bool:
+        try:
+            import tkinter.font as _tkfont
+            weight = "bold" if bold else "normal"
+            slant  = "italic" if italic else "roman"
+            f = _tkfont.Font(family=family, weight=weight, slant=slant, size=12)
+            return f.actual().get("family", "").lower() == family.lower()
+        except Exception:
+            return True
+
+    def on_font_changed(value: str) -> None:
+        state_bold   = "normal" if _font_has_variant(value, bold=True)   else "disabled"
+        state_italic = "normal" if _font_has_variant(value, italic=True) else "disabled"
+        w["bold_check"].configure(state=state_bold)
+        w["italic_check"].configure(state=state_italic)
+
     # ── Wire up all callbacks ──
     w["save_key_btn"].configure(command=on_save_key)
     w["generate_btn"].configure(command=on_generate)
@@ -961,6 +1007,7 @@ def setup(frame: Any, app: Any) -> None:
     w["highlight_color_btn"].configure(command=on_highlight_color)
     w["style_preset"].configure(command=on_style_preset_changed)
     w["style_import_btn"].configure(command=on_import_style)
+    w["font_family"].configure(command=on_font_changed)
 
     # Apply saved settings
     on_preset_changed(w["preset"].get())
@@ -976,3 +1023,4 @@ def setup(frame: Any, app: Any) -> None:
     if active_style in presets:
         w["style_preset"].set(active_style)
     on_style_preset_changed(w["style_preset"].get())
+    on_font_changed(w["font_family"].get())

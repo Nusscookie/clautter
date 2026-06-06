@@ -55,14 +55,16 @@ class MainWindow:
             _icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.png"
             if _icon_path.exists():
                 img = Image.open(str(_icon_path)).convert("RGBA")
+                # Set both iconphoto (title bar, macOS, Linux) and iconbitmap
+                # (Windows taskbar). Tk on Windows needs an .ico file with
+                # multi-res for the taskbar to pick it up.
+                self._icon_img = ImageTk.PhotoImage(img)
+                root.iconphoto(False, self._icon_img)
                 if sys.platform == "win32":
                     _tmp = Path(tempfile.gettempdir()) / "clutter_icon.ico"
                     img.save(str(_tmp), format="ICO",
                              sizes=[(256, 256), (64, 64), (32, 32), (16, 16)])
                     root.iconbitmap(str(_tmp))
-                else:
-                    self._icon_img = ImageTk.PhotoImage(img)
-                    root.iconphoto(False, self._icon_img)
         except Exception as _e:
             log.debug("Icon load failed: %s", _e)
 

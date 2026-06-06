@@ -373,8 +373,11 @@ def _apply_fusion_text_style(
         comp = item.GetFusionCompByIndex(1)
         if not comp:
             return
-        # AutoSubs Caption macro names its TextPlus "Template"; plain clips use tool ID
-        tool = comp.FindTool("Template") or comp.FindToolByID("TextPlus")
+        # Prefer the actual TextPlus tool (accessible inside macros via FindToolByID).
+        # AutoSubs Caption macro wrapper ("Template") only publishes a subset of inputs;
+        # BorderWidth/BorderRed/Green/Blue are NOT published, so SetInput on the wrapper
+        # silently does nothing. FindToolByID searches the full comp incl. inside macros.
+        tool = comp.FindToolByID("TextPlus") or comp.FindTool("Template")
         if not tool:
             log.debug("_apply_fusion_text_style: no TextPlus tool found in comp")
             return
@@ -389,7 +392,7 @@ def _apply_fusion_text_style(
 
         color_hex = (highlight_color or style.get("primary_color", "#FFFFFF")).lstrip("#")
         for attr, val in (
-            ("Font",   style.get("font_family", "Arial")),
+            ("Font",   style.get("font_family", "Open Sans")),
             ("Size",   style.get("font_size", 36) / 360.0),
             ("Red1",   int(color_hex[0:2], 16) / 255.0),
             ("Green1", int(color_hex[2:4], 16) / 255.0),
@@ -400,22 +403,187 @@ def _apply_fusion_text_style(
             except Exception:
                 pass
 
-        for flag, attr in (("bold", "Bold"), ("italic", "Italic")):
-            if style.get(flag):
-                try:
-                    tool.SetInput(attr, 1)
-                except Exception:
-                    pass
-
-        ow = style.get("outline_width", 0)
-        if ow:
+        # Style selects the actual font face ("Bold", "Italic", "Bold Italic", "Regular").
+        # The Bool inputs Bold/Italic apply a synthetic effect only; Style is authoritative.
+        _b = style.get("bold", False)
+        _i = style.get("italic", False)
+        _style_str = ("Bold Italic" if _b and _i else "Bold" if _b else "Italic" if _i else "Regular")
+        try:
+            tool.SetInput("Style", _style_str)
+        except Exception:
+            pass
+        for flag, attr in (("bold", "Bold"), ("italic", "Italic"), ("underline", "Underline")):
             try:
-                tool.SetInput("BorderWidth", ow / 100.0)
+                tool.SetInput(attr, 1 if style.get(flag, False) else 0)
             except Exception:
                 pass
 
+        ow = style.get("outline_width", 0)
+        try:
+            tool.SetInput("BorderWidth", ow / 100.0)
+        except Exception:
+            pass
+
+        # Fusion TextPlus element 2 = Outline. Color inputs follow {Key}{N} convention
+        # matching element 1's Red1/Green1/Blue1 → element 2 is Red2/Green2/Blue2.
+        # Enabled2 explicitly enables/disables — width=0 alone doesn't kill the element.
+        try:
+            tool.SetInput("Enabled2", 1 if ow > 0 else 0)
+        except Exception:
+            pass
+        oc_hex = style.get("outline_color", "#000000").lstrip("#")
+        for attr, val in (
+            ("Red2",   int(oc_hex[0:2], 16) / 255.0),
+            ("Green2", int(oc_hex[2:4], 16) / 255.0),
+            ("Blue2",  int(oc_hex[4:6], 16) / 255.0),
+        ):
+            try:
+                tool.SetInput(attr, val)
+            except Exception:
+                pass
+
+        # Element 3 = Shadow.
+        try:
+            tool.SetInput("Enabled3", 1 if style.get("shadow", 0) else 0)
+        except Exception:
+            pass
+
     except Exception as e:
         log.debug("_apply_fusion_text_style: %s", e)
+
+
+def _set_comp_text(comp: Any, text: str) -> bool:
+    """Set the StyledText/Text input on a Fusion comp's TextPlus. Returns True if set."""
+    if not comp:
+        return False
+    try:
+        tool = comp.FindTool("Template") or comp.FindToolByID("TextPlus")
+        if not tool:
+            return False
+        for input_name in ("StyledText", "Text"):
+            try:
+                tool.SetInput(input_name, text)
+                return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
+
+
+def _bootstrap_textplus_template(
+    resolve: Any, timeline: Any, style: dict, media_pool: Any
+) -> Any | None:
+    """Insert Resolve's stock Text+, apply our style, return MediaPoolItem.
+
+    Returns the template MediaPoolItem to be used as the source for
+    AppendToTimeline. Returns None on any failure.
+    """
+    try:
+        # 1. Insert stock Text+ onto the timeline (Resolve gives us a plain,
+        #    unstyled Text+ — no baked red outline, no OpenSans baked-in).
+        bootstrap_clip = timeline.InsertFusionTitleIntoTimeline("Text+")
+        if not bootstrap_clip:
+            log.warning("Bootstrap: InsertFusionTitleIntoTimeline returned None")
+            return None
+
+        template_mp = bootstrap_clip.GetMediaPoolItem()
+        if not template_mp:
+            log.info("Bootstrap: GetMediaPoolItem returned None (Resolve Free) — scanning Media Pool")
+            for candidate in _walk_media_pool(media_pool.GetRootFolder()):
+                try:
+                    if candidate.GetClipProperty().get("Type") in _FUSION_TITLE_TYPES:
+                        template_mp = candidate
+                        log.info("Bootstrap: found %s in Media Pool via scan",
+                                 candidate.GetClipProperty().get("Clip Name"))
+                        break
+                except Exception:
+                    continue
+        if not template_mp:
+            log.warning("Bootstrap: Media Pool scan also failed")
+            try:
+                timeline.DeleteClips([bootstrap_clip])
+            except Exception:
+                pass
+            return None
+
+        # 2. Apply our style to the TEMPLATE'S comp (not the placed clone).
+        #    Every AppendToTimeline clone inherits the mutated state.
+        try:
+            comp = template_mp.GetFusionCompByIndex(1)
+            tool = comp.FindToolByID("TextPlus") if comp else None
+            if tool:
+                color_hex = style.get("primary_color", "#FFFFFF").lstrip("#")
+                _b = style.get("bold", False)
+                _i = style.get("italic", False)
+                _style_str = (
+                    "Bold Italic" if _b and _i else
+                    "Bold" if _b else
+                    "Italic" if _i else
+                    "Regular"
+                )
+                for attr, val in (
+                    ("Font",     style.get("font_family", "Open Sans")),
+                    ("Style",    _style_str),
+                    ("Size",     style.get("font_size", 36) / 360.0),
+                    ("Red1",     int(color_hex[0:2], 16) / 255.0),
+                    ("Green1",   int(color_hex[2:4], 16) / 255.0),
+                    ("Blue1",    int(color_hex[4:6], 16) / 255.0),
+                    ("Bold",     1 if _b else 0),
+                    ("Italic",   1 if _i else 0),
+                    ("Underline", 1 if style.get("underline", False) else 0),
+                ):
+                    try:
+                        tool.SetInput(attr, val)
+                    except Exception as e:
+                        log.debug("template SetInput %s: %s", attr, e)
+                ow = style.get("outline_width", 0)
+                try:
+                    tool.SetInput("BorderWidth", ow / 100.0)
+                except Exception:
+                    pass
+                # Enabled2/Red2/Green2/Blue2 — element 2 (Outline) inputs.
+                try:
+                    tool.SetInput("Enabled2", 1 if ow > 0 else 0)
+                except Exception:
+                    pass
+                oc_hex = style.get("outline_color", "#000000").lstrip("#")
+                for attr, val in (
+                    ("Red2",   int(oc_hex[0:2], 16) / 255.0),
+                    ("Green2", int(oc_hex[2:4], 16) / 255.0),
+                    ("Blue2",  int(oc_hex[4:6], 16) / 255.0),
+                ):
+                    try:
+                        tool.SetInput(attr, val)
+                    except Exception:
+                        pass
+                try:
+                    tool.SetInput("Enabled3", 1 if style.get("shadow", 0) else 0)
+                except Exception:
+                    pass
+                # Comp.Save() is not a public Resolve API; ignore.
+                log.info(
+                    "Bootstrap template styled: font=%s size=%.3f bold=%s",
+                    style.get("font_family", "Open Sans"),
+                    style.get("font_size", 36) / 360.0,
+                    style.get("bold", False),
+                )
+        except Exception as e:
+            log.debug("Bootstrap style apply: %s", e)
+
+        # 3. Delete the visible bootstrap clip — we have the MediaPoolItem,
+        #    that's all we needed.
+        try:
+            timeline.DeleteClips([bootstrap_clip])
+            log.debug("Bootstrap clip deleted; template MP kept for cloning")
+        except Exception as e:
+            log.warning("Bootstrap clip delete failed: %s", e)
+
+        return template_mp
+
+    except Exception as e:
+        log.warning("Bootstrap template failed: %s", e)
+        return None
 
 
 def place_fusion_titles(
@@ -467,8 +635,15 @@ def place_fusion_titles(
         log.warning("place_fusion_titles: cannot get media pool: %s", e)
         return False
 
-    # ── Find Fusion Title template (scan Media Pool; import AutoSubs .drb as fallback) ──
-    template_mp = _find_fusion_title_template(media_pool)
+    # ── Bootstrap stock Text+ template (plain, no baked styling) ──
+    # SetInput on the template comp BEFORE AppendToTimeline so every clone
+    # inherits the mutated state. Bundled DRB is only a fallback — its
+    # CompositionBA bakes in red outline / OpenSans that overrides per-clip
+    # SetInput calls.
+    template_mp = _bootstrap_textplus_template(resolve, timeline, style, media_pool)
+    if not template_mp:
+        log.info("Bootstrap failed; trying bundled DRB / existing template")
+        template_mp = _find_fusion_title_template(media_pool)
     if not template_mp:
         log.warning(
             "place_fusion_titles: no Fusion Title template found. "
@@ -490,6 +665,11 @@ def place_fusion_titles(
         existing_tracks = timeline.GetTrackCount("video")
         timeline.AddTrack("video")
         subtitle_track = existing_tracks + 1
+        # Name the track "Subtitle" so it shows up by name in Resolve (was missing).
+        try:
+            timeline.SetTrackName("video", subtitle_track, "Subtitle")
+        except Exception as e:
+            log.debug("SetTrackName failed: %s", e)
         log.info("place_fusion_titles: subtitle clips on video track %d", subtitle_track)
     except Exception as e:
         log.warning("place_fusion_titles: AddTrack failed: %s", e)
@@ -519,13 +699,23 @@ def place_fusion_titles(
         log.warning("place_fusion_titles: AppendToTimeline failed: %s", e)
         return False
 
-    # ── Apply text + style — use AppendToTimeline return value (ordered, 1:1 with clip_list) ──
+    # ── Apply per-clip overrides — base style already lives on the template. ──
+    # AppendToTimeline clones inherit font/color/size/outline from the template's
+    # mutated comp. Per-clip work is limited to:
+    #   - Setting the StyledText/Text to the block's text
+    #   - Overriding the color when this clip is the "highlighted" word
     highlight = preset.highlight_color if preset.word_by_word else None
     if style.get("highlight_color") and preset.word_by_word:
         highlight = style["highlight_color"]
 
     for block, item in zip(blocks, placed):
-        _apply_fusion_text_style(item, block["text"], style, highlight_color=highlight)
+        # Always re-apply full user style on every placed clip. This guards
+        # against the bundled-DRB fallback leaking baked font/outline values
+        # (was previously only run for word_by_word presets).
+        if highlight:
+            _apply_fusion_text_style(item, block["text"], style, highlight_color=highlight)
+        else:
+            _apply_fusion_text_style(item, block["text"], style)
 
     log.info(
         "place_fusion_titles: done — %d clips, preset=%s, highlight=%s",
