@@ -16,5 +16,7 @@ customtkinter>=5.2.0  # GUI framework (replaces Fusion UIManager, removed in Res
 
 Pillow>=10.0.0      # Icon generation (generate_icon.py) and any future image ops
 
+faster-whisper>=1.0.0  # Local transcription via CTranslate2 (no PyTorch needed)
+
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

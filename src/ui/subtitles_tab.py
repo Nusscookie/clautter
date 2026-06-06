@@ -1,4 +1,4 @@
-"""Subtitles tab — ElevenLabs STT transcript generation and subtitle track creation."""
+"""Subtitles tab — ElevenLabs or local Whisper STT + subtitle track creation."""
 
 from __future__ import annotations
 import threading
@@ -21,27 +21,51 @@ _LANG_CODES  = {l: c for l, c in _LANGUAGES}
 
 _PRESETS = ["YouTube", "Standard", "TikTok", "Alex Hormozi Style"]
 
+_WHISPER_MODELS = ["Tiny (fast)", "Base", "Small", "Medium", "Large v2", "Large v3"]
+_WHISPER_MODEL_MAP = {
+    "Tiny (fast)": "tiny",
+    "Base": "base",
+    "Small": "small",
+    "Medium": "medium",
+    "Large v2": "large-v2",
+    "Large v3": "large-v3",
+}
+
 
 def build(parent: Any) -> None:
     w: dict[str, Any] = {}
 
     ctk.CTkLabel(
         parent,
-        text="SUBTITLES  —  Generate captions via ElevenLabs Speech-to-Text",
+        text="SUBTITLES  —  Generate captions via Speech-to-Text",
         font=ctk.CTkFont(size=11, weight="bold"),
         text_color="#aaaaaa",
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
-    # ── API key ──
-    api_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
-    api_card.pack(fill="x", padx=10, pady=4)
+    # ── Provider selector ──
+    w["provider"] = ctk.CTkSegmentedButton(
+        parent,
+        values=["ElevenLabs", "Local Whisper"],
+        font=ctk.CTkFont(size=11),
+    )
+    w["provider"].set("ElevenLabs")
+    w["provider"].pack(fill="x", padx=10, pady=(0, 4))
 
-    ctk.CTkLabel(api_card, text="ELEVENLABS API",
+    # Slot frame: holds either api_card or whisper_card (never both at once)
+    _slot = ctk.CTkFrame(parent, fg_color="transparent")
+    _slot.pack(fill="x")
+    w["_slot"] = _slot
+
+    # ── ElevenLabs API card ──
+    w["api_card"] = ctk.CTkFrame(_slot, fg_color="#2a2a2a", corner_radius=6)
+    w["api_card"].pack(fill="x", padx=10, pady=4)  # visible by default
+
+    ctk.CTkLabel(w["api_card"], text="ELEVENLABS API",
                  font=ctk.CTkFont(size=10, weight="bold"),
                  text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-    key_row = ctk.CTkFrame(api_card, fg_color="transparent")
+    key_row = ctk.CTkFrame(w["api_card"], fg_color="transparent")
     key_row.pack(fill="x", padx=10, pady=(0, 4))
     key_row.grid_columnconfigure(0, weight=1)
 
@@ -52,11 +76,44 @@ def build(parent: Any) -> None:
     w["save_key_btn"] = ctk.CTkButton(key_row, text="Save", width=70)
     w["save_key_btn"].grid(row=0, column=1)
 
-    w["key_status"] = ctk.CTkLabel(api_card, text="", font=ctk.CTkFont(size=10),
+    w["key_status"] = ctk.CTkLabel(w["api_card"], text="", font=ctk.CTkFont(size=10),
                                     text_color="#aaaaaa", anchor="w")
     w["key_status"].pack(fill="x", padx=10, pady=(0, 8))
 
-    # ── Settings row ──
+    # ── Local Whisper card (hidden by default) ──
+    w["whisper_card"] = ctk.CTkFrame(_slot, fg_color="#2a2a2a", corner_radius=6)
+    # not packed initially; on_provider_changed will show it when selected
+
+    ctk.CTkLabel(w["whisper_card"], text="LOCAL WHISPER",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    whisper_row = ctk.CTkFrame(w["whisper_card"], fg_color="transparent")
+    whisper_row.pack(fill="x", padx=10, pady=(0, 4))
+    whisper_row.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(whisper_row, text="Model",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=60, anchor="w").grid(row=0, column=0, sticky="w")
+
+    w["whisper_model"] = ctk.CTkComboBox(whisper_row, values=_WHISPER_MODELS, state="readonly")
+    w["whisper_model"].set("Base")
+    w["whisper_model"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+
+    w["whisper_device_label"] = ctk.CTkLabel(whisper_row, text="CPU",
+                                              font=ctk.CTkFont(size=10),
+                                              text_color="#4fc3f7", width=40, anchor="e")
+    w["whisper_device_label"].grid(row=0, column=2, sticky="e")
+
+    ctk.CTkLabel(
+        w["whisper_card"],
+        text="First run downloads the model automatically (~74 MB for Base).",
+        font=ctk.CTkFont(size=10),
+        text_color="#555555",
+        anchor="w",
+    ).pack(fill="x", padx=10, pady=(0, 8))
+
+    # ── Settings row (language + preset) ──
     settings_row = ctk.CTkFrame(parent, fg_color="transparent")
     settings_row.pack(fill="x", padx=10, pady=4)
     settings_row.grid_columnconfigure((0, 1), weight=1)
@@ -153,7 +210,7 @@ def build(parent: Any) -> None:
     w["progress_frame"].pack(fill="x", padx=10, pady=(4, 0))
 
     w["status"] = ctk.CTkLabel(
-        parent, text="Enter API key and click Generate Transcript.",
+        parent, text="Select provider and click Generate Transcript.",
         font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
     w["status"].pack(fill="x", padx=12, pady=(2, 4))
 
@@ -246,7 +303,17 @@ def setup(frame: Any, app: Any) -> None:
     w["wpl_slider"].configure(command=on_wpl)
     w["lpb_slider"].configure(command=on_lpb)
 
-    # Load saved API key
+    # ── Provider toggle ──
+    def on_provider_changed(value: str) -> None:
+        app.settings.set("stt_provider", value)
+        if value == "ElevenLabs":
+            w["whisper_card"].pack_forget()
+            w["api_card"].pack(fill="x", padx=10, pady=4)
+        else:
+            w["api_card"].pack_forget()
+            w["whisper_card"].pack(fill="x", padx=10, pady=4)
+
+    # ── Load saved state ──
     saved_key = app.settings.api_key
     if saved_key:
         w["api_key"].insert(0, saved_key)
@@ -256,6 +323,21 @@ def setup(frame: Any, app: Any) -> None:
     if saved_preset in _PRESETS:
         w["preset"].set(saved_preset)
 
+    saved_model = app.settings.get("whisper_model", "Base")
+    if saved_model in _WHISPER_MODELS:
+        w["whisper_model"].set(saved_model)
+
+    # Check for CUDA (informational label only)
+    def _check_cuda() -> None:
+        try:
+            import ctranslate2  # type: ignore
+            device = "CUDA" if "cuda" in ctranslate2.get_supported_compute_types("cuda") else "CPU"
+        except Exception:
+            device = "CPU"
+        _ui(lambda: w["whisper_device_label"].configure(text=device))
+    threading.Thread(target=_check_cuda, daemon=True).start()
+
+    # ── Callbacks ──
     def on_save_key() -> None:
         key = w["api_key"].get().strip()
         if key:
@@ -264,21 +346,18 @@ def setup(frame: Any, app: Any) -> None:
         else:
             w["key_status"].configure(text="Key is empty — not saved.")
 
+    def on_whisper_model_changed(value: str) -> None:
+        app.settings.set("whisper_model", value)
+
     def _generate_thread() -> None:
         try:
-            from src.subtitles.elevenlabs import ElevenLabsClient
             from src.utils.resolve_api import get_clip_file_path
 
             set_btn("generate_btn", False)
             set_progress(0, True)
             set_status("Checking configuration...")
 
-            api_key = w["api_key"].get().strip()
-            if not api_key:
-                set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
-                set_progress(0, False)
-                return
-
+            provider = w["provider"].get()
             lang_label = w["language"].get()
             lang_code = _LANG_CODES.get(lang_label, "")
 
@@ -295,11 +374,28 @@ def setup(frame: Any, app: Any) -> None:
                 set_progress(0, False)
                 return
 
-            set_status(f"Sending to ElevenLabs STT: {file_path.split(chr(92))[-1]}")
             set_progress(20)
 
-            client = ElevenLabsClient(api_key)
-            words = client.transcribe(file_path, language=lang_code)
+            if provider == "Local Whisper":
+                from src.subtitles.whisper_client import WhisperClient
+                model_label = w["whisper_model"].get()
+                model_name = _WHISPER_MODEL_MAP.get(model_label, "base")
+                set_status(
+                    f"Loading Whisper {model_label} — first run downloads model automatically..."
+                )
+                client = WhisperClient(model_name)
+                words = client.transcribe(file_path, language=lang_code)
+            else:
+                from src.subtitles.elevenlabs import ElevenLabsClient
+                api_key = w["api_key"].get().strip()
+                if not api_key:
+                    set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
+                    set_progress(0, False)
+                    return
+                set_status(f"Sending to ElevenLabs STT: {file_path.split(chr(92))[-1]}")
+                client = ElevenLabsClient(api_key)
+                words = client.transcribe(file_path, language=lang_code)
+
             set_progress(60)
 
             _state["words"] = words
@@ -347,7 +443,11 @@ def setup(frame: Any, app: Any) -> None:
         finally:
             set_btn("generate_btn", True)
 
-    def _create_track_thread() -> None:
+    def _create_track_thread(
+        transcript_text: str,
+        style_overrides: dict,
+        preset_name: str,
+    ) -> None:
         try:
             from src.subtitles.generator import import_srt_to_timeline, words_to_srt, remap_words_to_timeline
             import tempfile as _tempfile
@@ -358,13 +458,12 @@ def setup(frame: Any, app: Any) -> None:
                 set_status("Generate transcript first.", "#ff6b6b")
                 return
 
-            # Merge textbox edits back into word list (keeps timestamps, updates text).
-            # If token count matches, do 1:1 replacement. Otherwise use original.
-            _edited_text = w["transcript"].get("0.0", "end").strip()
+            # Merge textbox edits into word list (keeps timestamps, updates text).
+            # transcript_text was captured on the main thread — thread-safe.
             _placeholder = "Transcript will appear here after generation..."
             _orig_words = [wd for wd in _state["words"] if wd.get("type", "word") == "word"]
-            if _edited_text and _edited_text != _placeholder:
-                _tokens = _edited_text.split()
+            if transcript_text and transcript_text != _placeholder:
+                _tokens = transcript_text.split()
                 if len(_tokens) == len(_orig_words):
                     _tok_iter = iter(_tokens)
                     _words_src: list[Any] = [
@@ -374,7 +473,8 @@ def setup(frame: Any, app: Any) -> None:
                     log.info("Applied %d transcript edits to subtitle words", len(_tokens))
                 else:
                     log.warning(
-                        "Edited word count (%d) != original (%d) — edits ignored",
+                        "Edited word count (%d) != original (%d) — edits ignored; "
+                        "only same-count edits (typo fixes) preserve timing",
                         len(_tokens), len(_orig_words),
                     )
                     _words_src = _state["words"]
@@ -394,8 +494,7 @@ def setup(frame: Any, app: Any) -> None:
             else:
                 set_status("Adding subtitle track to current timeline...")
 
-            # Remap word timestamps to the current (possibly cut) timeline so
-            # subtitles align correctly after smart cuts have been applied.
+            # Remap word timestamps to the current (possibly cut) timeline.
             if app.timeline:
                 try:
                     clips = app.get_video_clips(1)
@@ -408,12 +507,11 @@ def setup(frame: Any, app: Any) -> None:
             else:
                 remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
 
-            preset_name = w["preset"].get()
             _tmp = _tempfile.NamedTemporaryFile(
                 suffix=".srt", delete=False, mode="w", encoding="utf-8",
                 prefix="clutter_remapped_",
             )
-            _tmp.write(words_to_srt(remapped, preset_name, **_get_style_overrides()))
+            _tmp.write(words_to_srt(remapped, preset_name, **style_overrides))
             _tmp.close()
             srt_path_for_import = _tmp.name
 
@@ -481,7 +579,16 @@ def setup(frame: Any, app: Any) -> None:
         if choice is None:
             return
         _state["timeline_choice"] = choice
-        threading.Thread(target=_create_track_thread, daemon=True).start()
+        # Capture all widget state on the main thread before launching background thread.
+        # CTkTextbox.get() hits the Tk C layer — not thread-safe from background threads.
+        _transcript_text = w["transcript"].get("0.0", "end").strip()
+        _style = _get_style_overrides()
+        _preset = w["preset"].get()
+        threading.Thread(
+            target=_create_track_thread,
+            args=(_transcript_text, _style, _preset),
+            daemon=True,
+        ).start()
 
     def on_preset_changed(value: str) -> None:
         app.settings.set("subtitle_preset", value)
@@ -495,10 +602,19 @@ def setup(frame: Any, app: Any) -> None:
         else:
             w["caps_check"].deselect()
 
+    # ── Wire up all callbacks ──
     w["save_key_btn"].configure(command=on_save_key)
     w["generate_btn"].configure(command=on_generate)
     w["create_track_btn"].configure(command=on_create_track)
     w["export_srt_btn"].configure(command=on_export_srt)
     w["export_txt_btn"].configure(command=on_export_txt)
     w["preset"].configure(command=on_preset_changed)
+    w["provider"].configure(command=on_provider_changed)
+    w["whisper_model"].configure(command=on_whisper_model_changed)
+
+    # Apply saved settings
     on_preset_changed(w["preset"].get())
+    saved_provider = app.settings.get("stt_provider", "ElevenLabs")
+    if saved_provider in ("ElevenLabs", "Local Whisper"):
+        w["provider"].set(saved_provider)
+        on_provider_changed(saved_provider)
