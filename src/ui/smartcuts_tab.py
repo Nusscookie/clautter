@@ -10,6 +10,29 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_PACE_PRESETS = {
+    1:  {"threshold_db": -55, "min_silence_ms": 1500, "label": "Very Slow",
+         "desc": "Documentary / cinematic — only remove very long pauses"},
+    2:  {"threshold_db": -50, "min_silence_ms": 1200, "label": "Slow",
+         "desc": "Long-form podcast / interview style"},
+    3:  {"threshold_db": -45, "min_silence_ms": 900,  "label": "Relaxed",
+         "desc": "Calm YouTube tutorial"},
+    4:  {"threshold_db": -40, "min_silence_ms": 600,  "label": "Moderate",
+         "desc": "Standard talking-head"},
+    5:  {"threshold_db": -35, "min_silence_ms": 350,  "label": "YouTube",
+         "desc": "Standard YouTube pacing — best all-round starting point"},
+    6:  {"threshold_db": -33, "min_silence_ms": 280,  "label": "Crisp",
+         "desc": "Tight YouTube / educational content"},
+    7:  {"threshold_db": -30, "min_silence_ms": 220,  "label": "Snappy",
+         "desc": "High-energy YouTube / commentary"},
+    8:  {"threshold_db": -28, "min_silence_ms": 160,  "label": "Fast",
+         "desc": "Instagram Reels / short-form"},
+    9:  {"threshold_db": -25, "min_silence_ms": 120,  "label": "Very Fast",
+         "desc": "TikTok-style aggressive cuts"},
+    10: {"threshold_db": -22, "min_silence_ms": 80,   "label": "TikTok / Reels",
+         "desc": "Maximum energy — every breath removed"},
+}
+
 
 def build(parent: Any) -> None:
     w: dict[str, Any] = {}
@@ -21,6 +44,48 @@ def build(parent: Any) -> None:
         text_color="#aaaaaa",
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
+
+    # ── Pace preset card ──
+    pace_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    pace_card.pack(fill="x", padx=10, pady=4)
+
+    ctk.CTkLabel(pace_card, text="PACE PRESET",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    slider_row = ctk.CTkFrame(pace_card, fg_color="transparent")
+    slider_row.pack(fill="x", padx=10, pady=(0, 4))
+    slider_row.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(slider_row, text="Slow", text_color="#888888",
+                 font=ctk.CTkFont(size=11)).grid(row=0, column=0, padx=(0, 8))
+    w["pace_slider"] = ctk.CTkSlider(slider_row, from_=1, to=10, number_of_steps=9)
+    w["pace_slider"].set(5)
+    w["pace_slider"].grid(row=0, column=1, sticky="ew")
+    ctk.CTkLabel(slider_row, text="Fast", text_color="#888888",
+                 font=ctk.CTkFont(size=11)).grid(row=0, column=2, padx=(8, 0))
+
+    info_row = ctk.CTkFrame(pace_card, fg_color="transparent")
+    info_row.pack(fill="x", padx=10, pady=(0, 10))
+
+    w["pace_level_lbl"] = ctk.CTkLabel(info_row, text="5",
+                                        font=ctk.CTkFont(size=22, weight="bold"),
+                                        text_color="#4fc3f7", width=36, anchor="w")
+    w["pace_level_lbl"].pack(side="left")
+
+    desc_col = ctk.CTkFrame(info_row, fg_color="transparent")
+    desc_col.pack(side="left", padx=(6, 0), fill="x", expand=True)
+
+    w["pace_name_lbl"] = ctk.CTkLabel(desc_col, text="YouTube",
+                                       font=ctk.CTkFont(size=13, weight="bold"),
+                                       text_color="#ffffff", anchor="w")
+    w["pace_name_lbl"].pack(fill="x")
+
+    w["pace_desc_lbl"] = ctk.CTkLabel(desc_col,
+                                       text="Standard YouTube pacing — best all-round starting point",
+                                       font=ctk.CTkFont(size=10), text_color="#aaaaaa",
+                                       anchor="w", wraplength=600)
+    w["pace_desc_lbl"].pack(fill="x")
 
     # ── Settings card ──
     card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
@@ -47,7 +112,7 @@ def build(parent: Any) -> None:
                                       state="disabled")
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
-    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Cuts (New Timeline)",
+    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Cuts",
                                     fg_color="#1565c0", hover_color="#1976d2",
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
@@ -313,6 +378,18 @@ def setup(frame: Any, app: Any) -> None:
         finally:
             set_btn("preview_btn", True)
 
+    def on_pace_slider(value: float) -> None:
+        level = int(round(value))
+        p = _PACE_PRESETS.get(level, _PACE_PRESETS[5])
+        w["pace_level_lbl"].configure(text=str(level))
+        w["pace_name_lbl"].configure(text=p["label"])
+        w["pace_desc_lbl"].configure(text=p["desc"])
+        w["threshold"].delete(0, "end")
+        w["threshold"].insert(0, str(p["threshold_db"]))
+        w["min_dur"].delete(0, "end")
+        w["min_dur"].insert(0, str(p["min_silence_ms"]))
+        app.settings.set("default_pace", level)
+
     def on_analyze() -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
@@ -344,3 +421,8 @@ def setup(frame: Any, app: Any) -> None:
     w["analyze_btn"].configure(command=on_analyze)
     w["apply_btn"].configure(command=on_apply)
     w["preview_btn"].configure(command=on_preview)
+    w["pace_slider"].configure(command=on_pace_slider)
+
+    default_pace = app.settings.get("default_pace", 5)
+    w["pace_slider"].set(default_pace)
+    on_pace_slider(default_pace)

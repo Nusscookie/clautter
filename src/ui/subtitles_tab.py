@@ -21,6 +21,11 @@ _LANG_CODES  = {l: c for l, c in _LANGUAGES}
 
 _PRESETS = ["YouTube", "Standard", "TikTok", "Alex Hormozi Style"]
 
+_FONT_FAMILIES = [
+    "Arial", "Calibri", "Georgia", "Impact", "Montserrat",
+    "Open Sans", "Roboto", "Times New Roman", "Trebuchet MS", "Verdana",
+]
+
 _WHISPER_MODELS = ["Tiny (fast)", "Base", "Small", "Medium", "Large v2", "Large v3"]
 _WHISPER_MODEL_MAP = {
     "Tiny (fast)": "tiny",
@@ -174,6 +179,104 @@ def build(parent: Any) -> None:
                                        font=ctk.CTkFont(size=11))
     w["caps_check"].pack(anchor="w", padx=10, pady=(0, 8))
 
+    # ── Text Style card ──
+    ts_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    ts_card.pack(fill="x", padx=10, pady=4)
+
+    ctk.CTkLabel(ts_card, text="TEXT STYLE",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    preset_row = ctk.CTkFrame(ts_card, fg_color="transparent")
+    preset_row.pack(fill="x", padx=10, pady=(0, 4))
+    preset_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(preset_row, text="Preset",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=60, anchor="w").grid(row=0, column=0, sticky="w")
+    w["style_preset"] = ctk.CTkComboBox(preset_row, state="readonly")
+    w["style_preset"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    w["style_import_btn"] = ctk.CTkButton(
+        preset_row, text="Import from Resolve", width=148,
+        fg_color="#2a2a2a", hover_color="#3a3a3a",
+        border_width=1, border_color="#555555",
+    )
+    w["style_import_btn"].grid(row=0, column=2)
+
+    ctk.CTkFrame(ts_card, height=1, fg_color="#444444", corner_radius=0).pack(
+        fill="x", padx=10, pady=4)
+
+    font_row = ctk.CTkFrame(ts_card, fg_color="transparent")
+    font_row.pack(fill="x", padx=10, pady=(0, 4))
+    font_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(font_row, text="Font",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=60, anchor="w").grid(row=0, column=0, sticky="w")
+    w["font_family"] = ctk.CTkComboBox(font_row, values=_FONT_FAMILIES)
+    w["font_family"].set("Arial")
+    w["font_family"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    ctk.CTkLabel(font_row, text="Size",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=30, anchor="e").grid(row=0, column=2, padx=(0, 6))
+    w["font_size_slider"] = ctk.CTkSlider(font_row, from_=16, to=72,
+                                           number_of_steps=56, width=90)
+    w["font_size_slider"].set(36)
+    w["font_size_slider"].grid(row=0, column=3, padx=(0, 6))
+    w["font_size_lbl"] = ctk.CTkLabel(font_row, text="36",
+                                       font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                       width=28, anchor="w")
+    w["font_size_lbl"].grid(row=0, column=4)
+
+    check_row = ctk.CTkFrame(ts_card, fg_color="transparent")
+    check_row.pack(fill="x", padx=10, pady=(0, 4))
+    w["bold_check"] = ctk.CTkCheckBox(check_row, text="Bold",
+                                       font=ctk.CTkFont(size=11))
+    w["bold_check"].pack(side="left", padx=(0, 14))
+    w["italic_check"] = ctk.CTkCheckBox(check_row, text="Italic",
+                                         font=ctk.CTkFont(size=11))
+    w["italic_check"].pack(side="left", padx=(0, 14))
+    w["underline_check"] = ctk.CTkCheckBox(check_row, text="Underline",
+                                            font=ctk.CTkFont(size=11))
+    w["underline_check"].pack(side="left")
+
+    color_row = ctk.CTkFrame(ts_card, fg_color="transparent")
+    color_row.pack(fill="x", padx=10, pady=(0, 10))
+    ctk.CTkLabel(color_row, text="Text",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(0, 4))
+    w["text_color_btn"] = ctk.CTkButton(
+        color_row, text="", width=36, height=26, corner_radius=4,
+        fg_color="#FFFFFF", hover_color="#FFFFFF",
+        border_width=2, border_color="#555555",
+    )
+    w["text_color_btn"].pack(side="left", padx=(0, 16))
+    ctk.CTkLabel(color_row, text="Outline",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(0, 4))
+    w["outline_color_btn"] = ctk.CTkButton(
+        color_row, text="", width=36, height=26, corner_radius=4,
+        fg_color="#000000", hover_color="#000000",
+        border_width=2, border_color="#555555",
+    )
+    w["outline_color_btn"].pack(side="left", padx=(0, 16))
+    ctk.CTkLabel(color_row, text="Outline Width",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(0, 6))
+    w["outline_width_slider"] = ctk.CTkSlider(
+        color_row, from_=0, to=6, number_of_steps=6, width=90)
+    w["outline_width_slider"].set(3)
+    w["outline_width_slider"].pack(side="left", padx=(0, 6))
+    w["outline_width_lbl"] = ctk.CTkLabel(
+        color_row, text="3",
+        font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+        width=20, anchor="w")
+    w["outline_width_lbl"].pack(side="left")
+
+    ctk.CTkLabel(color_row, text="Highlight",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(16, 4))
+    w["highlight_color_btn"] = ctk.CTkButton(
+        color_row, text="", width=36, height=26, corner_radius=4,
+        fg_color="#FFFF00", hover_color="#FFFF00",
+        border_width=2, border_color="#555555",
+    )
+    w["highlight_color_btn"].pack(side="left")
+
     # ── Action buttons ──
     btn_row1 = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row1.pack(fill="x", padx=10, pady=(6, 2))
@@ -250,11 +353,11 @@ def _unique_name(project: Any, base: str) -> str:
     return name
 
 
-_PRESET_DEFAULTS: dict[str, tuple[int, int, bool]] = {
-    "Standard":           (8, 2, False),
-    "YouTube":            (7, 2, False),
-    "TikTok":             (5, 1, True),
-    "Alex Hormozi Style": (3, 1, True),
+_PRESET_DEFAULTS: dict[str, tuple[int, int, bool, str]] = {
+    "Standard":           (8, 2, False, "#FFFF00"),
+    "YouTube":            (7, 2, False, "#FFFF00"),
+    "TikTok":             (5, 1, True,  "#FF0000"),
+    "Alex Hormozi Style": (3, 1, True,  "#FFFF00"),
 }
 
 
@@ -267,6 +370,11 @@ def setup(frame: Any, app: Any) -> None:
         "srt_path": "",
         "timeline_choice": ("new", None),
     }
+
+    # Mutable closure vars for color picker state (list wrapper allows reassignment)
+    _text_color:      list[str] = ["#FFFFFF"]
+    _outline_color:   list[str] = ["#000000"]
+    _highlight_color: list[str] = ["#FFFF00"]
 
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
@@ -293,6 +401,47 @@ def setup(frame: Any, app: Any) -> None:
             "lines_per_block": int(w["lpb_slider"].get()),
             "uppercase":       w["caps_check"].get() == 1,
         }
+
+    def _get_text_style() -> dict:
+        return {
+            "font_family":     w["font_family"].get(),
+            "font_size":       int(w["font_size_slider"].get()),
+            "bold":            w["bold_check"].get() == 1,
+            "italic":          w["italic_check"].get() == 1,
+            "underline":       w["underline_check"].get() == 1,
+            "primary_color":   _text_color[0],
+            "outline_color":   _outline_color[0],
+            "outline_width":   int(w["outline_width_slider"].get()),
+            "shadow":          1,
+            "highlight_color": _highlight_color[0],
+        }
+
+    def _apply_text_style(style: dict) -> None:
+        w["font_family"].set(style.get("font_family", "Arial"))
+        size = int(style.get("font_size", 36))
+        w["font_size_slider"].set(size)
+        w["font_size_lbl"].configure(text=str(size))
+        if style.get("bold", False):
+            w["bold_check"].select()
+        else:
+            w["bold_check"].deselect()
+        if style.get("italic", False):
+            w["italic_check"].select()
+        else:
+            w["italic_check"].deselect()
+        if style.get("underline", False):
+            w["underline_check"].select()
+        else:
+            w["underline_check"].deselect()
+        tc = style.get("primary_color", "#FFFFFF")
+        oc = style.get("outline_color", "#000000")
+        _text_color[0]    = tc
+        _outline_color[0] = oc
+        w["text_color_btn"].configure(fg_color=tc, hover_color=tc)
+        w["outline_color_btn"].configure(fg_color=oc, hover_color=oc)
+        ow = int(style.get("outline_width", 3))
+        w["outline_width_slider"].set(ow)
+        w["outline_width_lbl"].configure(text=str(ow))
 
     def on_wpl(val: float) -> None:
         w["wpl_label"].configure(text=str(int(val)))
@@ -447,9 +596,10 @@ def setup(frame: Any, app: Any) -> None:
         transcript_text: str,
         style_overrides: dict,
         preset_name: str,
+        text_style: dict,
     ) -> None:
         try:
-            from src.subtitles.generator import import_srt_to_timeline, words_to_srt, remap_words_to_timeline
+            from src.subtitles.generator import import_srt_to_timeline, remap_words_to_timeline
             import tempfile as _tempfile
 
             set_btn("create_track_btn", False)
@@ -472,12 +622,29 @@ def setup(frame: Any, app: Any) -> None:
                     ]
                     log.info("Applied %d transcript edits to subtitle words", len(_tokens))
                 else:
-                    log.warning(
-                        "Edited word count (%d) != original (%d) — edits ignored; "
-                        "only same-count edits (typo fixes) preserve timing",
-                        len(_tokens), len(_orig_words),
-                    )
-                    _words_src = _state["words"]
+                    if _orig_words:
+                        t0   = _orig_words[0]["start_sec"]
+                        t1   = _orig_words[-1]["end_sec"]
+                        step = (t1 - t0) / max(len(_tokens), 1)
+                        _words_src = [
+                            {
+                                "word": tok,
+                                "start_sec": t0 + i * step,
+                                "end_sec": t0 + (i + 1) * step,
+                                "type": "word",
+                            }
+                            for i, tok in enumerate(_tokens)
+                        ]
+                        log.info(
+                            "Word count changed (%d→%d) — using proportional timing fallback",
+                            len(_orig_words), len(_tokens),
+                        )
+                        set_status(
+                            f"Word count changed ({len(_orig_words)}→{len(_tokens)}) — timing approximated.",
+                            "#ffa726",
+                        )
+                    else:
+                        _words_src = _state["words"]
             else:
                 _words_src = _state["words"]
 
@@ -507,23 +674,30 @@ def setup(frame: Any, app: Any) -> None:
             else:
                 remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
 
-            _tmp = _tempfile.NamedTemporaryFile(
-                suffix=".srt", delete=False, mode="w", encoding="utf-8",
-                prefix="clutter_remapped_",
+            # Primary path: Fusion Title clips on a video track (full styling + word highlight).
+            from src.subtitles.generator import place_fusion_titles
+            ok = place_fusion_titles(
+                app.resolve, remapped, app.fps, app.timeline,
+                text_style, preset_name, **style_overrides,
             )
-            _tmp.write(words_to_srt(remapped, preset_name, **style_overrides))
-            _tmp.close()
-            srt_path_for_import = _tmp.name
-
-            ok = import_srt_to_timeline(app.resolve, srt_path_for_import, app.timeline)
-            if ok:
-                set_status(
-                    "Subtitle track created. If empty, drag SRT from Media Pool onto the track.",
-                    "#66bb6a",
+            if not ok:
+                # Fusion path failed (Resolve not connected, or Text+ not available).
+                # Fall back to SRT on subtitle track — no custom styling but clips land.
+                log.info("Fusion titles failed; falling back to SRT subtitle track")
+                from src.subtitles.generator import words_to_srt
+                _srt_tmp = _tempfile.NamedTemporaryFile(
+                    suffix=".srt", delete=False, mode="w", encoding="utf-8",
+                    prefix="clutter_fallback_",
                 )
+                _srt_tmp.write(words_to_srt(remapped, preset_name, **style_overrides))
+                _srt_tmp.close()
+                ok = import_srt_to_timeline(app.resolve, _srt_tmp.name, app.timeline)
+
+            if ok:
+                set_status("Subtitle track created.", "#66bb6a")
             else:
                 set_status(
-                    f"Could not auto-import SRT. File saved at: {_state['srt_path']}",
+                    f"Could not auto-import. Drag file from Media Pool: {srt_path_for_import}",
                     "#ffa726",
                 )
         except Exception as e:
@@ -580,19 +754,20 @@ def setup(frame: Any, app: Any) -> None:
             return
         _state["timeline_choice"] = choice
         # Capture all widget state on the main thread before launching background thread.
-        # CTkTextbox.get() hits the Tk C layer — not thread-safe from background threads.
+        # CTkTextbox.get() and slider/checkbox reads hit the Tk C layer — not thread-safe.
         _transcript_text = w["transcript"].get("0.0", "end").strip()
-        _style = _get_style_overrides()
-        _preset = w["preset"].get()
+        _style      = _get_style_overrides()
+        _preset     = w["preset"].get()
+        _text_style = _get_text_style()
         threading.Thread(
             target=_create_track_thread,
-            args=(_transcript_text, _style, _preset),
+            args=(_transcript_text, _style, _preset, _text_style),
             daemon=True,
         ).start()
 
     def on_preset_changed(value: str) -> None:
         app.settings.set("subtitle_preset", value)
-        wpl, lpb, caps = _PRESET_DEFAULTS.get(value, (7, 2, False))
+        wpl, lpb, caps, hcol = _PRESET_DEFAULTS.get(value, (7, 2, False, "#FFFF00"))
         w["wpl_slider"].set(wpl)
         w["wpl_label"].configure(text=str(wpl))
         w["lpb_slider"].set(lpb)
@@ -601,6 +776,151 @@ def setup(frame: Any, app: Any) -> None:
             w["caps_check"].select()
         else:
             w["caps_check"].deselect()
+        _highlight_color[0] = hcol
+        w["highlight_color_btn"].configure(fg_color=hcol, hover_color=hcol)
+
+    # ── Text style handlers ──
+    def on_font_size(val: float) -> None:
+        w["font_size_lbl"].configure(text=str(int(val)))
+
+    def on_outline_width(val: float) -> None:
+        w["outline_width_lbl"].configure(text=str(int(val)))
+
+    def on_text_color() -> None:
+        import tkinter.colorchooser
+        result = tkinter.colorchooser.askcolor(
+            color=_text_color[0], title="Choose Text Color"
+        )
+        if result and result[1]:
+            _text_color[0] = result[1].upper()
+            w["text_color_btn"].configure(
+                fg_color=_text_color[0], hover_color=_text_color[0])
+
+    def on_outline_color() -> None:
+        import tkinter.colorchooser
+        result = tkinter.colorchooser.askcolor(
+            color=_outline_color[0], title="Choose Outline Color"
+        )
+        if result and result[1]:
+            _outline_color[0] = result[1].upper()
+            w["outline_color_btn"].configure(
+                fg_color=_outline_color[0], hover_color=_outline_color[0])
+
+    def on_highlight_color() -> None:
+        import tkinter.colorchooser
+        result = tkinter.colorchooser.askcolor(
+            color=_highlight_color[0], title="Choose Highlight Color"
+        )
+        if result and result[1]:
+            _highlight_color[0] = result[1].upper()
+            w["highlight_color_btn"].configure(
+                fg_color=_highlight_color[0], hover_color=_highlight_color[0])
+
+    def on_style_preset_changed(name: str) -> None:
+        presets = app.settings.get_style_presets()
+        style = presets.get(name)
+        if style:
+            _apply_text_style(style)
+            app.settings.set("active_subtitle_style", name)
+
+    def _refresh_style_preset_list(select: str | None = None) -> None:
+        presets = app.settings.get_style_presets()
+        keys = list(presets.keys())
+        w["style_preset"].configure(values=keys)
+        if select and select in keys:
+            w["style_preset"].set(select)
+        elif keys:
+            w["style_preset"].set(keys[0])
+
+    def _import_style_thread() -> None:
+        try:
+            if not app.timeline:
+                set_status("No timeline — connect Resolve first.", "#ff6b6b")
+                return
+            item = app.timeline.GetCurrentVideoItem()
+
+            if not item:
+                # GetCurrentVideoItem only sees track 1 — scan all video tracks
+                log.debug("GetCurrentVideoItem returned None; scanning video tracks")
+                try:
+                    _tc = app.timeline.GetTrackCount("video")
+                    for _ti in range(1, _tc + 1):
+                        for _candidate in (app.timeline.GetItemListInTrack("video", _ti) or []):
+                            try:
+                                if _candidate.GetFusionCompCount():
+                                    _c = _candidate.GetFusionCompByIndex(1)
+                                    if _c and _c.FindToolByID("TextPlus"):
+                                        item = _candidate
+                                        log.info("Found Text+ on video track %d", _ti)
+                                        break
+                            except Exception:
+                                continue
+                        if item:
+                            break
+                except Exception as _e:
+                    log.debug("Track scan failed: %s", _e)
+
+            if not item:
+                set_status(
+                    "No Text+ clip found. Move playhead over the clip and try again.",
+                    "#ffa726",
+                )
+                return
+
+            try:
+                comp_count = item.GetFusionCompCount()
+            except Exception:
+                comp_count = 0
+            if not comp_count:
+                set_status("Selected clip has no Fusion composition.", "#ffa726")
+                return
+            comp = item.GetFusionCompByIndex(1)
+            text_tool = comp.FindToolByID("TextPlus")
+            if not text_tool:
+                set_status("No Text+ tool in selected clip. Select a Text+ generator.", "#ffa726")
+                return
+
+            style: dict[str, Any] = {}
+
+            font = text_tool.GetInput("Font")
+            if font:
+                style["font_family"] = str(font)
+
+            size = text_tool.GetInput("Size")
+            if size is not None:
+                # Fusion TextPlus Size is normalized; ~0.1 ≈ 36pt on 1080p canvas.
+                style["font_size"] = max(16, min(72, int(float(size) * 360)))
+
+            r = text_tool.GetInput("Red1")
+            g = text_tool.GetInput("Green1")
+            b = text_tool.GetInput("Blue1")
+            if all(v is not None for v in (r, g, b)):
+                style["primary_color"] = "#{:02X}{:02X}{:02X}".format(
+                    int(float(r) * 255), int(float(g) * 255), int(float(b) * 255))
+
+            if not style:
+                # Log available inputs so we can discover the correct key names.
+                try:
+                    inputs = text_tool.GetInputList()
+                    log.info("TextPlus inputs: %s", list(inputs.values()) if inputs else "none")
+                except Exception as _e:
+                    log.debug("GetInputList failed: %s", _e)
+                set_status(
+                    "Could not read style from clip. Check log for available inputs.", "#ffa726")
+                return
+
+            _ui(lambda: _apply_text_style(style))
+            set_status("Style imported from selected clip.", "#66bb6a")
+
+        except Exception as e:
+            log.error("Import style from Resolve: %s", e)
+            set_status(f"Import error: {e}", "#ff6b6b")
+
+    def on_import_style() -> None:
+        if not app.connected:
+            w["status"].configure(text="Not connected to DaVinci Resolve.", text_color="#ff6b6b")
+            return
+        threading.Thread(target=_import_style_thread, daemon=True).start()
 
     # ── Wire up all callbacks ──
     w["save_key_btn"].configure(command=on_save_key)
@@ -611,6 +931,13 @@ def setup(frame: Any, app: Any) -> None:
     w["preset"].configure(command=on_preset_changed)
     w["provider"].configure(command=on_provider_changed)
     w["whisper_model"].configure(command=on_whisper_model_changed)
+    w["font_size_slider"].configure(command=on_font_size)
+    w["outline_width_slider"].configure(command=on_outline_width)
+    w["text_color_btn"].configure(command=on_text_color)
+    w["outline_color_btn"].configure(command=on_outline_color)
+    w["highlight_color_btn"].configure(command=on_highlight_color)
+    w["style_preset"].configure(command=on_style_preset_changed)
+    w["style_import_btn"].configure(command=on_import_style)
 
     # Apply saved settings
     on_preset_changed(w["preset"].get())
@@ -618,3 +945,11 @@ def setup(frame: Any, app: Any) -> None:
     if saved_provider in ("ElevenLabs", "Local Whisper"):
         w["provider"].set(saved_provider)
         on_provider_changed(saved_provider)
+
+    # Init text style from saved settings
+    _refresh_style_preset_list()
+    active_style = app.settings.get("active_subtitle_style", "YouTube")
+    presets = app.settings.get_style_presets()
+    if active_style in presets:
+        w["style_preset"].set(active_style)
+    on_style_preset_changed(w["style_preset"].get())

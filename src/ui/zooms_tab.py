@@ -81,7 +81,7 @@ def build(parent: Any) -> None:
                                       state="disabled")
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
-    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Zooms (New Timeline)",
+    w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Zooms",
                                     fg_color="#6a1b9a", hover_color="#7b1fa2",
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")

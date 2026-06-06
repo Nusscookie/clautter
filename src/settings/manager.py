@@ -24,6 +24,13 @@ _DEFAULTS: dict[str, Any] = {
     "subtitle_language": "en",
     "subtitle_preset": "YouTube",
     "last_broll_folder": "",
+    "active_subtitle_style": "YouTube",
+    "subtitle_style_presets": {
+        "Clean White": {"font_family": "Arial",  "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 2, "shadow": 1},
+        "YouTube":     {"font_family": "Arial",  "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 3, "shadow": 1},
+        "TikTok Bold": {"font_family": "Impact", "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 4, "shadow": 0},
+        "Minimal":     {"font_family": "Arial",  "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_color": "#000000", "outline_width": 1, "shadow": 0},
+    },
     "stats": {
         "total_time_saved_sec": 0.0,
         "total_edits": 0,
@@ -53,8 +60,12 @@ class SettingsManager:
                 with open(self._path, "r", encoding="utf-8") as f:
                     loaded: dict[str, Any] = json.load(f)
                 self._data = {**_DEFAULTS, **loaded}
-                # Deep merge nested stats dict
+                # Deep merge nested dicts so built-in entries survive config updates
                 self._data["stats"] = {**_DEFAULTS["stats"], **loaded.get("stats", {})}
+                self._data["subtitle_style_presets"] = {
+                    **_DEFAULTS["subtitle_style_presets"],
+                    **loaded.get("subtitle_style_presets", {}),
+                }
                 log.debug("Settings loaded from %s", self._path)
             except Exception as e:
                 log.error("Failed to load settings (%s) — using defaults", e)
@@ -88,6 +99,10 @@ class SettingsManager:
     @property
     def stats(self) -> dict[str, Any]:
         return self._data.get("stats", {})
+
+    def get_style_presets(self) -> dict[str, Any]:
+        """Return a shallow copy of all subtitle style presets."""
+        return dict(self._data.get("subtitle_style_presets", {}))
 
     @property
     def api_key(self) -> str:

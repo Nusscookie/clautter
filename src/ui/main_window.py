@@ -7,7 +7,7 @@ import customtkinter as ctk
 
 from src.utils.logger import get_logger
 from src.ui import (
-    dashboard_tab, smartcuts_tab, pace_tab,
+    dashboard_tab, smartcuts_tab,
     subtitles_tab, zooms_tab, broll_tab, graphics_tab,
 )
 
@@ -19,7 +19,6 @@ _WIN_H = 700
 _TABS: list[tuple[str, Any]] = [
     ("Dashboard",       dashboard_tab),
     ("Smart Cuts",      smartcuts_tab),
-    ("Pace Control",    pace_tab),
     ("Subtitles",       subtitles_tab),
     ("Auto Zooms",      zooms_tab),
     ("B-Roll",          broll_tab),
