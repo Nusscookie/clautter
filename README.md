@@ -1,3 +1,5 @@
+<img src="assets/icon.svg" width="96" alt="Clutter icon" />
+
 # Clutter
 
 **CLAUDE + CUTTER** — built by Claude Code.
@@ -11,10 +13,9 @@ Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
 | Tab | Status | Description |
 |---|---|---|
-| **Smart Cuts** | ✅ Full | Automatically remove silences. Choose new or existing timeline |
-| **Pace Control** | ✅ Full | One slider (1–10) maps to editing intensity. Drives Smart Cuts |
-| **Subtitles** | ✅ Full | ElevenLabs STT → SRT generation → subtitle track import |
-| **Auto Zooms** | ✅ Full | Detect high-energy moments → apply zoom cuts. Choose new or existing timeline |
+| **Smart Cuts** | ✅ Full | Remove silences with a pace slider (1–10) + fine-grained controls |
+| **Subtitles** | ✅ Full | ElevenLabs or local Whisper STT → styled ASS subtitle track import |
+| **Auto Zooms** | ✅ Full | Detect high-energy moments → apply zoom cuts |
 | **B-Roll Assistant** | 🔧 Scaffold | Folder scan + keyword matching. Auto-place coming in V2 |
 | **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation coming in V2 |
 
@@ -42,41 +43,64 @@ See [INSTALL.md](INSTALL.md) for the full guide.
 
 Detects silent sections using pydub's silence analysis and reconstructs the timeline with silences removed.
 
-- **Silence Threshold** — how quiet counts as silence (dBFS)
-- **Min Silence Duration** — minimum pause length to remove (ms)
-- **Breathing Room** — ms to leave at each cut edge so speech isn't clipped
-- **Preview** — adds red markers at silence locations without cutting
-- **Apply Cuts** — shows a dialog to create a new `_cuts` timeline or append to an existing one
-
-Both video and audio tracks are preserved in the output timeline.
-
-### Pace Control
-
-Maps a single 1–10 slider to Smart Cuts parameters:
+**Pace Preset** (1–10 slider at the top of the card):
 
 | Level | Style | Threshold | Min Pause |
 |---|---|---|---|
 | 1 | Very Slow | -55 dB | 1500 ms |
 | 5 | YouTube | -35 dB | 350 ms |
-| 10 | TikTok | -22 dB | 80 ms |
+| 10 | TikTok / Reels | -22 dB | 80 ms |
 
-Apply shows the same timeline dialog as Smart Cuts.
+Moving the slider auto-fills the detection fields below it. Fine-tune manually if needed.
+
+**Detection Settings:**
+- **Silence Threshold** — how quiet counts as silence (dBFS)
+- **Min Silence Duration** — minimum pause length to remove (ms)
+- **Breathing Room** — ms to leave at each cut edge so speech isn't clipped
+- **Preview** — adds red markers at silence locations without cutting
+- **Apply Cuts** — dialog to create a new `_cuts` timeline or append to an existing one
+
+Both video and audio tracks are preserved in the output timeline.
 
 ### Subtitles
 
-Uses ElevenLabs Scribe (Speech-to-Text) API:
+Two STT providers:
 
-1. Enter API key → Save
-2. Choose language + style preset
-3. Click **Generate Transcript** → review transcript in the editor
-4. Click **Create Subtitle Track** → choose new or existing timeline → imports SRT
-5. Export SRT / TXT for external use
+| Provider | Notes |
+|---|---|
+| **ElevenLabs** | Cloud API — high accuracy, requires API key |
+| **Local Whisper** | Runs on device via `faster-whisper`. First run downloads the model |
 
-**Presets:**
+**Workflow:**
+1. Choose provider → configure API key or Whisper model size
+2. Choose language + layout preset
+3. Click **Generate Transcript** → review and edit in the transcript box
+4. Configure **Text Style** (font, size, colors, outline)
+5. Click **Create Subtitle Track** → choose new or existing timeline → imports styled subtitle file
+6. Export SRT / TXT for external use
+
+**Layout Presets:**
 - **YouTube** — 2 lines, ~7 words per line
 - **Standard** — 2 lines, ~8 words per line
 - **TikTok** — 1 line, uppercase, 5 words per line
 - **Alex Hormozi Style** — word-by-word, uppercase
+
+**Text Style Presets** (font, size, bold/italic/underline, text color, outline color + width):
+- **YouTube** — Arial 36px bold, white text, black outline
+- **Clean White** — Arial 32px, white text, thin outline
+- **TikTok Bold** — Impact 48px bold, heavy outline
+- **Minimal** — Arial 28px, white text, hairline outline
+
+Save custom presets via **Save As…**. Built-in presets are protected from deletion.
+
+> Subtitles are exported as ASS format (Advanced SubStation Alpha), which
+> carries full font and color metadata. DaVinci Resolve imports ASS identically
+> to SRT via drag-and-drop or Media Pool.
+
+**Transcript editing:** Edit the transcript text freely before clicking
+"Create Subtitle Track". Word timings are preserved when word count stays the
+same; if count changes, timings are distributed proportionally and an orange
+status message is shown.
 
 ### Auto Zooms
 
@@ -136,9 +160,8 @@ src/
 ├── ui/                 # customtkinter tab layouts + event handlers
 │   └── timeline_dialog.py  # modal: create new / use existing timeline
 ├── smartcuts/          # pydub silence detection + timeline reconstruction
-├── subtitles/          # ElevenLabs STT client + SRT generator + exporter
+├── subtitles/          # STT clients + ASS/SRT generator + exporter
 ├── zooms/              # Volume peak detection + SetProperty zoom applier
-├── pace/               # Pace level → SmartCuts parameter mapping
 ├── broll/              # Folder scanner + keyword matcher
 ├── graphics/           # Rule-based graphic suggester
 ├── settings/           # JSON config persistence (~/.clutter/)
@@ -158,6 +181,7 @@ See [CLAUDE.md](CLAUDE.md) for full design notes and gotchas.
 | Package | Purpose |
 |---|---|
 | `customtkinter` | The GUI toolkit (resolves the UIManager removal in Resolve free v19.1) |
+| `faster-whisper` | Local speech-to-text (optional, CPU or CUDA) |
 | `pydub` | Audio loading and silence detection |
 | `requests` | ElevenLabs API calls + HTTP bridge client |
 | `numpy` | RMS computation for zoom detection |
@@ -178,4 +202,4 @@ Install with `py -3.12 -m pip install -r requirements.txt`.
 
 ## License
 
-MIT
+[GPLv3](LICENSE.md)
