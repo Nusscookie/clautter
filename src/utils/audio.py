@@ -100,3 +100,58 @@ def find_volume_peaks(
             peaks.append((float(time_ms), float(val)))
 
     return peaks
+
+
+def extract_cut_audio(clips: list, tmp_dir: str, fps: float) -> str | None:
+    """ffmpeg-extract kept audio from timeline clips and concatenate into one WAV.
+
+    Returns path to the WAV (inside tmp_dir) or None if extraction fails.
+    The caller is responsible for cleaning up tmp_dir.
+    """
+    import subprocess
+    from src.utils.resolve_api import get_clip_file_path
+
+    segments: list[str] = []
+    for i, clip in enumerate(clips):
+        try:
+            src = get_clip_file_path(clip)
+            if not src or not os.path.exists(src):
+                continue
+            start_s = clip.GetSourceStartFrame() / fps
+            end_s   = clip.GetSourceEndFrame()   / fps
+            dur     = end_s - start_s
+            if dur < 0.05:
+                continue
+            seg = os.path.join(tmp_dir, f"seg_{i:04d}.wav")
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error",
+                 "-i", src, "-ss", str(start_s), "-t", str(dur),
+                 "-vn", "-ac", "1", "-ar", "16000", seg],
+                capture_output=True, timeout=120,
+            )
+            if r.returncode == 0:
+                segments.append(seg)
+            else:
+                log.debug("ffmpeg seg %d: %s", i, r.stderr.decode(errors="replace")[:200])
+        except Exception as _e:
+            log.debug("extract_cut_audio clip %d: %s", i, _e)
+
+    if not segments:
+        return None
+    if len(segments) == 1:
+        return segments[0]
+
+    lst = os.path.join(tmp_dir, "concat.txt")
+    with open(lst, "w", encoding="utf-8") as f:
+        for s in segments:
+            f.write(f"file '{s.replace(chr(92), '/')}'\n")
+    out = os.path.join(tmp_dir, "cut_audio.wav")
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error",
+         "-f", "concat", "-safe", "0", "-i", lst, out],
+        capture_output=True, timeout=120,
+    )
+    if r.returncode == 0:
+        return out
+    log.warning("extract_cut_audio concat failed — using first segment only")
+    return segments[0]

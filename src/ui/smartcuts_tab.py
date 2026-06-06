@@ -6,32 +6,11 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.ui._smartcuts_data import PACE_PRESETS
+from src.ui._smartcuts_workers import analyze_thread, apply_thread, preview_thread
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
-
-_PACE_PRESETS = {
-    1:  {"threshold_db": -55, "min_silence_ms": 1500, "label": "Very Slow",
-         "desc": "Documentary / cinematic — only remove very long pauses"},
-    2:  {"threshold_db": -50, "min_silence_ms": 1200, "label": "Slow",
-         "desc": "Long-form podcast / interview style"},
-    3:  {"threshold_db": -45, "min_silence_ms": 900,  "label": "Relaxed",
-         "desc": "Calm YouTube tutorial"},
-    4:  {"threshold_db": -40, "min_silence_ms": 600,  "label": "Moderate",
-         "desc": "Standard talking-head"},
-    5:  {"threshold_db": -35, "min_silence_ms": 350,  "label": "YouTube",
-         "desc": "Standard YouTube pacing — best all-round starting point"},
-    6:  {"threshold_db": -33, "min_silence_ms": 280,  "label": "Crisp",
-         "desc": "Tight YouTube / educational content"},
-    7:  {"threshold_db": -30, "min_silence_ms": 220,  "label": "Snappy",
-         "desc": "High-energy YouTube / commentary"},
-    8:  {"threshold_db": -28, "min_silence_ms": 160,  "label": "Fast",
-         "desc": "Instagram Reels / short-form"},
-    9:  {"threshold_db": -25, "min_silence_ms": 120,  "label": "Very Fast",
-         "desc": "TikTok-style aggressive cuts"},
-    10: {"threshold_db": -22, "min_silence_ms": 80,   "label": "TikTok / Reels",
-         "desc": "Maximum energy — every breath removed"},
-}
 
 
 def build(parent: Any) -> None:
@@ -96,8 +75,8 @@ def build(parent: Any) -> None:
                  text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
     w["threshold"] = _labeled_entry(card, "Silence Threshold", "-35", "dB")
-    w["min_dur"] = _labeled_entry(card, "Min Silence Duration", "350", "ms")
-    w["padding"] = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
+    w["min_dur"]   = _labeled_entry(card, "Min Silence Duration", "350", "ms")
+    w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
 
     # ── Buttons ──
     btn_row = ctk.CTkFrame(parent, fg_color="transparent")
@@ -126,14 +105,12 @@ def build(parent: Any) -> None:
     w["status"] = ctk.CTkLabel(
         parent,
         text="Ready. Select clips in the Edit page timeline, then click Analyze.",
-        font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa",
-        anchor="w",
-        wraplength=800,
+        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800,
     )
     w["status"].pack(fill="x", padx=12, pady=(2, 4))
 
-    _divider(parent)
+    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+        fill="x", padx=10, pady=6)
 
     # ── Results ──
     ctk.CTkLabel(parent, text="ANALYSIS RESULTS",
@@ -162,7 +139,6 @@ def _labeled_entry(parent: Any, label: str, default: str, unit: str) -> ctk.CTkE
     row = ctk.CTkFrame(parent, fg_color="transparent")
     row.pack(fill="x", padx=10, pady=2)
     row.grid_columnconfigure(0, weight=1)
-
     ctk.CTkLabel(row, text=label, anchor="w").grid(row=0, column=0, sticky="w")
     entry = ctk.CTkEntry(row, width=90, justify="center")
     entry.insert(0, default)
@@ -181,11 +157,6 @@ def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFram
                  text_color="#888888").pack(pady=(0, 8))
     card._val = val
     return card
-
-
-def _divider(parent: Any) -> None:
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
-        fill="x", padx=10, pady=6)
 
 
 def setup(frame: Any, app: Any) -> None:
@@ -218,169 +189,9 @@ def setup(frame: Any, app: Any) -> None:
         state = "normal" if enabled else "disabled"
         _ui(lambda: w[name].configure(state=state))
 
-    def _analyze_thread() -> None:
-        try:
-            from src.smartcuts.analyzer import detect_silences
-            from src.utils.resolve_api import get_clip_file_path
-
-            set_btn("analyze_btn", False)
-            set_btn("apply_btn", False)
-            set_btn("preview_btn", False)
-            set_progress(0, True)
-            set_status("Refreshing timeline...")
-
-            app.refresh_timeline()
-            clips = app.get_video_clips(1)
-            if not clips:
-                set_status("No clips found on Video Track 1.", "#ff6b6b")
-                set_progress(0, False)
-                set_btn("analyze_btn", True)
-                return
-
-            threshold = float(w["threshold"].get())
-            min_dur = float(w["min_dur"].get())
-            padding = float(w["padding"].get())
-
-            _state["clips"] = clips
-            _state["silence_regions"] = []
-            total_silences = 0
-            total_ms = 0.0
-
-            for i, clip in enumerate(clips):
-                set_status(f"Analyzing clip {i + 1} / {len(clips)}...")
-                set_progress(int((i / len(clips)) * 90))
-
-                file_path = get_clip_file_path(clip)
-                if not file_path:
-                    _state["silence_regions"].append((clip, []))
-                    continue
-
-                try:
-                    regions = detect_silences(
-                        file_path,
-                        threshold_db=threshold,
-                        min_duration_ms=min_dur,
-                        padding_ms=padding,
-                    )
-                except Exception as e:
-                    log.error("Analysis error clip %d: %s", i, e)
-                    regions = []
-
-                _state["silence_regions"].append((clip, regions))
-                total_silences += len(regions)
-                total_ms += sum(r.duration_ms for r in regions)
-
-            _state["total_silences"] = total_silences
-            _state["total_time_saved"] = total_ms / 1000.0
-
-            _ui(lambda: w["found_count"]._val.configure(text=str(total_silences)))
-            _ui(lambda: w["time_saved"]._val.configure(
-                text=f"{_state['total_time_saved']:.1f} s"))
-            _ui(lambda: w["clips_count"]._val.configure(text=str(len(clips))))
-
-            set_progress(100)
-            if total_silences > 0:
-                set_status(
-                    f"Found {total_silences} silence(s) totaling "
-                    f"{_state['total_time_saved']:.1f}s. Click Apply Cuts.",
-                    "#66bb6a",
-                )
-                set_btn("apply_btn", True)
-                set_btn("preview_btn", True)
-            else:
-                set_status("No significant silences found. Try lowering the threshold.", "#ffa726")
-            set_progress(0, False)
-
-        except Exception as e:
-            log.error("Analyze thread error: %s", e)
-            set_status(f"Error: {e}", "#ff6b6b")
-            set_progress(0, False)
-        finally:
-            set_btn("analyze_btn", True)
-
-    def _apply_thread() -> None:
-        try:
-            from src.smartcuts.cutter import apply_cuts
-
-            _mode, _target_tl = _state["timeline_choice"]
-            set_btn("apply_btn", False)
-            set_btn("analyze_btn", False)
-            set_progress(0, True)
-            if _target_tl is not None:
-                set_status(f"Appending cuts to '{_target_tl.GetName()}'...")
-            else:
-                set_status("Creating new timeline with silence removed...")
-
-            def progress_cb(current: int, total: int, msg: str) -> None:
-                set_progress(int((current / max(total, 1)) * 100))
-                set_status(msg)
-
-            result = apply_cuts(
-                resolve=app.resolve,
-                timeline=app.timeline,
-                clips=_state["clips"],
-                threshold_db=float(w["threshold"].get()),
-                min_duration_ms=float(w["min_dur"].get()),
-                padding_ms=float(w["padding"].get()),
-                progress_callback=progress_cb,
-                target_timeline=_target_tl,
-            )
-
-            app.refresh_timeline()
-            app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
-            app.settings.add_stat("total_edits", 1)
-
-            set_progress(100)
-            set_status(
-                f"Done! New timeline: '{result.new_timeline_name}' "
-                f"({result.time_saved_sec:.1f}s removed)",
-                "#66bb6a",
-            )
-            _ui(lambda: w["new_timeline_lbl"].configure(
-                text=f"Created: \"{result.new_timeline_name}\""))
-            set_progress(0, False)
-
-        except Exception as e:
-            log.error("Apply thread error: %s", e)
-            set_status(f"Error: {e}", "#ff6b6b")
-            set_progress(0, False)
-        finally:
-            set_btn("apply_btn", True)
-            set_btn("analyze_btn", True)
-
-    def _preview_thread() -> None:
-        try:
-            set_btn("preview_btn", False)
-            set_status("Adding markers at silence locations...")
-
-            if not app.timeline:
-                set_status("No active timeline.", "#ff6b6b")
-                return
-
-            marker_count = 0
-            for clip, regions in _state["silence_regions"]:
-                for region in regions:
-                    frame_offset = int((region.start_ms / 1000.0) * app.fps)
-                    try:
-                        clip.AddMarker(
-                            frame_offset, "Red", "Silence",
-                            f"Silence: {region.duration_ms:.0f}ms",
-                            int((region.duration_ms / 1000.0) * app.fps), "",
-                        )
-                        marker_count += 1
-                    except Exception as me:
-                        log.debug("Marker add error: %s", me)
-
-            set_status(f"Added {marker_count} marker(s). Red markers = silences.", "#66bb6a")
-        except Exception as e:
-            log.error("Preview thread error: %s", e)
-            set_status(f"Error: {e}", "#ff6b6b")
-        finally:
-            set_btn("preview_btn", True)
-
     def on_pace_slider(value: float) -> None:
         level = int(round(value))
-        p = _PACE_PRESETS.get(level, _PACE_PRESETS[5])
+        p = PACE_PRESETS.get(level, PACE_PRESETS[5])
         w["pace_level_lbl"].configure(text=str(level))
         w["pace_name_lbl"].configure(text=p["label"])
         w["pace_desc_lbl"].configure(text=p["desc"])
@@ -394,7 +205,11 @@ def setup(frame: Any, app: Any) -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
-        threading.Thread(target=_analyze_thread, daemon=True).start()
+        threading.Thread(
+            target=analyze_thread,
+            args=(w, app, _state, set_status, set_btn, set_progress, _ui),
+            daemon=True,
+        ).start()
 
     def on_apply() -> None:
         if not app.connected:
@@ -410,13 +225,21 @@ def setup(frame: Any, app: Any) -> None:
         if choice is None:
             return
         _state["timeline_choice"] = choice
-        threading.Thread(target=_apply_thread, daemon=True).start()
+        threading.Thread(
+            target=apply_thread,
+            args=(w, app, _state, set_status, set_btn, set_progress, _ui),
+            daemon=True,
+        ).start()
 
     def on_preview() -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
-        threading.Thread(target=_preview_thread, daemon=True).start()
+        threading.Thread(
+            target=preview_thread,
+            args=(app, _state, set_status, set_btn),
+            daemon=True,
+        ).start()
 
     w["analyze_btn"].configure(command=on_analyze)
     w["apply_btn"].configure(command=on_apply)
