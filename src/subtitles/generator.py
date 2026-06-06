@@ -302,9 +302,12 @@ def _walk_media_pool(folder: Any):
 def _find_fusion_title_template(media_pool: Any) -> Any | None:
     """Return first Fusion Title item from Media Pool.
 
-    If none found, tries to auto-import AutoSubs' caption-bin.drb so the user
-    doesn't need a manual setup step. Falls back gracefully on any error.
+    If none found, imports the bundled subtitle_template.drb from Clutter's
+    own assets folder (no external dependency). Falls back to AutoSubs' DRB
+    if the bundled asset is somehow absent.
     """
+    import pathlib
+
     def _scan():
         for clip in _walk_media_pool(media_pool.GetRootFolder()):
             try:
@@ -315,26 +318,40 @@ def _find_fusion_title_template(media_pool: Any) -> Any | None:
                 pass
         return None
 
-    result = _scan()
-    if result:
-        return result
-
-    # AutoSubs ships a caption-bin.drb we can import as a template source.
-    drb = os.path.join(
-        os.environ.get("LOCALAPPDATA", ""),
-        "AutoSubs", "resources", "AutoSubs", "caption-bin.drb",
-    )
-    if os.path.exists(drb):
-        log.info("No Fusion Title in Media Pool — importing AutoSubs template from %s", drb)
+    def _import_drb(drb: str) -> None:
         for attempt in (
             lambda: media_pool.ImportFolderFromFile(drb, ""),
             lambda: media_pool.ImportFolderFromFile(drb),
         ):
             try:
                 attempt()
-                break
+                return
             except Exception:
                 pass
+
+    result = _scan()
+    if result:
+        return result
+
+    # Try Clutter's own bundled template first (autonomous — no AutoSubs dependency).
+    _own_drb = str(
+        pathlib.Path(__file__).resolve().parent.parent.parent / "assets" / "subtitle_template.drb"
+    )
+    if os.path.exists(_own_drb):
+        log.info("No Fusion Title in Media Pool — importing bundled template: %s", _own_drb)
+        _import_drb(_own_drb)
+        result = _scan()
+        if result:
+            return result
+
+    # AutoSubs fallback (if bundled asset somehow missing).
+    _autosubs_drb = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""),
+        "AutoSubs", "resources", "AutoSubs", "caption-bin.drb",
+    )
+    if os.path.exists(_autosubs_drb):
+        log.info("Bundled template failed — importing AutoSubs template: %s", _autosubs_drb)
+        _import_drb(_autosubs_drb)
         return _scan()
 
     return None

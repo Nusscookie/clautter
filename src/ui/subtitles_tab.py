@@ -442,6 +442,10 @@ def setup(frame: Any, app: Any) -> None:
         ow = int(style.get("outline_width", 3))
         w["outline_width_slider"].set(ow)
         w["outline_width_lbl"].configure(text=str(ow))
+        if "highlight_color" in style:
+            hc = style["highlight_color"]
+            _highlight_color[0] = hc
+            w["highlight_color_btn"].configure(fg_color=hc, hover_color=hc)
 
     def on_wpl(val: float) -> None:
         w["wpl_label"].configure(text=str(int(val)))
@@ -840,7 +844,7 @@ def setup(frame: Any, app: Any) -> None:
             item = app.timeline.GetCurrentVideoItem()
 
             if not item:
-                # GetCurrentVideoItem only sees track 1 — scan all video tracks
+                # GetCurrentVideoItem only sees track 1 — scan all video tracks for any Fusion Title
                 log.debug("GetCurrentVideoItem returned None; scanning video tracks")
                 try:
                     _tc = app.timeline.GetTrackCount("video")
@@ -849,9 +853,11 @@ def setup(frame: Any, app: Any) -> None:
                             try:
                                 if _candidate.GetFusionCompCount():
                                     _c = _candidate.GetFusionCompByIndex(1)
-                                    if _c and _c.FindToolByID("TextPlus"):
+                                    if _c and (
+                                        _c.FindTool("Template") or _c.FindToolByID("TextPlus")
+                                    ):
                                         item = _candidate
-                                        log.info("Found Text+ on video track %d", _ti)
+                                        log.info("Found Fusion Title on video track %d", _ti)
                                         break
                             except Exception:
                                 continue
@@ -862,7 +868,7 @@ def setup(frame: Any, app: Any) -> None:
 
             if not item:
                 set_status(
-                    "No Text+ clip found. Move playhead over the clip and try again.",
+                    "No Fusion Title clip found. Move playhead over a subtitle clip and try again.",
                     "#ffa726",
                 )
                 return
@@ -874,10 +880,15 @@ def setup(frame: Any, app: Any) -> None:
             if not comp_count:
                 set_status("Selected clip has no Fusion composition.", "#ffa726")
                 return
+
             comp = item.GetFusionCompByIndex(1)
-            text_tool = comp.FindToolByID("TextPlus")
+            # Handle both AutoSubs Caption macro (tool name "Template") and plain TextPlus
+            text_tool = comp.FindTool("Template") or comp.FindToolByID("TextPlus")
             if not text_tool:
-                set_status("No Text+ tool in selected clip. Select a Text+ generator.", "#ffa726")
+                set_status(
+                    "No Text+ tool in selected clip. Select a Fusion Title or Text+ generator.",
+                    "#ffa726",
+                )
                 return
 
             style: dict[str, Any] = {}
@@ -888,7 +899,6 @@ def setup(frame: Any, app: Any) -> None:
 
             size = text_tool.GetInput("Size")
             if size is not None:
-                # Fusion TextPlus Size is normalized; ~0.1 ≈ 36pt on 1080p canvas.
                 style["font_size"] = max(16, min(72, int(float(size) * 360)))
 
             r = text_tool.GetInput("Red1")
@@ -898,8 +908,20 @@ def setup(frame: Any, app: Any) -> None:
                 style["primary_color"] = "#{:02X}{:02X}{:02X}".format(
                     int(float(r) * 255), int(float(g) * 255), int(float(b) * 255))
 
+            # Read bold/italic flags (Fusion uses 1/0, not bool)
+            bold = text_tool.GetInput("Bold")
+            if bold is not None:
+                style["bold"] = bool(int(float(bold)))
+            italic = text_tool.GetInput("Italic")
+            if italic is not None:
+                style["italic"] = bool(int(float(italic)))
+
+            # Read outline width (Fusion BorderWidth is 0–1 range)
+            bw = text_tool.GetInput("BorderWidth")
+            if bw is not None:
+                style["outline_width"] = max(0, min(6, round(float(bw) * 100)))
+
             if not style:
-                # Log available inputs so we can discover the correct key names.
                 try:
                     inputs = text_tool.GetInputList()
                     log.info("TextPlus inputs: %s", list(inputs.values()) if inputs else "none")
@@ -909,8 +931,9 @@ def setup(frame: Any, app: Any) -> None:
                     "Could not read style from clip. Check log for available inputs.", "#ffa726")
                 return
 
+            log.info("Imported style from Resolve clip: %s", style)
             _ui(lambda: _apply_text_style(style))
-            set_status("Style imported from selected clip.", "#66bb6a")
+            set_status("Style imported from Fusion clip.", "#66bb6a")
 
         except Exception as e:
             log.error("Import style from Resolve: %s", e)
