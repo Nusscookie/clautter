@@ -78,6 +78,18 @@ def build(parent: Any) -> None:
     w["min_dur"]   = _labeled_entry(card, "Min Silence Duration", "350", "ms")
     w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
 
+    ctk.CTkFrame(card, height=1, fg_color="#333333", corner_radius=0).pack(
+        fill="x", padx=10, pady=(6, 2))
+    w["retake_cb"] = ctk.CTkCheckBox(
+        card,
+        text="Detect & isolate retakes  (uses Whisper — adds ~30 s)",
+        font=ctk.CTkFont(size=11),
+        text_color="#aaaaaa",
+        checkbox_width=16,
+        checkbox_height=16,
+    )
+    w["retake_cb"].pack(anchor="w", padx=10, pady=(2, 10))
+
     # ── Buttons ──
     btn_row = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row.pack(fill="x", padx=10, pady=6)

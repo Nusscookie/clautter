@@ -25,6 +25,8 @@ class CutResult:
     segments_created: int
     time_saved_sec: float
     total_clips_processed: int
+    retakes_found: int = 0
+    retake_track_index: int = 0  # 0 = no retake track created
 
 
 def _non_silent_segments(
@@ -94,6 +96,7 @@ def apply_cuts(
     padding_ms: float = 120.0,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     target_timeline: Optional[Any] = None,
+    detect_retakes: bool = False,
 ) -> CutResult:
     """Remove silences by building a timeline with only non-silent clip segments.
 
@@ -130,7 +133,9 @@ def apply_cuts(
         new_name = _unique_timeline_name(project, f"{timeline.GetName()}_cuts")
         log.info("Target new timeline: '%s' | FPS: %.2f", new_name, fps)
 
-    clip_infos: list[dict] = []
+    from src.smartcuts.retake_detector import SegmentRecord, find_retakes as _find_retakes
+
+    all_segment_records: list[SegmentRecord] = []
     total_silence_ms = 0.0
     clips_processed = 0
 
@@ -186,19 +191,37 @@ def apply_cuts(
             if end_frame <= start_frame:
                 continue
 
-            clip_infos.append({
-                "mediaPoolItem": media_item,
-                "startFrame": start_frame,
-                "endFrame": end_frame,
-            })
+            all_segment_records.append(SegmentRecord(
+                clip_idx=idx,
+                media_item=media_item,
+                file_path=file_path,
+                start_ms=seg_start_ms,
+                end_ms=seg_end_ms,
+                start_frame=start_frame,
+                end_frame=end_frame,
+            ))
 
         clips_processed += 1
 
-    if not clip_infos:
+    if not all_segment_records:
         raise RuntimeError(
             "No valid clip segments found after silence analysis.\n"
             "Check that the media files are accessible and that ffmpeg is installed."
         )
+
+    # Retake detection — tags each SegmentRecord.is_retake in-place
+    retakes_found = 0
+    if detect_retakes:
+        def _retake_progress(msg: str) -> None:
+            if progress_callback:
+                progress_callback(clips_processed, total, msg)
+        try:
+            retakes_found = _find_retakes(all_segment_records, progress_callback=_retake_progress)
+        except Exception as e:
+            log.error("Retake detection failed: %s — continuing without retake isolation", e)
+            retakes_found = 0
+
+    retake_count = sum(1 for s in all_segment_records if s.is_retake)
 
     if progress_callback:
         progress_callback(total, total, f"Building timeline '{new_name}'...")
@@ -224,23 +247,125 @@ def apply_cuts(
             )
         project.SetCurrentTimeline(dest_timeline)
 
-    result = media_pool.AppendToTimeline(clip_infos)
+    # Black Solid Color MediaPoolItem for retake gaps on Track 1.
+    # Only attempt when retakes exist — no need to spend the bootstrap if we won't use it.
+    from src.utils.black_clip import get_black_media_item
+    black_item: Any | None = None
+    if retake_count > 0:
+        black_item = get_black_media_item(resolve)
+
+    # Unified stream walk: best-takes go to Track 1; retakes leave a black gap
+    # on Track 1 of the same duration AND go to Track 2 at the same recordFrame.
+    # NOTE: Resolve's AppendToTimeline interprets endFrame EXCLUSIVELY for
+    # explicit recordFrame entries (placed_length = endFrame - startFrame).
+    # So endFrame = startFrame + placed_length, not startFrame + placed_length - 1.
+    tl_start = dest_timeline.GetStartFrame()
+    cursor = tl_start
+    track1_entries: list[dict] = []
+    retake_placements: list[tuple[int, int, Any, int]] = []  # (start_frame, end_frame, media_item, record_frame)
+    for s in all_segment_records:
+        dur = s.end_frame - s.start_frame + 1
+        if s.is_retake:
+            if black_item is not None:
+                track1_entries.append({
+                    "mediaPoolItem": black_item,
+                    "mediaType":     1,
+                    "startFrame":    0,
+                    "endFrame":      dur,
+                    "recordFrame":   cursor,
+                    "trackIndex":    1,
+                })
+            else:
+                log.warning(
+                    "No black Solid Color — retake at recordFrame=%d (%.2fs) "
+                    "omitted from Track 1; drag it manually from Track 2.",
+                    cursor, dur / fps,
+                )
+            retake_placements.append((s.start_frame, s.end_frame, s.media_item, cursor))
+        else:
+            track1_entries.append({
+                "mediaPoolItem": s.media_item,
+                "startFrame":    s.start_frame,
+                "endFrame":      s.end_frame + 1,  # exclusive: +1 to get dur frames
+                "recordFrame":   cursor,
+                "trackIndex":    1,
+            })
+        cursor += dur
+
+    result = media_pool.AppendToTimeline(track1_entries)
     if not result:
         log.warning(
             "AppendToTimeline returned falsy — timeline '%s' may be incomplete.", new_name
         )
 
+    # Place retakes on a separate disabled track when requested
+    retake_track_index = 0
+    if retake_placements:
+        try:
+            dest_timeline.AddTrack("video")
+            retake_track_index = dest_timeline.GetTrackCount("video")
+
+            # Ensure a matching audio track exists at the same index BEFORE placing clips,
+            # so Resolve routes the clips' linked audio to the retake audio track.
+            audio_count = dest_timeline.GetTrackCount("audio")
+            while audio_count < retake_track_index:
+                dest_timeline.AddTrack("audio")
+                audio_count += 1
+
+            track2_entries: list[dict] = [
+                {
+                    "mediaPoolItem": mi,
+                    "startFrame":    sf,
+                    "endFrame":      ef,
+                    "recordFrame":   rf,
+                    "trackIndex":    retake_track_index,
+                }
+                for (sf, ef, mi, rf) in retake_placements
+            ]
+            retake_result = media_pool.AppendToTimeline(track2_entries)
+            if not retake_result:
+                log.warning("AppendToTimeline for retake track returned falsy")
+
+            try:
+                dest_timeline.SetTrackName("video", retake_track_index, "Retakes")
+            except Exception as e:
+                log.debug("SetTrackName video retake track failed: %s", e)
+            try:
+                dest_timeline.SetTrackEnable("video", retake_track_index, False)
+            except Exception as e:
+                log.warning("SetTrackEnable video retake track failed: %s", e)
+
+            try:
+                dest_timeline.SetTrackName("audio", retake_track_index, "Retakes")
+            except Exception as e:
+                log.debug("SetTrackName audio retake track failed: %s", e)
+            try:
+                dest_timeline.SetTrackEnable("audio", retake_track_index, False)
+            except Exception as e:
+                log.warning("SetTrackEnable audio retake track failed: %s", e)
+
+            log.info(
+                "Retake track %d created on '%s': %d retake(s)",
+                retake_track_index, new_name, len(retake_placements),
+            )
+        except Exception as e:
+            log.error("Failed to create retake track: %s", e)
+            retake_track_index = 0
+
     log.info(
-        "Created '%s': %d segment(s), %.2fs silence removed from %d clip(s)",
+        "Created '%s': %d segment(s), %.2fs silence removed from %d clip(s), %d retake(s)",
         new_name,
-        len(clip_infos),
+        len(track1_entries),
         total_silence_ms / 1000.0,
         clips_processed,
+        retakes_found,
     )
 
     return CutResult(
         new_timeline_name=new_name,
-        segments_created=len(clip_infos),
+        segments_created=len(track1_entries),
         time_saved_sec=total_silence_ms / 1000.0,
         total_clips_processed=clips_processed,
+        retakes_found=retakes_found,
+        retake_track_index=retake_track_index,
     )

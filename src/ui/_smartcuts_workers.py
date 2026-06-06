@@ -119,6 +119,8 @@ def apply_thread(
         else:
             set_status("Creating new timeline with silence removed...")
 
+        _detect_retakes = bool(w["retake_cb"].get())
+
         def progress_cb(current: int, total: int, msg: str) -> None:
             set_progress(int((current / max(total, 1)) * 100))
             set_status(msg)
@@ -132,16 +134,21 @@ def apply_thread(
             padding_ms=float(w["padding"].get()),
             progress_callback=progress_cb,
             target_timeline=_target_tl,
+            detect_retakes=_detect_retakes,
         )
 
         app.refresh_timeline()
         app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
         app.settings.add_stat("total_edits", 1)
 
+        retake_note = (
+            f", {result.retakes_found} retake(s) isolated on track {result.retake_track_index}"
+            if result.retakes_found else ""
+        )
         set_progress(100)
         set_status(
             f"Done! New timeline: '{result.new_timeline_name}' "
-            f"({result.time_saved_sec:.1f}s removed)",
+            f"({result.time_saved_sec:.1f}s removed{retake_note})",
             "#66bb6a",
         )
         ui(lambda: w["new_timeline_lbl"].configure(
