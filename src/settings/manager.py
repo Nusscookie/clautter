@@ -24,6 +24,11 @@ _DEFAULTS: dict[str, Any] = {
     "subtitle_language": "en",
     "subtitle_preset": "YouTube",
     "last_broll_folder": "",
+    "pixabay_api_key": "",
+    "pexels_api_key": "",
+    "broll_provider": "Both",
+    "broll_top_n": 10,
+    "broll_use_mock": False,
     "active_subtitle_style": "Open Sans Semibold",
     "subtitle_style_presets": {
         "Open Sans Semibold": {"font_family": "Open Sans", "font_style": "Semibold", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 0, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},

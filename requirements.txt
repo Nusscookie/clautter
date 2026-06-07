@@ -18,5 +18,13 @@ Pillow>=10.0.0      # Icon generation (generate_icon.py) and any future image op
 
 faster-whisper>=1.0.0  # Local transcription via CTranslate2 (no PyTorch needed)
 
+yake>=0.4.8            # Statistical keyword extractor (B-roll search), no model download
+spacy>=3.7.0           # NLP keyword extraction for B-roll search (noun chunks + NER)
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
+sentence-transformers>=2.7.0  # Semantic B-roll clip matching via all-MiniLM-L6-v2 (~80MB, no API key)
+keybert>=0.8.0                # Semantic keyword extraction for online B-roll search (uses sentence-transformers)
+joblib>=1.4.0                 # Embedding cache — avoids re-encoding the same transcript on repeated runs
+
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

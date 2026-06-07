@@ -93,6 +93,20 @@ class MainWindow:
         )
         self._status_lbl.pack(side="left", padx=6, pady=6)
 
+        # ── Project-wide BETA banner ──
+        # Single source of truth for "this build is not finished".
+        self._beta_banner = ctk.CTkFrame(
+            root, height=26, fg_color="#1a1200", corner_radius=0)
+        self._beta_banner.pack(fill="x", side="top", after=top)
+        self._beta_banner.pack_propagate(False)
+        ctk.CTkLabel(
+            self._beta_banner,
+            text="⚠  BETA / ALPHA — Clutter is in active development. Expect rough edges.",
+            font=ctk.CTkFont(size=11),
+            text_color="#ff8f00",
+            anchor="w",
+        ).pack(side="left", padx=12)
+
         # ── Tab view ──
         tabview = ctk.CTkTabview(root, anchor="nw", fg_color="#1e1e1e")
         tabview.pack(fill="both", expand=True, padx=8, pady=(4, 8))
