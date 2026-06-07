@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional
 
 from src.utils.logger import get_logger
 from src.utils.resolve_api import get_clip_file_path, ms_to_frames
-from src.smartcuts.analyzer import SilenceRegion, detect_silences
+from src.smartcuts.analyzer import SilenceRegion, detect_silences_auto
 from src.smartcuts.retake_types import SegmentRecord
 
 log = get_logger(__name__)
@@ -57,6 +57,8 @@ def _collect_segments(
     min_duration_ms: float,
     padding_ms: float,
     progress_callback: Optional[Callable[[int, int, str], None]],
+    silence_method: str = "vad",
+    vad_threshold: float = 0.5,
 ) -> tuple[list[SegmentRecord], float, int]:
     """Analyze each clip for silences and build SegmentRecord list.
 
@@ -88,12 +90,31 @@ def _collect_segments(
         src_end_ms = (src_end_frame / fps) * 1000.0
 
         try:
-            all_regions = detect_silences(
+            all_regions = detect_silences_auto(
                 file_path,
+                method=silence_method,
                 threshold_db=threshold_db,
                 min_duration_ms=min_duration_ms,
                 padding_ms=padding_ms,
+                vad_threshold=vad_threshold,
             )
+        except RuntimeError as e:
+            if "not installed" in str(e) and silence_method == "vad":
+                log.warning("Silero VAD unavailable — falling back to pydub RMS: %s", e)
+                try:
+                    all_regions = detect_silences_auto(
+                        file_path,
+                        method="rms",
+                        threshold_db=threshold_db,
+                        min_duration_ms=min_duration_ms,
+                        padding_ms=padding_ms,
+                    )
+                except Exception as e2:
+                    log.error("Clip %d RMS fallback failed (%s): %s — keeping whole clip", idx, file_path, e2)
+                    all_regions = []
+            else:
+                log.error("Clip %d analysis failed (%s): %s — keeping whole clip", idx, file_path, e)
+                all_regions = []
         except Exception as e:
             log.error("Clip %d analysis failed (%s): %s — keeping whole clip", idx, file_path, e)
             all_regions = []

@@ -38,33 +38,12 @@ def build(parent: Any) -> None:
     w["browse_btn"] = ctk.CTkButton(folder_row, text="Browse", width=80)
     w["browse_btn"].grid(row=0, column=1)
 
-    btn_row1 = ctk.CTkFrame(parent, fg_color="transparent")
-    btn_row1.pack(fill="x", padx=10, pady=(4, 2))
-    btn_row1.grid_columnconfigure((0, 1), weight=1)
-
-    w["scan_btn"] = ctk.CTkButton(btn_row1, text="Scan Folder",
-                                   fg_color="#2a2a2a", hover_color="#3a3a3a",
-                                   state="disabled")
-    w["scan_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-
-    w["analyze_btn"] = ctk.CTkButton(btn_row1, text="Analyze Transcript",
-                                      fg_color="#2a2a2a", hover_color="#3a3a3a",
-                                      state="disabled")
-    w["analyze_btn"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
-
-    btn_row2 = ctk.CTkFrame(parent, fg_color="transparent")
-    btn_row2.pack(fill="x", padx=10, pady=2)
-    btn_row2.grid_columnconfigure((0, 1), weight=1)
-
-    w["suggest_btn"] = ctk.CTkButton(btn_row2, text="Suggest B-Roll",
-                                      fg_color="#1b5e20", hover_color="#2e7d32",
-                                      state="disabled")
-    w["suggest_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-
-    w["place_btn"] = ctk.CTkButton(btn_row2, text="Auto Place on V2",
-                                    fg_color="#2a2a2a", hover_color="#3a3a3a",
-                                    state="disabled")
-    w["place_btn"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
+    w["suggest_local_btn"] = ctk.CTkButton(
+        parent, text="Suggest Local B-Roll",
+        fg_color="#1b5e20", hover_color="#2e7d32",
+        state="disabled",
+    )
+    w["suggest_local_btn"].pack(fill="x", padx=10, pady=(4, 2))
 
     w["status"] = ctk.CTkLabel(
         parent, text="Browse a folder of local B-roll clips to start.",
@@ -86,7 +65,14 @@ def build(parent: Any) -> None:
     w["suggestions"] = ctk.CTkTextbox(parent, height=200, state="disabled",
                                        font=ctk.CTkFont(size=12))
     w["suggestions"].pack(fill="x", padx=10, pady=(0, 4))
-    _set_textbox(w["suggestions"], "Scan a folder, then generate suggestions...")
+    _set_textbox(w["suggestions"], "Browse a folder and click Suggest Local B-Roll...")
+
+    w["place_btn"] = ctk.CTkButton(
+        parent, text="Auto Place on Timeline",
+        fg_color="#2a2a2a", hover_color="#3a3a3a",
+        state="disabled",
+    )
+    w["place_btn"].pack(fill="x", padx=10, pady=(2, 4))
 
     ctk.CTkLabel(
         parent,

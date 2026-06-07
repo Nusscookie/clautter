@@ -26,5 +26,8 @@ sentence-transformers>=2.7.0  # Semantic B-roll clip matching via all-MiniLM-L6-
 keybert>=0.8.0                # Semantic keyword extraction for online B-roll search (uses sentence-transformers)
 joblib>=1.4.0                 # Embedding cache — avoids re-encoding the same transcript on repeated runs
 
+silero-vad>=5.0        # Neural VAD silence detection — handles noise, music beds, quiet speakers
+onnxruntime>=1.18.0    # silero-vad ONNX backend (~20 MB); avoids full PyTorch install
+
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

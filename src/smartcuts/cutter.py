@@ -44,6 +44,9 @@ def apply_cuts(
     target_timeline: Optional[Any] = None,
     detect_retakes: bool = False,
     existing_retake_track: Optional[int] = None,
+    silence_method: str = "vad",
+    retake_method: str = "spacy",
+    vad_threshold: float = 0.5,
 ) -> CutResult:
     """Remove silences by building a timeline with only non-silent clip segments.
 
@@ -81,7 +84,8 @@ def apply_cuts(
         log.info("Target new timeline: '%s' | FPS: %.2f", new_name, fps)
 
     all_segment_records, total_silence_ms, clips_processed = _collect_segments(
-        clips, fps, threshold_db, min_duration_ms, padding_ms, progress_callback,
+        clips, fps, threshold_db, min_duration_ms, padding_ms, progress_callback, silence_method,
+        vad_threshold,
     )
 
     if not all_segment_records:
@@ -98,7 +102,11 @@ def apply_cuts(
             if progress_callback:
                 progress_callback(clips_processed, len(clips), msg)
         try:
-            retakes_found = _find_retakes(all_segment_records, progress_callback=_retake_progress)
+            retakes_found = _find_retakes(
+                all_segment_records,
+                progress_callback=_retake_progress,
+                method=retake_method,
+            )
         except Exception as e:
             log.error("Retake detection failed: %s — continuing without retake isolation", e)
             retakes_found = 0

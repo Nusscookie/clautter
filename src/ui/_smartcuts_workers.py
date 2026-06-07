@@ -7,6 +7,16 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_SILENCE_METHOD_KEYS: dict[str, str] = {
+    "Silero VAD (recommended)": "vad",
+    "pydub RMS (legacy)": "rms",
+}
+
+_RETAKE_METHOD_KEYS: dict[str, str] = {
+    "spaCy filler normalization (recommended)": "spacy",
+    "difflib only (legacy)": "difflib",
+}
+
 
 def analyze_thread(
     w: dict,
@@ -19,7 +29,7 @@ def analyze_thread(
 ) -> None:
     """Detect silence regions in timeline clips."""
     try:
-        from src.smartcuts.analyzer import detect_silences
+        from src.smartcuts.analyzer import detect_silences_auto
         from src.utils.resolve_api import get_clip_file_path
 
         set_btn("analyze_btn", False)
@@ -36,14 +46,18 @@ def analyze_thread(
             set_btn("analyze_btn", True)
             return
 
-        threshold = float(w["threshold"].get())
-        min_dur   = float(w["min_dur"].get())
-        padding   = float(w["padding"].get())
+        threshold     = float(w["threshold"].get())
+        vad_threshold = float(w["vad_threshold"].get())
+        min_dur       = float(w["min_dur"].get())
+        padding       = float(w["padding"].get())
+        silence_method = _SILENCE_METHOD_KEYS.get(w["silence_method"].get(), "vad")
 
         state["clips"] = clips
         state["silence_regions"] = []
+        state["silence_method"] = silence_method
         total_silences = 0
         total_ms = 0.0
+        _vad_fallback_warned = False
 
         for i, clip in enumerate(clips):
             set_status(f"Analyzing clip {i + 1} / {len(clips)}...")
@@ -55,12 +69,31 @@ def analyze_thread(
                 continue
 
             try:
-                regions = detect_silences(
+                regions = detect_silences_auto(
                     file_path,
+                    method=silence_method,
                     threshold_db=threshold,
                     min_duration_ms=min_dur,
                     padding_ms=padding,
+                    vad_threshold=vad_threshold,
                 )
+            except RuntimeError as e:
+                if "not installed" in str(e) and silence_method == "vad" and not _vad_fallback_warned:
+                    _vad_fallback_warned = True
+                    set_status("Silero VAD not installed — falling back to pydub RMS", "#ffa726")
+                    silence_method = "rms"
+                    state["silence_method"] = "rms"
+                try:
+                    regions = detect_silences_auto(
+                        file_path,
+                        method="rms",
+                        threshold_db=threshold,
+                        min_duration_ms=min_dur,
+                        padding_ms=padding,
+                    )
+                except Exception as e2:
+                    log.error("Analysis error clip %d: %s", i, e2)
+                    regions = []
             except Exception as e:
                 log.error("Analysis error clip %d: %s", i, e)
                 regions = []
@@ -120,7 +153,11 @@ def apply_thread(
         else:
             set_status("Creating new timeline with silence removed...")
 
-        _detect_retakes = bool(w["retake_cb"].get())
+        _detect_retakes  = bool(w["retake_cb"].get())
+        _silence_method  = _SILENCE_METHOD_KEYS.get(w["silence_method"].get(), "vad")
+        _retake_method   = _RETAKE_METHOD_KEYS.get(w["retake_method"].get(), "spacy")
+        _vad_threshold   = float(w["vad_threshold"].get())
+        _threshold_db    = float(w["threshold"].get())
 
         def progress_cb(current: int, total: int, msg: str) -> None:
             set_progress(int((current / max(total, 1)) * 100))
@@ -130,13 +167,16 @@ def apply_thread(
             resolve=app.resolve,
             timeline=app.timeline,
             clips=state["clips"],
-            threshold_db=float(w["threshold"].get()),
+            threshold_db=_threshold_db,
             min_duration_ms=float(w["min_dur"].get()),
             padding_ms=float(w["padding"].get()),
             progress_callback=progress_cb,
             target_timeline=_target_tl,
             detect_retakes=_detect_retakes,
             existing_retake_track=_existing_retake_track,
+            silence_method=_silence_method,
+            retake_method=_retake_method,
+            vad_threshold=_vad_threshold,
         )
 
         app.refresh_timeline()

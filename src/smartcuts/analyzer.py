@@ -117,6 +117,120 @@ def detect_silences(
     return regions
 
 
+def detect_silences_vad(
+    file_path: str,
+    min_duration_ms: float = 350.0,
+    padding_ms: float = 120.0,
+    vad_threshold: float = 0.5,
+) -> list[SilenceRegion]:
+    """Detect silent regions using Silero VAD (neural, handles noise/music/quiet speakers).
+
+    Requires: pip install silero-vad onnxruntime
+
+    Raises:
+        RuntimeError if silero-vad or onnxruntime is not installed.
+        FileNotFoundError if the file doesn't exist.
+    """
+    try:
+        from silero_vad import load_silero_vad, read_audio, get_speech_timestamps  # type: ignore
+    except ImportError:
+        raise RuntimeError(
+            "silero-vad is not installed.\n"
+            "Run: pip install silero-vad onnxruntime"
+        )
+
+    import tempfile
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Media file not found: {file_path}")
+
+    log.debug("detect_silences_vad: %s | min=%.0fms | padding=%.0fms",
+              os.path.basename(file_path), min_duration_ms, padding_ms)
+
+    try:
+        from pydub import AudioSegment  # type: ignore
+    except ImportError:
+        raise RuntimeError("pydub is not installed. Run: pip install pydub")
+
+    # Silero requires 16 kHz mono WAV
+    audio = AudioSegment.from_file(file_path).set_channels(1).set_frame_rate(16000)
+    total_ms = float(len(audio))
+
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+        audio.export(tmp_path, format="wav")
+
+        model = load_silero_vad()
+        wav = read_audio(tmp_path)
+        speech_ts = get_speech_timestamps(wav, model, threshold=vad_threshold, return_seconds=True)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+    # Invert speech segments → silence gaps
+    silence_gaps: list[tuple[float, float]] = []
+    cursor = 0.0
+    for ts in speech_ts:
+        gap_start = cursor
+        gap_end = float(ts["start"]) * 1000.0
+        if gap_end - gap_start >= min_duration_ms:
+            silence_gaps.append((gap_start, gap_end))
+        cursor = float(ts["end"]) * 1000.0
+    if total_ms - cursor >= min_duration_ms:
+        silence_gaps.append((cursor, total_ms))
+
+    regions: list[SilenceRegion] = []
+    for raw_start, raw_end in silence_gaps:
+        inner_start = raw_start + padding_ms
+        inner_end = raw_end - padding_ms
+        if inner_start >= inner_end:
+            log.debug("VAD silence %d–%d ms consumed by padding, skipping", raw_start, raw_end)
+            continue
+        inner_start = max(0.0, inner_start)
+        inner_end = min(total_ms, inner_end)
+        regions.append(SilenceRegion(inner_start, inner_end))
+
+    log.info(
+        "VAD found %d silence region(s) in '%s' (total: %.2fs)",
+        len(regions),
+        os.path.basename(file_path),
+        sum(r.duration_ms for r in regions) / 1000.0,
+    )
+    return regions
+
+
+def detect_silences_auto(
+    file_path: str,
+    method: str = "vad",
+    threshold_db: float = -35.0,
+    min_duration_ms: float = 350.0,
+    padding_ms: float = 120.0,
+    vad_threshold: float = 0.5,
+) -> list[SilenceRegion]:
+    """Dispatch to VAD or pydub RMS silence detection.
+
+    Args:
+        method: ``"vad"`` for Silero VAD (default), ``"rms"`` for pydub RMS.
+        threshold_db: Only used when method is ``"rms"``.
+        vad_threshold: Speech probability cutoff (0–1). Only used when method is ``"vad"``.
+    """
+    if method == "vad":
+        return detect_silences_vad(
+            file_path,
+            min_duration_ms=min_duration_ms,
+            padding_ms=padding_ms,
+            vad_threshold=vad_threshold,
+        )
+    return detect_silences(
+        file_path,
+        threshold_db=threshold_db,
+        min_duration_ms=min_duration_ms,
+        padding_ms=padding_ms,
+    )
+
+
 def estimate_time_saved(regions: list[SilenceRegion]) -> float:
     """Return total silence duration in seconds."""
     return sum(r.duration_ms for r in regions) / 1000.0

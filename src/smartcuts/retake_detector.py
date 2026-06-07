@@ -27,6 +27,8 @@ from src.smartcuts.retake_types import (
     _FULL_RETAKE_COVERAGE,
     _words_in_range,
     _normalize_word,
+    _normalize_word_with_extras,
+    _build_spacy_intj_set,
 )
 
 # Re-export SegmentRecord so callers that do
@@ -40,6 +42,7 @@ def find_retakes(
     segments: list[SegmentRecord],
     language: str = "",
     progress_callback: Optional[Any] = None,
+    method: str = "spacy",
 ) -> int:
     """Tag retake segments in-place.  Returns number of retakes found.
 
@@ -56,6 +59,9 @@ def find_retakes(
         segments:          All SegmentRecord objects in source-timeline order.
         language:          BCP-47 code for Whisper (empty = auto-detect).
         progress_callback: Optional callable(message: str) for status updates.
+        method:            ``"spacy"`` (default) — strips INTJ tokens via spaCy on top
+                           of the hardcoded filler set. ``"difflib"`` — legacy hardcoded
+                           fillers only.
 
     Returns:
         Number of segments tagged is_retake=True.
@@ -85,6 +91,11 @@ def find_retakes(
         words = words_by_path.get(seg.file_path, [])
         seg.text = _words_in_range(words, seg.start_ms, seg.end_ms)
 
+    # Build extra filler set via spaCy when method == "spacy"
+    extra_fillers: frozenset[str] = frozenset()
+    if method == "spacy":
+        extra_fillers = _build_spacy_intj_set([seg.text for seg in segments])
+
     flat: list[_WordEntry] = []
     for seg_idx, seg in enumerate(segments):
         raw_words = words_by_path.get(seg.file_path, [])
@@ -93,7 +104,10 @@ def find_retakes(
             t_end   = w["end_sec"]   * 1000.0
             if t_start < seg.start_ms or t_end > seg.end_ms:
                 continue
-            norm = _normalize_word(w["word"])
+            if extra_fillers:
+                norm = _normalize_word_with_extras(w["word"], extra_fillers)
+            else:
+                norm = _normalize_word(w["word"])
             if norm is None:
                 continue
             flat.append(_WordEntry(word=norm, time_ms=t_start, seg_idx=seg_idx))

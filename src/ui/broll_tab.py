@@ -8,7 +8,7 @@ from typing import Any
 
 from src.ui._broll_build import build, _set_textbox
 from src.ui._broll_workers import (
-    scan_thread, search_online_thread, suggest_thread,
+    suggest_local_thread, search_online_thread,
 )
 from src.utils.logger import get_logger
 
@@ -135,7 +135,7 @@ def setup(frame: Any, app: Any) -> None:
         _set_readonly_entry(w["folder"], path)
         app.settings.set("last_broll_folder", path)
         set_status(f"Selected: {path}", "#4fc3f7")
-        _ui(lambda: w["scan_btn"].configure(state="normal"))
+        _ui(lambda: w["suggest_local_btn"].configure(state="normal"))
 
     def on_pick_dl_folder() -> None:
         initial = _state["dl_folder"] or str(Path.home())
@@ -197,19 +197,9 @@ def setup(frame: Any, app: Any) -> None:
         state = "normal" if ok else "disabled"
         _ui(lambda s=state: w["search_online_btn"].configure(state=s))
 
-    def on_analyze() -> None:
-        if not app.transcript:
-            set_status("No transcript found. Generate one in the Subtitles tab first.", "#ff6b6b")
-            return
-        set_status(f"Transcript has {len(app.transcript)} words. Ready to suggest B-roll.", "#66bb6a")
-        _ui(lambda: w["suggest_btn"].configure(state="normal"))
-        _refresh_search_button()
-
     def on_place() -> None:
         set_status(
-            "Auto Place is coming in a future update. "
-            "V2 will be renamed to 'B-roll' then. "
-            "Use the suggestions or downloaded clips above to manually place B-roll.",
+            "Auto Place coming in a future update — will work for both local and online B-roll.",
             "#ffa726",
         )
 
@@ -274,11 +264,9 @@ def setup(frame: Any, app: Any) -> None:
     w["save_keys_btn"].configure(command=on_save_keys)
     w["provider"].configure(command=on_provider_change)
     w["top_n_slider"].configure(command=on_top_n_change)
-    w["scan_btn"].configure(command=lambda: threading.Thread(
-        target=scan_thread, args=(w, _state, set_status, _ui), daemon=True).start())
-    w["analyze_btn"].configure(command=on_analyze)
-    w["suggest_btn"].configure(command=lambda: threading.Thread(
-        target=suggest_thread, args=(w, app, _state, set_status, set_suggestions, _ui),
+    w["suggest_local_btn"].configure(command=lambda: threading.Thread(
+        target=suggest_local_thread,
+        args=(w, app, _state, set_status, set_suggestions, _ui),
         daemon=True).start())
     w["place_btn"].configure(command=on_place)
     w["search_online_btn"].configure(command=on_search_online)

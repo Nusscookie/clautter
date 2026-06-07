@@ -71,3 +71,61 @@ def _normalize_word(raw: str) -> str | None:
     if not cleaned or cleaned in _FILLERS:
         return None
     return cleaned
+
+
+def _normalize_word_with_extras(raw: str, extra_fillers: frozenset[str]) -> str | None:
+    """Normalize a single word, also stripping spaCy-detected interjections."""
+    cleaned = re.sub(r"[^\w]", "", raw.lower())
+    if not cleaned or cleaned in _FILLERS or cleaned in extra_fillers:
+        return None
+    return cleaned
+
+
+_NLP: Any = None  # cached spaCy model — loaded once per process
+_NLP_TRIED: bool = False  # avoid repeated failed imports
+
+
+def _load_spacy_nlp() -> Any:
+    """Load en_core_web_sm once. Returns None if spaCy or the model isn't available."""
+    global _NLP, _NLP_TRIED
+    if _NLP_TRIED:
+        return _NLP
+    _NLP_TRIED = True
+    try:
+        import spacy  # type: ignore
+        _NLP = spacy.load("en_core_web_sm")
+    except Exception:
+        _NLP = None
+    return _NLP
+
+
+def _build_spacy_intj_set(segment_texts: list[str]) -> frozenset[str]:
+    """Run spaCy over segment text to find INTJ-tagged tokens beyond the hardcoded list.
+
+    Args:
+        segment_texts: List of plain-text segment transcripts (may be empty strings).
+
+    Returns:
+        Frozenset of lowercased word forms tagged as INTJ by spaCy.
+    """
+    from src.utils.logger import get_logger as _get_logger
+    _log = _get_logger(__name__)
+
+    nlp = _load_spacy_nlp()
+    if nlp is None:
+        _log.warning("spaCy not available — retake detection uses hardcoded fillers only")
+        return frozenset()
+
+    combined = " ".join(t for t in segment_texts if t)
+    if not combined.strip():
+        return frozenset()
+
+    doc = nlp(combined)
+    intj_words: set[str] = {
+        re.sub(r"[^\w]", "", token.lemma_.lower())
+        for token in doc
+        if token.pos_ == "INTJ"
+    }
+    intj_words.discard("")
+    _log.debug("spaCy INTJ extras detected: %s", sorted(intj_words))
+    return frozenset(intj_words)

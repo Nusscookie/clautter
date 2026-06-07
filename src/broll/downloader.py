@@ -87,10 +87,17 @@ class BrollDownloader:
 
         import_result: Any = None
         try:
-            mp = getattr(self._app, "media_pool", None) or self._app.resolve.MediaPool
-            import_result = mp.ImportFile(str(dest))
+            mp = getattr(self._app, "media_pool", None)
+            if mp is None:
+                project = getattr(self._app, "project", None)
+                if project is not None:
+                    mp = project.GetMediaPool()
+            if mp is None:
+                log.warning("MediaPool unavailable — file saved to disk only: %s", dest)
+                return {"path": str(dest), "import": None}
+            import_result = mp.ImportMedia([str(dest)])
         except Exception as e:
-            log.error("MediaPool.ImportFile failed for %s: %s", dest, e)
+            log.error("MediaPool.ImportMedia failed for %s: %s", dest, e)
             raise
 
         log.info("Downloaded + imported %s", dest)
