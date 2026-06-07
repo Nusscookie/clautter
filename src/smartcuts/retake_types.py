@@ -14,8 +14,10 @@ _SIMILARITY_THRESHOLD = 0.70     # SequenceMatcher ratio to call two windows ret
 _PROXIMITY_WINDOW_MS  = 120_000  # only compare windows within 2 minutes of each other
 _FULL_RETAKE_COVERAGE = 0.90     # retake region covering >= 90% of a segment -> full retake
 
+# "so" is intentionally absent: it is a meaningful word in German (the primary
+# language here) and stripping it hurt retake matching more than it helped.
 _FILLERS = frozenset({
-    "um", "uh", "like", "so", "okay", "ok", "well", "right",
+    "um", "uh", "like", "okay", "ok", "well", "right",
     "actually", "basically", "you", "know", "now", "alright", "hmm",
 })
 
@@ -31,18 +33,20 @@ class SegmentRecord:
     end_ms:        float
     start_frame:   int
     end_frame:     int
-    text:          str                        = field(default="",   compare=False)
-    is_retake:     bool                       = field(default=False, compare=False)
-    retake_region: tuple[float, float] | None = field(default=None,  compare=False)
-    # retake_region: (start_ms, end_ms) of just the retake sub-range within this segment.
-    # None when is_retake is False, or when the retake covers the full segment (no split needed).
+    text:           str = field(default="", compare=False)
+    is_retake:      bool = field(default=False, compare=False)
+    retake_regions: list[tuple[float, float]] = field(default_factory=list, compare=False)
+    # retake_regions: source-time (start_ms, end_ms) sub-ranges within this segment that
+    # are superseded retakes. Empty when is_retake is False. A segment may hold several
+    # (few big silence segments can contain multiple retakes). cutter_retakes.py splits
+    # the clip at every range. A single range covering the whole segment = full retake.
 
 
 @dataclass
 class _WordEntry:
     """One content word (filler-stripped) with its timestamp and owning segment index."""
     word:    str    # normalized: lowercase, no punctuation, not a filler
-    time_ms: float
+    time_ms: float  # word start, ms (absolute in source file)
     seg_idx: int
 
 

@@ -4,10 +4,11 @@ Identifies segments where the speaker re-recorded the same content.
 The LAST attempt in each duplicate group is kept; earlier attempts are
 tagged as retakes so the caller can route them to a separate timeline track.
 
-When the retake phrase occupies only part of a segment (common at moderate/slow
-pace where silence cutting makes fewer, longer clips), `retake_region` carries
-the sub-range (start_ms, end_ms) so cutter.py can split the clip at those
-boundaries and move only the retake portion to Track 2.
+Detection runs on a flat word timeline, so it is independent of how coarsely
+silence cutting split the clips. Each superseded phrase is recorded on the
+owning segment(s) as a (start_ms, end_ms) sub-range in `retake_regions` — a list,
+because one long clip can contain several retakes. cutter_retakes.py splits the
+clip at every range and moves only those portions to Track 2.
 
 Types, constants, and text-normalization helpers live in retake_types.py.
 """
@@ -47,10 +48,9 @@ def find_retakes(
     2. Build a flat word timeline (content words only, fillers excluded).
     3. Slide a window of _WIN_WORDS words across the timeline.
        When two windows match, extend the match greedily forward to find the
-       full repeated phrase.  Map the phrase's ms range onto segments:
-       - Segments fully inside the phrase → is_retake=True, retake_region=None
-       - Segments partially overlapping   → is_retake=True, retake_region=(start,end)
-       Partial-retake segments are split by cutter.py at the stored sub-range.
+       full repeated phrase.  Clip the phrase's ms range to each overlapped
+       segment and append it to that segment's `retake_regions` list (a segment
+       may accumulate several). cutter.py splits each clip at the stored ranges.
 
     Args:
         segments:          All SegmentRecord objects in source-timeline order.
@@ -120,6 +120,12 @@ def find_retakes(
             if flat[j].time_ms - t_end_a > _PROXIMITY_WINDOW_MS:
                 break
 
+            # Anchor on a matching first word so the seed can't lock onto a
+            # 3-of-4 *shifted* window (which lands one word before the real copy
+            # and truncates the removed span). Extension below stays fuzzy.
+            if flat[j].word != words_a[0]:
+                continue
+
             words_b = [flat[j + k].word for k in range(_WIN_WORDS)]
             ratio   = difflib.SequenceMatcher(None, words_a, words_b).ratio()
 
@@ -138,6 +144,9 @@ def find_retakes(
 
             total_len       = _WIN_WORDS + ext
             retake_start_ms = flat[i].time_ms
+            # End at the start of the SECOND copy: that spans the whole first take
+            # (including any divergent tail of a false start) up to where the kept
+            # copy begins, so the kept copy is preserved intact.
             retake_end_ms   = flat[j].time_ms
 
             seen_segs: set[int] = set()
@@ -149,25 +158,27 @@ def find_retakes(
                     continue
                 seen_segs.add(si)
                 seg = segments[si]
-                if seg.is_retake:
+
+                # Clip the matched phrase to this segment and record it as one more
+                # retake sub-range. A segment may accumulate several (few big silence
+                # segments can hold multiple retakes) — append, never overwrite.
+                clip_start = max(seg.start_ms, retake_start_ms)
+                clip_end   = min(seg.end_ms,   retake_end_ms)
+                if clip_end <= clip_start:
                     continue
 
-                seg_dur  = max(seg.end_ms - seg.start_ms, 1.0)
-                overlap  = min(seg.end_ms, retake_end_ms) - max(seg.start_ms, retake_start_ms)
-                coverage = max(0.0, overlap) / seg_dur
-
                 seg.is_retake = True
-                seg.retake_region = None if coverage >= _FULL_RETAKE_COVERAGE else (
-                    max(seg.start_ms, retake_start_ms),
-                    min(seg.end_ms,   retake_end_ms),
-                )
+                seg.retake_regions.append((clip_start, clip_end))
+
+                seg_dur  = max(seg.end_ms - seg.start_ms, 1.0)
+                coverage = (clip_end - clip_start) / seg_dur
                 retake_count += 1
                 log.debug(
-                    "Retake: seg %d [%.1fs–%.1fs] '%s...' → superseded at %.1fs "
-                    "(sim=%.2f, coverage=%.0f%%, %s)",
+                    "Retake: seg %d [%.1fs–%.1fs] '%s...' → superseded by copy at %.1fs "
+                    "(sim=%.2f, span=%.1f–%.1fs, coverage=%.0f%%, %s)",
                     si, seg.start_ms / 1000, seg.end_ms / 1000, seg.text[:40],
-                    flat[j].time_ms / 1000, ratio, coverage * 100,
-                    "full" if seg.retake_region is None else "partial",
+                    flat[j].time_ms / 1000, ratio, clip_start / 1000, clip_end / 1000,
+                    coverage * 100, "full" if coverage >= _FULL_RETAKE_COVERAGE else "partial",
                 )
 
             break

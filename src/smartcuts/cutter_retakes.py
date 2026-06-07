@@ -32,25 +32,33 @@ def _build_timeline_entries(
     for s in all_segment_records:
         dur = s.end_frame - s.start_frame + 1
 
-        if s.is_retake and s.retake_region is not None:
-            # Partial retake: only a sub-range of this clip is the retake.
-            r_start_ms, r_end_ms = s.retake_region
-            retake_sf = s.start_frame + round((r_start_ms - s.start_ms) * fps / 1000)
-            retake_ef = s.start_frame + round((r_end_ms   - s.start_ms) * fps / 1000)
-            retake_sf = max(s.start_frame, min(retake_sf, s.end_frame))
-            retake_ef = max(retake_sf,     min(retake_ef, s.end_frame))
+        if not s.is_retake or not s.retake_regions:
+            track1_entries.append({
+                "mediaPoolItem": s.media_item,
+                "startFrame":    s.start_frame,
+                "endFrame":      s.end_frame + 1,  # exclusive: +1 to get dur frames
+                "recordFrame":   cursor,
+                "trackIndex":    1,
+            })
+            cursor += dur
+            continue
 
-            cur = cursor
+        # One or more retake sub-ranges inside this clip. Split the clip at each:
+        # kept speech → Track 1, retake spans → black gap on Track 1 + Track 2.
+        regions = _merge_regions(s, fps)
+        cur = cursor
+        prev_frame = s.start_frame  # next kept sub-clip starts here
 
-            if retake_sf > s.start_frame:
+        for retake_sf, retake_ef in regions:
+            if retake_sf > prev_frame:
                 track1_entries.append({
                     "mediaPoolItem": s.media_item,
-                    "startFrame":    s.start_frame,
-                    "endFrame":      retake_sf,
+                    "startFrame":    prev_frame,
+                    "endFrame":      retake_sf,  # exclusive
                     "recordFrame":   cur,
                     "trackIndex":    1,
                 })
-                cur += retake_sf - s.start_frame
+                cur += retake_sf - prev_frame
 
             retake_dur = retake_ef - retake_sf + 1
             if black_item is not None:
@@ -64,54 +72,50 @@ def _build_timeline_entries(
                 })
             else:
                 log.warning(
-                    "No black Solid Color — partial retake at recordFrame=%d omitted from Track 1.", cur
+                    "No black Solid Color — retake at recordFrame=%d (%.2fs) omitted "
+                    "from Track 1; drag it manually from Track 2.", cur, retake_dur / fps,
                 )
             retake_placements.append((retake_sf, retake_ef, s.media_item, cur))
             cur += retake_dur
+            prev_frame = retake_ef + 1
 
-            if retake_ef < s.end_frame:
-                track1_entries.append({
-                    "mediaPoolItem": s.media_item,
-                    "startFrame":    retake_ef + 1,
-                    "endFrame":      s.end_frame + 1,
-                    "recordFrame":   cur,
-                    "trackIndex":    1,
-                })
-                cur += s.end_frame - retake_ef
-
-            cursor = cur
-
-        elif s.is_retake:
-            # Full retake: entire clip goes to Track 2.
-            if black_item is not None:
-                track1_entries.append({
-                    "mediaPoolItem": black_item,
-                    "mediaType":     1,
-                    "startFrame":    0,
-                    "endFrame":      dur,
-                    "recordFrame":   cursor,
-                    "trackIndex":    1,
-                })
-            else:
-                log.warning(
-                    "No black Solid Color — retake at recordFrame=%d (%.2fs) "
-                    "omitted from Track 1; drag it manually from Track 2.",
-                    cursor, dur / fps,
-                )
-            retake_placements.append((s.start_frame, s.end_frame, s.media_item, cursor))
-            cursor += dur
-
-        else:
+        if prev_frame <= s.end_frame:
             track1_entries.append({
                 "mediaPoolItem": s.media_item,
-                "startFrame":    s.start_frame,
-                "endFrame":      s.end_frame + 1,  # exclusive: +1 to get dur frames
-                "recordFrame":   cursor,
+                "startFrame":    prev_frame,
+                "endFrame":      s.end_frame + 1,
+                "recordFrame":   cur,
                 "trackIndex":    1,
             })
-            cursor += dur
+            cur += s.end_frame + 1 - prev_frame
+
+        cursor = cur
 
     return track1_entries, retake_placements
+
+
+def _merge_regions(s: SegmentRecord, fps: float) -> list[tuple[int, int]]:
+    """Convert a segment's retake_regions (ms) to clamped, sorted, merged frame spans.
+
+    Returns inclusive (start_frame, end_frame) pairs that never overlap and stay
+    within [s.start_frame, s.end_frame].
+    """
+    spans: list[tuple[int, int]] = []
+    for r_start_ms, r_end_ms in s.retake_regions:
+        sf = s.start_frame + round((r_start_ms - s.start_ms) * fps / 1000)
+        ef = s.start_frame + round((r_end_ms   - s.start_ms) * fps / 1000)
+        sf = max(s.start_frame, min(sf, s.end_frame))
+        ef = max(sf,            min(ef, s.end_frame))
+        spans.append((sf, ef))
+
+    spans.sort()
+    merged: list[tuple[int, int]] = []
+    for sf, ef in spans:
+        if merged and sf <= merged[-1][1] + 1:  # overlapping or adjacent
+            merged[-1] = (merged[-1][0], max(merged[-1][1], ef))
+        else:
+            merged.append((sf, ef))
+    return merged
 
 
 def _create_retake_track(
