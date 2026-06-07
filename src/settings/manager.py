@@ -24,12 +24,12 @@ _DEFAULTS: dict[str, Any] = {
     "subtitle_language": "en",
     "subtitle_preset": "YouTube",
     "last_broll_folder": "",
-    "active_subtitle_style": "YouTube",
+    "active_subtitle_style": "Open Sans Semibold",
     "subtitle_style_presets": {
-        "Clean White": {"font_family": "Open Sans", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 2, "shadow": 1},
-        "YouTube":     {"font_family": "Open Sans", "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 3, "shadow": 1},
-        "TikTok Bold": {"font_family": "Open Sans", "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 4, "shadow": 0},
-        "Minimal":     {"font_family": "Open Sans", "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 1, "shadow": 0},
+        "Open Sans Semibold": {"font_family": "Open Sans", "font_style": "Semibold", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 0, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+        "YouTube":            {"font_family": "Open Sans", "font_style": None,       "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 3, "shadow": 1, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+        "TikTok Bold":        {"font_family": "Open Sans", "font_style": None,       "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 4, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+        "Minimal":            {"font_family": "Open Sans", "font_style": None,       "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 1, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
     },
     "stats": {
         "total_time_saved_sec": 0.0,

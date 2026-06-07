@@ -40,20 +40,25 @@ def apply_fusion_text_style(
         color_hex = (highlight_color or style.get("primary_color", "#FFFFFF")).lstrip("#")
         for attr, val in (
             ("Font",   style.get("font_family", "Open Sans")),
-            ("Size",   style.get("font_size", 36) / 360.0),
-            ("Red1",   int(color_hex[0:2], 16) / 255.0),
-            ("Green1", int(color_hex[2:4], 16) / 255.0),
-            ("Blue1",  int(color_hex[4:6], 16) / 255.0),
+            ("Size",   style.get("font_size", 32) / 360.0),
+            ("Red1",   int(color_hex[0:2], 16) / 255.0 or 1e-7),
+            ("Green1", int(color_hex[2:4], 16) / 255.0 or 1e-7),
+            ("Blue1",  int(color_hex[4:6], 16) / 255.0 or 1e-7),
         ):
             try:
                 tool.SetInput(attr, val)
             except Exception:
                 pass
 
-        # Style selects the actual font face — authoritative over Bool Bold/Italic inputs.
-        _b = style.get("bold", False)
-        _i = style.get("italic", False)
-        _style_str = ("Bold Italic" if _b and _i else "Bold" if _b else "Italic" if _i else "Regular")
+        # Style selects the font face. font_style (e.g. "Semibold") takes precedence
+        # over the boolean bold/italic construction when explicitly set.
+        _font_style = style.get("font_style")
+        if _font_style:
+            _style_str = _font_style
+        else:
+            _b = style.get("bold", False)
+            _i = style.get("italic", False)
+            _style_str = ("Bold Italic" if _b and _i else "Bold" if _b else "Italic" if _i else "Regular")
         try:
             tool.SetInput("Style", _style_str)
         except Exception:
@@ -77,9 +82,9 @@ def apply_fusion_text_style(
             pass
         oc_hex = style.get("outline_color", "#000000").lstrip("#")
         for attr, val in (
-            ("Red2",   int(oc_hex[0:2], 16) / 255.0),
-            ("Green2", int(oc_hex[2:4], 16) / 255.0),
-            ("Blue2",  int(oc_hex[4:6], 16) / 255.0),
+            ("Red2",   int(oc_hex[0:2], 16) / 255.0 or 1e-7),
+            ("Green2", int(oc_hex[2:4], 16) / 255.0 or 1e-7),
+            ("Blue2",  int(oc_hex[4:6], 16) / 255.0 or 1e-7),
         ):
             try:
                 tool.SetInput(attr, val)
@@ -90,6 +95,27 @@ def apply_fusion_text_style(
             tool.SetInput("Enabled3", 1 if style.get("shadow", 0) else 0)
         except Exception:
             pass
+
+        for attr, val in (
+            ("VerticalJustificationNew",   style.get("vertical_align", 3)),
+            ("HorizontalJustificationNew", style.get("horizontal_align", 3)),
+        ):
+            try:
+                tool.SetInput(attr, val)
+            except Exception:
+                pass
+
+        v = style.get("vertical_position")
+        if v is not None:
+            center_y = max(0.02, min(0.98, 0.5 + (v / 100.0) * 0.45))
+            try:
+                tool.SetInput("VerticalJustificationNew", 2)
+            except Exception:
+                pass
+            try:
+                tool.SetInput("Center", {1: 0.5, 2: center_y})
+            except Exception:
+                pass
 
     except Exception as e:
         log.debug("apply_fusion_text_style: %s", e)

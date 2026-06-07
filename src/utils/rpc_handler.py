@@ -32,7 +32,13 @@ def _walk(obj: Any, refs: type[_State]) -> Any:
             if ref in refs.objects:
                 return refs.objects[ref]
             raise KeyError(f"unknown ref: {ref}")
-        return {k: _walk(v, refs) for k, v in obj.items()}
+        # JSON always stringifies dict keys; restore integer keys so Fusion
+        # Point2D tables ({1: x, 2: y}) survive the HTTP round-trip intact.
+        result = {}
+        for k, v in obj.items():
+            real_k = int(k) if isinstance(k, str) and k.lstrip("-").isdigit() else k
+            result[real_k] = _walk(v, refs)
+        return result
     if isinstance(obj, list):
         return [_walk(v, refs) for v in obj]
     if isinstance(obj, tuple):

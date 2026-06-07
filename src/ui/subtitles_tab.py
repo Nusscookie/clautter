@@ -124,6 +124,7 @@ def setup(frame: Any, app: Any) -> None:
     w["lpb_slider"].configure(command=lambda v: w["lpb_label"].configure(text=str(int(v))))
     w["font_size_slider"].configure(command=cbs["on_font_size"])
     w["outline_width_slider"].configure(command=cbs["on_outline_width"])
+    w["vpos_slider"].configure(command=lambda v: w["vpos_lbl"].configure(text=f"{int(v)}%"))
     w["text_color_btn"].configure(
         command=lambda: cbs["pick_color"](_text_color, "text_color_btn", "Choose Text Color"))
     w["outline_color_btn"].configure(

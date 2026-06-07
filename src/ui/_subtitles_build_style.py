@@ -173,6 +173,20 @@ def build_text_style_card(parent: Any, w: dict) -> None:
         w[key] = ctk.CTkCheckBox(check_row, text=label, font=ctk.CTkFont(size=11))
         w[key].pack(side="left", padx=(0, 14))
 
+    vpos_row = ctk.CTkFrame(ts_card, fg_color="transparent")
+    vpos_row.pack(fill="x", padx=10, pady=(0, 4))
+    vpos_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(vpos_row, text="V. Position",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=80, anchor="w").grid(row=0, column=0, sticky="w")
+    w["vpos_slider"] = ctk.CTkSlider(vpos_row, from_=-100, to=100, number_of_steps=200)
+    w["vpos_slider"].set(-90)
+    w["vpos_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    w["vpos_lbl"] = ctk.CTkLabel(vpos_row, text="-90%",
+                                  font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                  width=40, anchor="e")
+    w["vpos_lbl"].grid(row=0, column=2, sticky="e")
+
     color_row = ctk.CTkFrame(ts_card, fg_color="transparent")
     color_row.pack(fill="x", padx=10, pady=(0, 10))
 

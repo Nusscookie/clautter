@@ -75,7 +75,7 @@ def find_fusion_title_template(media_pool: Any) -> Any | None:
 
     log.warning(
         "find_fusion_title_template: no Fusion Title template found and bundled DRB unavailable. "
-        "Run assets/build_template.py inside Resolve Studio to regenerate subtitle_template.drb."
+        "Drag a Text+ title from the Titles panel into the Media Pool to create one."
     )
     return None
 
@@ -119,21 +119,25 @@ def bootstrap_textplus_template(
             tool = comp.FindToolByID("TextPlus") if comp else None
             if tool:
                 color_hex = style.get("primary_color", "#FFFFFF").lstrip("#")
-                _b = style.get("bold", False)
-                _i = style.get("italic", False)
-                _style_str = (
-                    "Bold Italic" if _b and _i else
-                    "Bold" if _b else
-                    "Italic" if _i else
-                    "Regular"
-                )
+                _font_style = style.get("font_style")
+                if _font_style:
+                    _style_str = _font_style
+                else:
+                    _b = style.get("bold", False)
+                    _i = style.get("italic", False)
+                    _style_str = (
+                        "Bold Italic" if _b and _i else
+                        "Bold" if _b else
+                        "Italic" if _i else
+                        "Regular"
+                    )
                 for attr, val in (
                     ("Font",     style.get("font_family", "Open Sans")),
                     ("Style",    _style_str),
-                    ("Size",     style.get("font_size", 36) / 360.0),
-                    ("Red1",     int(color_hex[0:2], 16) / 255.0),
-                    ("Green1",   int(color_hex[2:4], 16) / 255.0),
-                    ("Blue1",    int(color_hex[4:6], 16) / 255.0),
+                    ("Size",     style.get("font_size", 32) / 360.0),
+                    ("Red1",     int(color_hex[0:2], 16) / 255.0 or 1e-7),
+                    ("Green1",   int(color_hex[2:4], 16) / 255.0 or 1e-7),
+                    ("Blue1",    int(color_hex[4:6], 16) / 255.0 or 1e-7),
                     ("Bold",     1 if _b else 0),
                     ("Italic",   1 if _i else 0),
                     ("Underline", 1 if style.get("underline", False) else 0),
@@ -154,9 +158,9 @@ def bootstrap_textplus_template(
                     pass
                 oc_hex = style.get("outline_color", "#000000").lstrip("#")
                 for attr, val in (
-                    ("Red2",   int(oc_hex[0:2], 16) / 255.0),
-                    ("Green2", int(oc_hex[2:4], 16) / 255.0),
-                    ("Blue2",  int(oc_hex[4:6], 16) / 255.0),
+                    ("Red2",   int(oc_hex[0:2], 16) / 255.0 or 1e-7),
+                    ("Green2", int(oc_hex[2:4], 16) / 255.0 or 1e-7),
+                    ("Blue2",  int(oc_hex[4:6], 16) / 255.0 or 1e-7),
                 ):
                     try:
                         tool.SetInput(attr, val)
@@ -166,6 +170,25 @@ def bootstrap_textplus_template(
                     tool.SetInput("Enabled3", 1 if style.get("shadow", 0) else 0)
                 except Exception:
                     pass
+                for attr, val in (
+                    ("VerticalJustificationNew",   style.get("vertical_align", 3)),
+                    ("HorizontalJustificationNew", style.get("horizontal_align", 3)),
+                ):
+                    try:
+                        tool.SetInput(attr, val)
+                    except Exception:
+                        pass
+                v = style.get("vertical_position")
+                if v is not None:
+                    center_y = max(0.02, min(0.98, 0.5 + (v / 100.0) * 0.45))
+                    try:
+                        tool.SetInput("VerticalJustificationNew", 2)
+                    except Exception:
+                        pass
+                    try:
+                        tool.SetInput("Center", {1: 0.5, 2: center_y})
+                    except Exception:
+                        pass
                 log.info(
                     "Bootstrap template styled: font=%s size=%.3f bold=%s",
                     style.get("font_family", "Open Sans"),

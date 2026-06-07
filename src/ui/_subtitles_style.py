@@ -24,17 +24,18 @@ def get_text_style(
 ) -> dict:
     _outline_on = w["outline_enabled_check"].get() == 1
     return {
-        "font_family":     w["font_family"].get(),
-        "font_size":       int(w["font_size_slider"].get()),
-        "bold":            w["bold_check"].get() == 1,
-        "italic":          w["italic_check"].get() == 1,
-        "underline":       w["underline_check"].get() == 1,
-        "primary_color":   text_color[0],
-        "outline_enabled": _outline_on,
-        "outline_color":   outline_color[0],
-        "outline_width":   int(w["outline_width_slider"].get()) if _outline_on else 0,
-        "shadow":          1 if w["shadow_check"].get() == 1 else 0,
-        "highlight_color": highlight_color[0],
+        "font_family":      w["font_family"].get(),
+        "font_size":        int(w["font_size_slider"].get()),
+        "bold":             w["bold_check"].get() == 1,
+        "italic":           w["italic_check"].get() == 1,
+        "underline":        w["underline_check"].get() == 1,
+        "primary_color":    text_color[0],
+        "outline_enabled":  _outline_on,
+        "outline_color":    outline_color[0],
+        "outline_width":    int(w["outline_width_slider"].get()) if _outline_on else 0,
+        "shadow":           1 if w["shadow_check"].get() == 1 else 0,
+        "highlight_color":  highlight_color[0],
+        "vertical_position": int(w["vpos_slider"].get()),
     }
 
 
@@ -91,3 +92,7 @@ def apply_text_style(
         hc = style["highlight_color"]
         highlight_color[0] = hc
         w["highlight_color_btn"].configure(fg_color=hc, hover_color=hc)
+
+    vp = int(style.get("vertical_position", -90))
+    w["vpos_slider"].set(vp)
+    w["vpos_lbl"].configure(text=f"{vp}%")
