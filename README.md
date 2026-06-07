@@ -11,6 +11,27 @@ Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
 ---
 
+## Philosophy
+
+Clutter is built around one idea: **the editor shouldn't have to babysit the tool.**
+
+Most Resolve plugins for talking-head cleanup are assistants — they surface candidates,
+mark regions, or highlight pauses, then wait for you to confirm or discard each one.
+That's still a lot of clicking.
+
+Clutter goes the other direction. It analyzes the timeline, makes the call, and applies
+the edit. You set the intent (a pace level, a sensitivity), and Clutter does the rest.
+The human reviews the result, not every individual decision.
+
+**AI is used only where it earns its cost.** Transcription (speech-to-text for subtitles)
+genuinely requires a model. Silence detection, zoom placement, and B-roll matching do not —
+those run locally with zero API calls. This keeps everyday editing free and fast, and leaves
+the API budget for operations that actually need it.
+
+The result is a tool that feels lightweight: launch it, set a knob, get an edit.
+
+---
+
 ## Features
 
 | Tab | Status | Description |
@@ -139,40 +160,9 @@ AI-powered generation planned for V2.
 
 ## Architecture
 
-Two-process model connected via a localhost HTTP bridge. The GUI subprocess has no
-direct Resolve access (external scripting is disabled in the free edition), so
-`main.py` runs a bridge server inside Resolve's process that proxies all API calls.
-
-```
-DaVinci Resolve → main.py (Resolve-side launcher, no UI)
-                     ├─ acquires resolve object from module globals
-                     ├─ starts rpc_server.py in a daemon thread
-                     │     └─ http://127.0.0.1:<random>  +  writes ~/.clutter/bridge.json
-                     └─ subprocess.Popen(py -3.12, gui.py)  [then .wait()s]
-                          └─ gui.py (standalone customtkinter window)
-                               └─ rpc_client.py reads bridge.json → ResolveProxy
-                                    └─ app.py (ClutterApp, framework-agnostic)
-                                         ├─ src/<feature>/*.py  (business logic)
-                                         └─ src/ui/<tab>.py     (customtkinter widgets)
-```
-
-```
-src/
-├── app.py              # Central coordinator (ClutterApp)
-├── ui/                 # customtkinter tab layouts + event handlers
-│   └── timeline_dialog.py  # modal: create new / use existing timeline
-├── smartcuts/          # pydub silence detection + timeline reconstruction
-├── subtitles/          # STT clients + ASS/SRT generator + exporter
-├── zooms/              # Volume peak detection + SetProperty zoom applier
-├── broll/              # Folder scanner + keyword matcher
-├── graphics/           # Rule-based graphic suggester
-├── settings/           # JSON config persistence (~/.clutter/)
-└── utils/
-    ├── resolve_api.py  # connect() + clip helpers
-    ├── rpc_server.py   # Bridge server (runs inside Resolve's process)
-    ├── rpc_client.py   # ResolveProxy + ResolveHTTP
-    └── logger.py       # stderr + rotating file (~/.clutter/logs/clutter.log)
-```
+Two-process model via a localhost HTTP bridge. `main.py` runs inside Resolve's process
+(where the `resolve` object lives), starts a bridge server, then spawns `gui.py` as a
+subprocess. The GUI talks to Resolve through the proxy — no direct scripting access needed.
 
 See [CLAUDE.md](CLAUDE.md) for full design notes and gotchas.
 

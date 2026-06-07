@@ -78,6 +78,10 @@ def detect_silences(
     if audio.channels > 1:
         audio = audio.set_channels(1)
 
+    # Peak-normalize so the silence threshold is relative to this clip's loudness.
+    # Without this, a quiet speaker falls below the absolute dBFS threshold and gets cut as silence.
+    audio = audio.normalize()
+
     total_ms = len(audio)
 
     # pydub returns [(start_ms, end_ms), ...]

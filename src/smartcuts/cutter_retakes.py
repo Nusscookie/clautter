@@ -124,7 +124,7 @@ def _create_retake_track(
     media_pool: Any,
     new_name: str,
 ) -> int:
-    """Add a retake video+audio track pair, place retakes, name and disable it.
+    """Add a retake video+audio track pair, place retakes, and name it.
 
     Returns the retake track index, or 0 on failure.
     """
@@ -156,10 +156,6 @@ def _create_retake_track(
                 dest_timeline.SetTrackName(track_type, retake_track_index, "Retakes")
             except Exception as e:
                 log.debug("SetTrackName %s retake track failed: %s", track_type, e)
-            try:
-                dest_timeline.SetTrackEnable(track_type, retake_track_index, False)
-            except Exception as e:
-                log.warning("SetTrackEnable %s retake track failed: %s", track_type, e)
 
         log.info(
             "Retake track %d created on '%s': %d retake(s)",

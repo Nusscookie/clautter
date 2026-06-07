@@ -23,8 +23,9 @@ desktop.ini
 
 # Personal notes (not for repo)
 FUTURE.md
-SPEC.md
+SPECS.md
 UNOFFICIAL_DOC.md
+tests/
 
 # Editor
 .vscode/
