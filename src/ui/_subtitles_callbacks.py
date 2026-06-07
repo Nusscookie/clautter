@@ -61,15 +61,31 @@ def make_callbacks(
             set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
             return
         try:
-            from src.ui.timeline_dialog import show_timeline_dialog
-            choice = show_timeline_dialog(frame, app.project)
+            from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog
+            _subtitle_track_idx: int | None = None
+            if app.timeline:
+                _subtitle_track_idx = find_named_video_track(app.timeline, "Subtitle")
+            choice = show_timeline_dialog(
+                frame, app.project,
+                secondary_section={
+                    "detect": _subtitle_track_idx is not None,
+                    "label": "Subtitle layer",
+                    "existing_text": f"Use existing 'Subtitle' layer (track {_subtitle_track_idx})",
+                    "new_text": "Create new layer above",
+                    "key": "track_mode",
+                } if app.timeline else None,
+            )
         except Exception as e:
             log.error("Timeline dialog error: %s", e)
             set_status(f"Dialog error: {e}", "#ff6b6b")
             return
         if choice is None:
             return
-        _state["timeline_choice"] = choice
+        _state["timeline_choice"] = choice["timeline"]
+        _state["track_mode"] = choice.get("track_mode", "new")
+        _state["subtitle_track_index"] = (
+            _subtitle_track_idx if choice.get("track_mode") == "existing" else None
+        )
         _transcript_text = w["transcript"].get("0.0", "end").strip()
         _style      = get_style_overrides(w)
         _preset     = w["preset"].get()

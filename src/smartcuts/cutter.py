@@ -43,6 +43,7 @@ def apply_cuts(
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     target_timeline: Optional[Any] = None,
     detect_retakes: bool = False,
+    existing_retake_track: Optional[int] = None,
 ) -> CutResult:
     """Remove silences by building a timeline with only non-silent clip segments.
 
@@ -146,6 +147,7 @@ def apply_cuts(
     if retake_placements:
         retake_track_index = _create_retake_track(
             dest_timeline, retake_placements, media_pool, new_name,
+            existing_track_index=existing_retake_track,
         )
 
     log.info(

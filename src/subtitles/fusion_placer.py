@@ -23,6 +23,7 @@ def place_fusion_titles(
     words_per_line: int | None = None,
     lines_per_block: int | None = None,
     uppercase: bool | None = None,
+    subtitle_track_index: int | None = None,
 ) -> bool:
     """Place subtitle blocks as Fusion Title clips on a new video track.
 
@@ -82,14 +83,18 @@ def place_fusion_titles(
         pass
 
     try:
-        existing_tracks = timeline.GetTrackCount("video")
-        timeline.AddTrack("video")
-        subtitle_track = existing_tracks + 1
-        try:
-            timeline.SetTrackName("video", subtitle_track, "Subtitle")
-        except Exception as e:
-            log.debug("SetTrackName failed: %s", e)
-        log.info("place_fusion_titles: subtitle clips on video track %d", subtitle_track)
+        if subtitle_track_index is not None:
+            subtitle_track = subtitle_track_index
+            log.info("place_fusion_titles: reusing existing video track %d", subtitle_track)
+        else:
+            existing_tracks = timeline.GetTrackCount("video")
+            timeline.AddTrack("video")
+            subtitle_track = existing_tracks + 1
+            try:
+                timeline.SetTrackName("video", subtitle_track, "Subtitle")
+            except Exception as e:
+                log.debug("SetTrackName failed: %s", e)
+            log.info("place_fusion_titles: subtitle clips on new video track %d", subtitle_track)
     except Exception as e:
         log.warning("place_fusion_titles: AddTrack failed: %s", e)
         return False

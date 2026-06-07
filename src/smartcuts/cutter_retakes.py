@@ -123,19 +123,30 @@ def _create_retake_track(
     retake_placements: list[tuple[int, int, Any, int]],
     media_pool: Any,
     new_name: str,
+    existing_track_index: int | None = None,
 ) -> int:
-    """Add a retake video+audio track pair, place retakes, and name it.
+    """Add (or reuse) a retake video+audio track pair, place retakes, and name it.
 
     Returns the retake track index, or 0 on failure.
     """
     try:
-        dest_timeline.AddTrack("video")
-        retake_track_index = dest_timeline.GetTrackCount("video")
+        if existing_track_index is not None:
+            retake_track_index = existing_track_index
+            log.info("Reusing existing retake track %d on '%s'", retake_track_index, new_name)
+        else:
+            dest_timeline.AddTrack("video")
+            retake_track_index = dest_timeline.GetTrackCount("video")
 
-        audio_count = dest_timeline.GetTrackCount("audio")
-        while audio_count < retake_track_index:
-            dest_timeline.AddTrack("audio")
-            audio_count += 1
+            audio_count = dest_timeline.GetTrackCount("audio")
+            while audio_count < retake_track_index:
+                dest_timeline.AddTrack("audio")
+                audio_count += 1
+
+            for track_type in ("video", "audio"):
+                try:
+                    dest_timeline.SetTrackName(track_type, retake_track_index, "Retakes")
+                except Exception as e:
+                    log.debug("SetTrackName %s retake track failed: %s", track_type, e)
 
         track2_entries: list[dict] = [
             {
@@ -150,12 +161,6 @@ def _create_retake_track(
         retake_result = media_pool.AppendToTimeline(track2_entries)
         if not retake_result:
             log.warning("AppendToTimeline for retake track returned falsy")
-
-        for track_type in ("video", "audio"):
-            try:
-                dest_timeline.SetTrackName(track_type, retake_track_index, "Retakes")
-            except Exception as e:
-                log.debug("SetTrackName %s retake track failed: %s", track_type, e)
 
         log.info(
             "Retake track %d created on '%s': %d retake(s)",

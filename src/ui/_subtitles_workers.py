@@ -107,9 +107,12 @@ def create_track_thread(
             remapped = [wd for wd in _words_src if wd.get("type", "word") == "word"]
 
         from src.subtitles.generator import place_fusion_titles
+        _subtitle_track_index = state.get("subtitle_track_index")
         ok = place_fusion_titles(
             app.resolve, remapped, app.fps, app.timeline,
-            text_style, preset_name, **style_overrides,
+            text_style, preset_name,
+            subtitle_track_index=_subtitle_track_index,
+            **style_overrides,
         )
         if not ok:
             log.info("Fusion titles failed; falling back to SRT subtitle track")

@@ -10,18 +10,45 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def find_named_video_track(timeline: Any, name: str) -> int | None:
+    """Return 1-based index of first video track whose name matches (case-insensitive), or None."""
+    try:
+        count = timeline.GetTrackCount("video")
+        for i in range(1, count + 1):
+            if timeline.GetTrackName("video", i).lower() == name.lower():
+                return i
+    except Exception:
+        pass
+    return None
+
+
 def show_timeline_dialog(
     parent: Any,
     project: Any,
-) -> Optional[tuple[str, Any]]:
+    *,
+    secondary_section: dict | None = None,
+) -> dict | None:
     """Modal dialog: use existing timeline or create a new one.
 
+    Args:
+        secondary_section: Optional dict with keys:
+            detect (bool): show extra radio group when True
+            label (str): section heading text
+            existing_text (str): label for "use existing" option
+            new_text (str): label for "create new" option
+            key (str): key for the extra choice in the return dict
+
     Returns:
-        ("new", None)             — create a fresh timeline
-        ("existing", timeline)    — append to the chosen existing timeline
-        None                      — user cancelled
+        {
+            "timeline": ("new", None) | ("existing", tl_obj),
+            <key>: "existing" | "new",  # present only when secondary_section detect=True
+        }
+        or None if user cancelled.
     """
     result: dict[str, Any] = {"choice": None}
+
+    show_secondary = bool(secondary_section and secondary_section.get("detect"))
+    dialog_height = 330 if show_secondary else 230
 
     # Walk up the widget hierarchy to find the CTk root window.
     # parent._w is our widgets dict (overrides Tkinter's internal path string),
@@ -32,11 +59,11 @@ def show_timeline_dialog(
 
     root.update_idletasks()
     rx = root.winfo_x() + (root.winfo_width() - 420) // 2
-    ry = root.winfo_y() + (root.winfo_height() - 230) // 2
+    ry = root.winfo_y() + (root.winfo_height() - dialog_height) // 2
 
     dialog = ctk.CTkToplevel(root)
     dialog.title("Choose Timeline")
-    dialog.geometry(f"420x230+{rx}+{ry}")
+    dialog.geometry(f"420x{dialog_height}+{rx}+{ry}")
     dialog.resizable(False, False)
     dialog.transient(root)
     dialog.lift()
@@ -97,6 +124,35 @@ def show_timeline_dialog(
         combo.set(timeline_names[0])
     combo.pack(side="left", padx=(10, 0))
 
+    # Optional secondary section (e.g. subtitle layer or retake layer choice)
+    track_var: ctk.StringVar | None = None
+    if show_secondary:
+        sec = secondary_section  # type: ignore[assignment]
+        ctk.CTkFrame(dialog, height=1, fg_color="#444444").pack(
+            fill="x", padx=20, pady=(12, 0)
+        )
+        ctk.CTkLabel(
+            dialog,
+            text=sec["label"],
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#888888",
+        ).pack(anchor="w", padx=30, pady=(8, 4))
+        track_var = ctk.StringVar(value="new")
+        ctk.CTkRadioButton(
+            dialog,
+            text=sec["existing_text"],
+            variable=track_var,
+            value="existing",
+            text_color="#cccccc",
+        ).pack(anchor="w", padx=30, pady=(0, 4))
+        ctk.CTkRadioButton(
+            dialog,
+            text=sec["new_text"],
+            variable=track_var,
+            value="new",
+            text_color="#cccccc",
+        ).pack(anchor="w", padx=30, pady=(0, 6))
+
     btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
     btn_row.pack(pady=(14, 0))
 
@@ -105,9 +161,13 @@ def show_timeline_dialog(
         if mode == "existing" and has_timelines:
             sel = combo.get()
             tl_obj = next((obj for name, obj in timelines if name == sel), None)
-            result["choice"] = ("existing", tl_obj) if tl_obj else ("new", None)
+            tl_choice = ("existing", tl_obj) if tl_obj else ("new", None)
         else:
-            result["choice"] = ("new", None)
+            tl_choice = ("new", None)
+        ret: dict[str, Any] = {"timeline": tl_choice}
+        if show_secondary and track_var is not None and secondary_section:
+            ret[secondary_section["key"]] = track_var.get()
+        result["choice"] = ret
         dialog.destroy()
 
     def on_cancel() -> None:

@@ -111,6 +111,7 @@ def apply_thread(
         from src.smartcuts.cutter import apply_cuts
 
         _mode, _target_tl = state["timeline_choice"]
+        _existing_retake_track = state.get("retake_track_index")
         set_btn("apply_btn", False)
         set_btn("analyze_btn", False)
         set_progress(0, True)
@@ -135,6 +136,7 @@ def apply_thread(
             progress_callback=progress_cb,
             target_timeline=_target_tl,
             detect_retakes=_detect_retakes,
+            existing_retake_track=_existing_retake_track,
         )
 
         app.refresh_timeline()
