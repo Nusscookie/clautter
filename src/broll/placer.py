@@ -1,8 +1,8 @@
-"""Resolve timeline V2 placement for autonomous B-roll mode.
+"""Resolve timeline placement for autonomous B-roll mode.
 
-Places a downloaded clip on video track 2 at a given start timecode.
-Falls back gracefully when Resolve is unavailable or V2 insertion is
-restricted (Resolve free edition).
+Places a downloaded clip on the named 'B-Roll' video track at a given
+start timecode. Uses the same API chain as the working subtitles placer:
+resolve.GetProjectManager().GetCurrentProject().GetMediaPool().AppendToTimeline().
 """
 
 from __future__ import annotations
@@ -38,9 +38,8 @@ def _find_or_create_broll_track(timeline: Any) -> int:
     """Return the 1-based video track index for the 'B-Roll' named track.
 
     Searches existing tracks by name. If not found, creates a new video track,
-    names it 'B-Roll', and returns its index. New tracks land above all existing
-    ones (highest index), so B-Roll ends up above Retakes but below any
-    Subtitle track created afterward.
+    names it 'B-Roll', and returns its index. Tolerates SetTrackName failures
+    (common on free edition) — track is still usable even if not named.
     """
     try:
         count = timeline.GetTrackCount("video")
@@ -53,14 +52,13 @@ def _find_or_create_broll_track(timeline: Any) -> int:
             except Exception:
                 continue
 
-        # Not found — create a new track
         timeline.AddTrack("video")
         new_index = count + 1
         try:
             timeline.SetTrackName("video", new_index, "B-Roll")
+            log.info("[placer] created and named B-Roll track at video index %d", new_index)
         except Exception as e:
-            log.debug("[placer] SetTrackName failed (non-fatal): %s", e)
-        log.info("[placer] created B-Roll track at video index %d", new_index)
+            log.debug("[placer] SetTrackName failed (non-fatal, track %d still usable): %s", new_index, e)
         return new_index
     except Exception as e:
         log.warning("[placer] _find_or_create_broll_track failed (%s) — using track 2", e)
@@ -68,7 +66,7 @@ def _find_or_create_broll_track(timeline: Any) -> int:
 
 
 def _fps_from_timeline(timeline: Any) -> float:
-    """Extract FPS from the timeline setting string, e.g. '25' or '23.976'."""
+    """Extract FPS from timeline settings."""
     try:
         raw = timeline.GetSetting("timelineFrameRate") or "25"
         return float(str(raw).split()[0])
@@ -80,97 +78,110 @@ def _sec_to_frame(sec: float, fps: float) -> int:
     return max(0, int(round(sec * fps)))
 
 
-def _import_to_pool(app: Any, clip_path: str) -> Any | None:
-    """Import a local file to the Resolve media pool; return MediaPoolItem or None."""
-    try:
-        project = getattr(app, "project", None)
-        if project is None:
-            log.warning("[placer] no project — cannot import to media pool")
-            return None
-        mp = project.GetMediaPool()
-        if mp is None:
-            log.warning("[placer] GetMediaPool() returned None")
-            return None
-        items = mp.ImportMedia([str(clip_path)])
-        if not items:
-            log.warning("[placer] ImportMedia returned empty list for %s", clip_path)
-            return None
-        return items[0]
-    except Exception as e:
-        log.error("[placer] ImportMedia failed: %s", e)
-        return None
-
-
 def place_clip(
     app: Any,
     clip_path: str,
     segment_start_sec: float,
     clip_duration_sec: float = 0.0,
+    clip_start_sec: float = 0.0,
     track_index: int | None = None,
 ) -> PlacerResult:
     """Place *clip_path* on the B-Roll track at *segment_start_sec*.
 
-    Strategy:
-      1. Import clip into media pool.
-      2. Get active timeline; compute frame offset.
-      3. Find or create a named 'B-Roll' video track (or use explicit track_index).
-      4. Use AppendToTimeline with trackIndex.
-      5. If step 4 raises (restricted in free edition), log a warning and return
-         placed=False so the caller can show a toast.
+    Uses resolve.GetProjectManager().GetCurrentProject().GetMediaPool()
+    — same chain as the working subtitles placer (fusion_placer.py).
 
     Args:
-        app:                 The AIEditorApp (or proxy); needs .project and .timeline.
+        app:                 The AIEditorApp; needs .resolve.
         clip_path:           Absolute path to a local video file.
-        segment_start_sec:   Where on the timeline (in seconds) to insert the clip.
-        clip_duration_sec:   Duration to use; 0 = full clip.
-        track_index:         Explicit Resolve track index (1-based). None = auto-find
-                             or create a named 'B-Roll' track.
+        segment_start_sec:   Where on the timeline (seconds) to insert.
+        clip_duration_sec:   Duration to use from clip; 0 = full clip.
+        clip_start_sec:      In-point offset within the clip (seconds).
+        track_index:         Explicit 1-based track index. None = auto-find/create.
 
     Returns:
-        PlacerResult with placed=True on success, placed=False with reason on failure.
+        PlacerResult with placed=True on success.
     """
     clip_path = str(clip_path)
+    clip_name = Path(clip_path).name
 
-    # 1. Import to media pool
-    mpi = _import_to_pool(app, clip_path)
-    if mpi is None:
+    resolve = getattr(app, "resolve", None)
+    if resolve is None:
         return PlacerResult(clip_path, segment_start_sec, False,
-                            "MediaPool import failed — clip saved to disk only")
+                            "app.resolve is None — not connected to Resolve")
 
-    # 2. Get timeline + FPS
-    timeline = getattr(app, "timeline", None)
-    if timeline is None:
+    # Always get a fresh project + media pool via resolve (same as fusion_placer.py)
+    try:
+        project = resolve.GetProjectManager().GetCurrentProject()
+        if project is None:
+            return PlacerResult(clip_path, segment_start_sec, False,
+                                "GetCurrentProject() returned None")
+        media_pool = project.GetMediaPool()
+        if media_pool is None:
+            return PlacerResult(clip_path, segment_start_sec, False,
+                                "GetMediaPool() returned None")
+        timeline = project.GetCurrentTimeline()
+        if timeline is None:
+            return PlacerResult(clip_path, segment_start_sec, False,
+                                "GetCurrentTimeline() returned None — open a timeline in Resolve")
+    except Exception as e:
         return PlacerResult(clip_path, segment_start_sec, False,
-                            "No active timeline — clip imported to media pool")
+                            f"Resolve API chain failed: {e}")
+
+    # Import clip to media pool
+    try:
+        items = media_pool.ImportMedia([clip_path])
+        if not items:
+            return PlacerResult(clip_path, segment_start_sec, False,
+                                f"ImportMedia returned empty for {clip_name}")
+        mpi = items[0]
+    except Exception as e:
+        return PlacerResult(clip_path, segment_start_sec, False,
+                            f"ImportMedia failed: {e}")
 
     fps = _fps_from_timeline(timeline)
-    start_frame = _sec_to_frame(segment_start_sec, fps)
+    try:
+        tl_start = timeline.GetStartFrame()
+    except Exception:
+        tl_start = 0
 
-    # Resolve target track: find/create named 'B-Roll' track if not explicit
+    record_frame = tl_start + _sec_to_frame(segment_start_sec, fps)
     resolved_track = track_index if track_index is not None else _find_or_create_broll_track(timeline)
 
-    # 3. Build clip info dict for AppendToTimeline
+    # Build clip info — same keys as fusion_placer.py (the working reference)
     clip_info: dict[str, Any] = {
         "mediaPoolItem": mpi,
-        "trackIndex": resolved_track,
-        "recordFrame": start_frame,
+        "mediaType":     1,
+        "startFrame":    _sec_to_frame(clip_start_sec, fps) if clip_start_sec > 0.0 else 0,
+        "endFrame":      max(1, _sec_to_frame(clip_start_sec + clip_duration_sec, fps))
+                         if clip_duration_sec > 0.0 else None,
+        "recordFrame":   record_frame,
+        "trackIndex":    resolved_track,
     }
-    if clip_duration_sec > 0.0:
-        clip_info["startFrame"] = 0
-        clip_info["endFrame"] = _sec_to_frame(clip_duration_sec, fps)
+    # Remove endFrame key entirely if not set (None confuses the API)
+    if clip_info["endFrame"] is None:
+        del clip_info["endFrame"]
+
+    log.debug(
+        "[placer] AppendToTimeline: %s → track %d, recordFrame %d (%.1fs), "
+        "startFrame %d, endFrame %s",
+        clip_name, resolved_track, record_frame, segment_start_sec,
+        clip_info["startFrame"], clip_info.get("endFrame", "full"),
+    )
 
     try:
-        project = app.project
-        mp = project.GetMediaPool()
-        result = mp.AppendToTimeline([clip_info])
-        if not result:
-            # AppendToTimeline returns [] on failure (e.g., restricted in free)
-            log.warning("[placer] AppendToTimeline returned empty — V2 placement may be restricted")
-            return PlacerResult(clip_path, segment_start_sec, False,
-                                "AppendToTimeline returned empty (free edition restriction?)")
-        log.info("[placer] placed %s on track %d at %.1fs (frame %d)",
-                 Path(clip_path).name, resolved_track, segment_start_sec, start_frame)
-        return PlacerResult(clip_path, segment_start_sec, True)
+        placed = media_pool.AppendToTimeline([clip_info])
+        log.debug("[placer] AppendToTimeline raw result: %r", placed)
+        if placed:
+            log.info("[placer] placed %s on track %d at %.1fs", clip_name, resolved_track, segment_start_sec)
+            return PlacerResult(clip_path, segment_start_sec, True)
+        log.warning(
+            "[placer] AppendToTimeline returned empty for %s "
+            "(track %d, recordFrame %d) — may be a free edition restriction",
+            clip_name, resolved_track, record_frame,
+        )
+        return PlacerResult(clip_path, segment_start_sec, False,
+                            "AppendToTimeline returned empty (free edition restriction?)")
     except Exception as e:
         log.error("[placer] AppendToTimeline raised: %s", e)
         return PlacerResult(clip_path, segment_start_sec, False, str(e))

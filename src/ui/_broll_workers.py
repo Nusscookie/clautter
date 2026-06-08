@@ -284,6 +284,7 @@ def autonomous_thread(
     on_progress: Callable,
     set_auto_status: Callable,
     _ui: Callable,
+    llm_director_mode: bool = False,
 ) -> None:
     """End-to-end autonomous B-roll pipeline on a daemon thread."""
     from src.broll.autonomous import run_autonomous
@@ -298,6 +299,7 @@ def autonomous_thread(
             clips_per_segment=clips_per_segment,
             on_progress=on_progress,
             max_clips=max_clips,
+            llm_director_mode=llm_director_mode,
         )
 
         if result.warnings:

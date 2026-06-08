@@ -215,6 +215,7 @@ def run_autonomous(
     clips_per_segment: int,
     on_progress: Callable[[str, float], None],
     max_clips: int = 10,
+    llm_director_mode: bool = False,
 ) -> AutonomousResult:
     """Run the full autonomous B-roll pipeline.
 
@@ -278,6 +279,86 @@ def run_autonomous(
 
     log.info("[autonomous] total candidates: %d", len(all_clips))
 
+    # ── 4. LLM Director mode — LLM decides everything ────────────────
+    if llm_director_mode:
+        on_progress("Asking LLM director to plan placements…", 0.55)
+        from src.broll.llm_director import direct as llm_direct
+        decisions, llm_err = llm_direct(
+            transcript_words=words,
+            segments=segments,
+            keywords=keywords,
+            candidates=all_clips,
+            settings=app.settings,
+            max_placements=max_clips,
+        )
+        if not decisions:
+            result.warnings.append(llm_err or "LLM director returned no placements.")
+            on_progress(llm_err or "LLM director returned nothing.", 1.0)
+            return result
+
+        # Build a lookup: canonical name → clip dict (case-insensitive, with/without ext)
+        def _name_variants(c: dict) -> list[str]:
+            n = c.get("name", Path(c.get("path", "")).name)
+            stem = Path(n).stem
+            return [n.lower(), stem.lower()]
+
+        name_index: dict[str, dict] = {}
+        for c in all_clips:
+            for variant in _name_variants(c):
+                name_index.setdefault(variant, c)
+
+        for d_idx, decision in enumerate(decisions):
+            progress = 0.60 + (d_idx / max(len(decisions), 1)) * 0.30
+            on_progress(
+                f"Placing {decision.clip_name[:40]} at {decision.timeline_sec:.1f}s…",
+                progress,
+            )
+            # Fuzzy lookup: exact name → stem → first partial match
+            key = decision.clip_name.lower()
+            match = (
+                name_index.get(key)
+                or name_index.get(Path(key).stem)
+                or next(
+                    (c for c in all_clips
+                     if key in c.get("name", "").lower()
+                     or key in Path(c.get("path", "")).stem.lower()),
+                    None,
+                )
+            )
+            if match is None:
+                result.warnings.append(
+                    f"LLM director: clip '{decision.clip_name}' not found in candidates "
+                    f"(available: {[c.get('name','?') for c in all_clips[:5]]}…)"
+                )
+                result.skipped_count += 1
+                result.segments.append(SegmentResult(decision.clip_name, decision.timeline_sec, None))
+                continue
+
+            duration = decision.clip_end_sec - decision.clip_start_sec
+            placer_res = place_clip(
+                app,
+                match["path"],
+                segment_start_sec=decision.timeline_sec,
+                clip_duration_sec=duration if duration > 0 else match.get("duration_sec", 0.0),
+                clip_start_sec=decision.clip_start_sec,
+            )
+            seg_result = SegmentResult(
+                decision.clip_name, decision.timeline_sec, match,
+                placer_result=placer_res,
+                reranked=True,
+            )
+            result.segments.append(seg_result)
+            if placer_res.placed:
+                result.placed_count += 1
+            else:
+                result.skipped_count += 1
+                result.warnings.append(f"Placement {d_idx + 1}: {placer_res.reason}")
+
+        on_progress("Done.", 1.0)
+        log.info("[autonomous] LLM director finished: %d placed, %d skipped",
+                 result.placed_count, result.skipped_count)
+        return result
+
     # ── 4. Semantic rank across all candidates ────────────────────────
     on_progress("Ranking clips against transcript…", 0.55)
     transcript_text = " ".join(w["word"] for w in words if w.get("type") == "word")
@@ -289,8 +370,6 @@ def run_autonomous(
         ranked_global = semantic
 
     # ── 5. Per-segment matching + optional re-ranking ─────────────────
-    # Build a per-segment candidate list: for each segment, score candidates
-    # relative to that segment's text, then optionally re-rank with LLM/visual.
     on_progress("Matching clips to timeline segments…", 0.65)
 
     # Deduplicate placed clips across segments (don't use same clip twice)
@@ -314,9 +393,9 @@ def run_autonomous(
         # Cloud LLM re-rank
         reranked_flag = False
         if cloud_rerank:
-            before = [c["clip_name"] for c in top_candidates[:3]]
+            before = [c.get("clip_name", c.get("name", "")) for c in top_candidates[:3]]
             top_candidates = rerank(seg_text, top_candidates, app.settings)
-            after = [c["clip_name"] for c in top_candidates[:3]]
+            after = [c.get("clip_name", c.get("name", "")) for c in top_candidates[:3]]
             reranked_flag = before != after
 
         chosen = top_candidates[0] if top_candidates else None
@@ -331,12 +410,13 @@ def run_autonomous(
         # ── 6. Scene boundary alignment ───────────────────────────────
         in_point = _clean_in_point(chosen["path"], 0.0)
 
-        # ── 7. Place on V2 ────────────────────────────────────────────
+        # ── 7. Place on B-Roll track ──────────────────────────────────
         placer_res = place_clip(
             app,
             chosen["path"],
             segment_start_sec=seg_start,
             clip_duration_sec=chosen.get("duration_sec", 0.0),
+            clip_start_sec=in_point,
         )
 
         seg_result = SegmentResult(

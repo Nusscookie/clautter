@@ -185,18 +185,28 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_dl_browse_btn"] = ctk.CTkButton(dl_row, text="Browse", width=80)
     w["auto_dl_browse_btn"].grid(row=0, column=1)
 
-    # Options row
-    opts_row = ctk.CTkFrame(card, fg_color="transparent")
-    opts_row.pack(fill="x", padx=10, pady=(4, 4))
-    ctk.CTkLabel(opts_row, text="Options:", font=ctk.CTkFont(size=11),
+    # LLM mode row
+    llm_row = ctk.CTkFrame(card, fg_color="transparent")
+    llm_row.pack(fill="x", padx=10, pady=(4, 4))
+    ctk.CTkLabel(llm_row, text="LLM mode:", font=ctk.CTkFont(size=11),
                  text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
-    w["auto_cloud_rerank"] = ctk.CTkCheckBox(
-        opts_row,
-        text="Cloud LLM re-rank (if OpenAI/Gemini key set)",
+    w["auto_llm_mode"] = ctk.CTkSegmentedButton(
+        llm_row,
+        values=["Off", "Full Director"],
         font=ctk.CTkFont(size=11),
-        checkbox_width=16, checkbox_height=16,
+        selected_color="#1b5e20",
+        selected_hover_color="#2e7d32",
+        unselected_color="#2a2a2a",
+        unselected_hover_color="#3a3a3a",
+        width=180,
     )
-    w["auto_cloud_rerank"].pack(side="left")
+    w["auto_llm_mode"].set("Off")
+    w["auto_llm_mode"].pack(side="left", padx=(6, 0))
+    ctk.CTkLabel(
+        llm_row,
+        text="Full Director: LLM picks clips + positions (needs OpenAI/Gemini/Minimax key)",
+        font=ctk.CTkFont(size=10), text_color="#555555",
+    ).pack(side="left", padx=(10, 0))
 
     # Max total clips slider
     max_clips_row = ctk.CTkFrame(card, fg_color="transparent")
@@ -211,7 +221,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_max_clips_value"].grid(row=0, column=2, padx=(6, 0))
 
     w["auto_max_clips"] = ctk.CTkSlider(
-        max_clips_row, from_=5, to=30, number_of_steps=5,
+        max_clips_row, from_=1, to=30, number_of_steps=29,
         progress_color="#4fc3f7",
     )
     w["auto_max_clips"].set(10)

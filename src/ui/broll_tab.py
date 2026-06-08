@@ -85,13 +85,15 @@ def setup(frame: Any, app: Any) -> None:
     # ── Hydrate autonomous settings ─────────────────────────────────
     auto_local = bool(app.settings.get("broll_auto_use_local", True))
     auto_online = bool(app.settings.get("broll_auto_use_online", True))
-    auto_cloud = bool(app.settings.get("broll_auto_cloud_rerank", False))
+    auto_llm_mode = str(app.settings.get("broll_llm_mode", "Off"))
+    if auto_llm_mode not in ("Off", "Full Director"):
+        auto_llm_mode = "Off"
     auto_cps = str(app.settings.get("broll_auto_clips_per_segment", 1))
     auto_provider = str(app.settings.get("broll_auto_provider", "Both"))
     auto_dl = str(app.settings.get("broll_auto_dl_folder", "") or str(Path.home() / "broll_downloads"))
     auto_folder = str(app.settings.get("last_broll_folder", ""))
     auto_max_clips = int(app.settings.get("broll_auto_max_clips", 10) or 10)
-    auto_max_clips = max(5, min(30, auto_max_clips))
+    auto_max_clips = max(1, min(30, auto_max_clips))
 
     _state["auto_dl_folder"] = auto_dl
     _state["auto_folder"] = auto_folder
@@ -101,8 +103,7 @@ def setup(frame: Any, app: Any) -> None:
             w["auto_use_local"].select()
         if auto_online:
             w["auto_use_online"].select()
-        if auto_cloud:
-            w["auto_cloud_rerank"].select()
+        w["auto_llm_mode"].set(auto_llm_mode)
         if auto_cps in ("1", "2", "3"):
             w["auto_clips_per_seg"].set(auto_cps)
         if auto_provider in ("Pixabay", "Pexels", "Both"):
@@ -279,8 +280,8 @@ def setup(frame: Any, app: Any) -> None:
         app.settings.set("broll_auto_use_online", bool(w["auto_use_online"].get()))
         _refresh_auto_run_btn()
 
-    def on_auto_cloud_rerank_change() -> None:
-        app.settings.set("broll_auto_cloud_rerank", bool(w["auto_cloud_rerank"].get()))
+    def on_auto_llm_mode_change(value: str) -> None:
+        app.settings.set("broll_llm_mode", value)
 
     def on_auto_provider_change(value: str) -> None:
         app.settings.set("broll_auto_provider", value)
@@ -317,7 +318,8 @@ def setup(frame: Any, app: Any) -> None:
                 if k:
                     providers.append(("Pexels", k))
 
-        cloud_rerank = bool(w["auto_cloud_rerank"].get())
+        llm_director = w["auto_llm_mode"].get() == "Full Director"
+        cloud_rerank = False
         clips_per_seg = int(w["auto_clips_per_seg"].get() or 1)
         max_clips = int(round(float(w["auto_max_clips"].get())))
 
@@ -333,7 +335,8 @@ def setup(frame: Any, app: Any) -> None:
         threading.Thread(
             target=autonomous_thread,
             args=(w, frame, app, _state, local_folder, providers, dl_folder,
-                  cloud_rerank, clips_per_seg, max_clips, _on_progress, set_auto_status, _ui),
+                  cloud_rerank, clips_per_seg, max_clips, _on_progress, set_auto_status, _ui,
+                  llm_director),
             daemon=True,
         ).start()
 
@@ -355,7 +358,7 @@ def setup(frame: Any, app: Any) -> None:
     w["auto_dl_browse_btn"].configure(command=on_auto_dl_browse)
     w["auto_use_local"].configure(command=on_auto_source_change)
     w["auto_use_online"].configure(command=on_auto_source_change)
-    w["auto_cloud_rerank"].configure(command=on_auto_cloud_rerank_change)
+    w["auto_llm_mode"].configure(command=on_auto_llm_mode_change)
     w["auto_provider"].configure(command=on_auto_provider_change)
     w["auto_clips_per_seg"].configure(command=on_auto_cps_change)
     w["auto_max_clips"].configure(command=on_auto_max_clips_change)
