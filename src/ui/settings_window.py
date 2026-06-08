@@ -10,7 +10,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 _WIN_W = 560
-_WIN_H = 520
+_WIN_H = 680
 
 _SILENCE_METHOD_LABELS: dict[str, str] = {
     "vad": "Silero VAD (recommended)",
@@ -81,6 +81,38 @@ class _SettingsWindow(ctk.CTkToplevel):
         _prefill(self._el_entry, str(app.settings.get("elevenlabs_api_key", "") or ""))
         _prefill(self._px_entry, str(app.settings.get("pixabay_api_key", "") or ""))
         _prefill(self._pex_entry, str(app.settings.get("pexels_api_key", "") or ""))
+
+        # ── CLOUD LLM RE-RANK ─────────────────────────────────────────
+        llm_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        llm_card.pack(fill="x", padx=12, pady=(4, 4))
+
+        ctk.CTkLabel(llm_card, text="CLOUD LLM RE-RANK",
+                     font=ctk.CTkFont(size=10, weight="bold"),
+                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+
+        ctk.CTkLabel(
+            llm_card,
+            text="Optional: used by Autonomous B-Roll to pick the best clip per segment. "
+                 "Leave blank to use semantic ranking only.",
+            font=ctk.CTkFont(size=10), text_color="#555555",
+            anchor="w", wraplength=500,
+        ).pack(fill="x", padx=12, pady=(0, 6))
+
+        self._oai_entry, self._oai_status = _key_row(llm_card, "OpenAI")
+        self._gem_entry, self._gem_status = _key_row(llm_card, "Gemini")
+        self._mmx_entry, self._mmx_status = _key_row(llm_card, "Minimax")
+
+        save_llm_btn = ctk.CTkButton(
+            llm_card, text="Save LLM Keys",
+            fg_color="#1f6aa5", hover_color="#144870",
+            text_color="#ffffff", width=130,
+            command=self._on_save_llm_keys,
+        )
+        save_llm_btn.pack(anchor="w", padx=12, pady=(4, 10))
+
+        _prefill(self._oai_entry, str(app.settings.get("openai_api_key", "") or ""))
+        _prefill(self._gem_entry, str(app.settings.get("gemini_api_key", "") or ""))
+        _prefill(self._mmx_entry, str(app.settings.get("minimax_api_key", "") or ""))
 
         # ── SMART CUTS ────────────────────────────────────────────────
         sc_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
@@ -180,6 +212,28 @@ class _SettingsWindow(ctk.CTkToplevel):
             self._pex_status.configure(text="Saved.", text_color="#66bb6a")
 
         log.info("Settings: saved keys: %s", ", ".join(saved) if saved else "none")
+
+    def _on_save_llm_keys(self) -> None:
+        app = self._app
+        oai = self._oai_entry.get().strip()
+        gem = self._gem_entry.get().strip()
+        mmx = self._mmx_entry.get().strip()
+
+        saved: list[str] = []
+        if oai:
+            app.settings.set("openai_api_key", oai)
+            saved.append("OpenAI")
+            self._oai_status.configure(text="Saved.", text_color="#66bb6a")
+        if gem:
+            app.settings.set("gemini_api_key", gem)
+            saved.append("Gemini")
+            self._gem_status.configure(text="Saved.", text_color="#66bb6a")
+        if mmx:
+            app.settings.set("minimax_api_key", mmx)
+            saved.append("Minimax")
+            self._mmx_status.configure(text="Saved.", text_color="#66bb6a")
+
+        log.info("Settings: saved LLM keys: %s", ", ".join(saved) if saved else "none")
 
     def _on_silence_method(self, label: str) -> None:
         key = next((k for k, v in _SILENCE_METHOD_LABELS.items() if v == label), "vad")

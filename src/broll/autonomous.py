@@ -1,0 +1,360 @@
+"""Autonomous B-roll agent — end-to-end pipeline without user interaction.
+
+Orchestrates: keyword extraction → candidate collection (local + online)
+→ semantic ranking → optional scenedetect boundary validation →
+optional cloud LLM re-rank → Resolve V2 placement.
+
+Called from _broll_workers.autonomous_thread() on a daemon thread.
+All Resolve / UI side effects go through app.resolve / placer.place_clip().
+"""
+
+from __future__ import annotations
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable
+
+from src.broll.placer import PlacerResult, place_clip
+from src.broll.reranker import rerank
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
+
+
+# ── Result types ──────────────────────────────────────────────────────────────
+
+@dataclass
+class SegmentResult:
+    """One placed (or failed) clip per transcript segment."""
+    segment_text: str
+    segment_start_sec: float
+    chosen_clip: dict | None        # suggestion dict from matcher, or None
+    placer_result: PlacerResult | None = None
+    reranked: bool = False
+
+
+@dataclass
+class AutonomousResult:
+    segments: list[SegmentResult] = field(default_factory=list)
+    placed_count: int = 0
+    skipped_count: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+
+# ── Scene boundary validation (optional scenedetect) ─────────────────────────
+
+def _clean_in_point(clip_path: str, desired_sec: float) -> float:
+    """Return a scene-boundary-aligned in-point near *desired_sec*.
+
+    Uses scenedetect if available; otherwise returns *desired_sec* unchanged.
+    Only searches for boundaries within the clip itself (local files only).
+    For online clips that were just downloaded we use 0.0 as the in-point.
+    """
+    try:
+        from scenedetect import open_video, SceneManager  # type: ignore[import]
+        from scenedetect.detectors import ContentDetector  # type: ignore[import]
+    except ImportError:
+        return desired_sec
+
+    try:
+        video = open_video(clip_path)
+        sm = SceneManager()
+        sm.add_detector(ContentDetector())
+        sm.detect_scenes(video, show_progress=False)
+        scenes = sm.get_scene_list()
+        if not scenes:
+            return desired_sec
+
+        # Pick the scene boundary closest to desired_sec
+        boundaries = [s[0].get_seconds() for s in scenes]
+        closest = min(boundaries, key=lambda b: abs(b - desired_sec))
+        log.debug("[autonomous] scene boundary %.2fs → %.2fs for %s",
+                  desired_sec, closest, Path(clip_path).name)
+        return closest
+    except Exception as e:
+        log.warning("[autonomous] scenedetect failed for %s: %s", clip_path, e)
+        return desired_sec
+
+
+# ── Candidate collection ──────────────────────────────────────────────────────
+
+def _collect_local(local_folder: str) -> list[dict]:
+    from src.broll.scanner import scan_folder
+    clips = scan_folder(local_folder)
+    log.info("[autonomous] local scan: %d clip(s) in %s", len(clips), local_folder)
+    return clips
+
+
+def _collect_online(
+    keywords: list[str],
+    providers: list[tuple[str, str]],
+    download_folder: str,
+    app: Any,
+    on_progress: Callable[[str, float], None],
+    max_clips: int = 10,
+) -> list[dict]:
+    """Search providers for each keyword, download top hit, return clip dicts."""
+    from src.broll.cache import BrollCache
+    from src.broll.downloader import BrollDownloader
+    from src.broll.providers.base import AuthError, EmptyResultsError, NetworkError, RateLimitError
+    from src.broll.providers.pexels import PexelsClient
+    from src.broll.providers.pixabay import PixabayClient
+
+    cache = BrollCache()
+    slots: list[tuple[str, Any]] = []
+    for name, key in providers:
+        if name == "Pixabay":
+            slots.append(("Pixabay", PixabayClient(key, cache=cache)))
+        elif name == "Pexels":
+            slots.append(("Pexels", PexelsClient(key, cache=cache)))
+
+    downloader = BrollDownloader(Path(download_folder), app)
+    collected: list[dict] = []
+    total = len(keywords) * len(slots)
+    done = 0
+
+    for kw in keywords:
+        for slot_name, client in slots:
+            done += 1
+            on_progress(f"Searching {slot_name} for '{kw}'…", done / max(total, 1) * 0.4)
+            try:
+                hits = client.search(kw, per_page=3)
+            except (AuthError, RateLimitError, NetworkError, EmptyResultsError) as e:
+                log.warning("[autonomous] %s/%s: %s", slot_name, kw, e)
+                continue
+            except Exception as e:
+                log.error("[autonomous] unexpected search error %s/%s: %s", slot_name, kw, e)
+                continue
+
+            for hit in hits[:1]:   # download only top result per keyword per provider
+                if len(collected) >= max_clips:
+                    log.info("[autonomous] online cap reached (%d clips)", max_clips)
+                    break
+                try:
+                    on_progress(f"Downloading {hit.title[:40]}…", done / max(total, 1) * 0.4)
+                    result = downloader.download_and_import(hit)
+                    path = result["path"]
+                    # Build a clip dict compatible with matcher input
+                    collected.append({
+                        "name": hit.title,
+                        "path": path,
+                        "keywords": [kw],
+                        "duration_sec": float(hit.duration_sec),
+                        "source": hit.source,
+                    })
+                except Exception as e:
+                    log.warning("[autonomous] download failed for %s: %s", hit.title, e)
+            if len(collected) >= max_clips:
+                break
+
+    log.info("[autonomous] online: %d clip(s) downloaded", len(collected))
+    return collected
+
+
+# ── Optional visual re-rank (OpenCLIP/Torch) ─────────────────────────────────
+
+def _visual_rerank_if_available(
+    segment_text: str,
+    candidates: list[dict],
+) -> list[dict]:
+    """Re-rank candidates visually using OpenCLIP if torch+open_clip are present."""
+    try:
+        import torch  # type: ignore[import]
+        import open_clip  # type: ignore[import]
+    except ImportError:
+        return candidates
+
+    try:
+        model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
+        tokenizer = open_clip.get_tokenizer("ViT-B-32")
+        model.eval()
+
+        from PIL import Image
+        import cv2  # type: ignore[import]
+
+        text_tokens = tokenizer([segment_text])
+        with torch.no_grad():
+            text_feat = model.encode_text(text_tokens)
+            text_feat /= text_feat.norm(dim=-1, keepdim=True)
+
+        scores: list[float] = []
+        for c in candidates:
+            path = c.get("path", "")
+            try:
+                cap = cv2.VideoCapture(str(path))
+                ok, frame = cap.read()
+                cap.release()
+                if not ok:
+                    scores.append(0.0)
+                    continue
+                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                img_tensor = preprocess(img).unsqueeze(0)
+                with torch.no_grad():
+                    img_feat = model.encode_image(img_tensor)
+                    img_feat /= img_feat.norm(dim=-1, keepdim=True)
+                score = float((img_feat @ text_feat.T).squeeze())
+                scores.append(score)
+            except Exception:
+                scores.append(0.0)
+
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        log.debug("[autonomous] OpenCLIP visual re-rank applied")
+        return [c for _, c in ranked]
+    except Exception as e:
+        log.warning("[autonomous] OpenCLIP re-rank failed: %s", e)
+        return candidates
+
+
+# ── Main orchestrator ─────────────────────────────────────────────────────────
+
+def run_autonomous(
+    app: Any,
+    local_folder: str | None,
+    providers: list[tuple[str, str]],
+    download_folder: str,
+    cloud_rerank: bool,
+    clips_per_segment: int,
+    on_progress: Callable[[str, float], None],
+    max_clips: int = 10,
+) -> AutonomousResult:
+    """Run the full autonomous B-roll pipeline.
+
+    Args:
+        app:               AIEditorApp with .transcript, .project, .timeline, .settings.
+        local_folder:      Path to local B-roll folder, or None to skip.
+        providers:         [(name, api_key), ...] for online search, or [] to skip.
+        download_folder:   Where to save downloaded clips.
+        cloud_rerank:      Whether to call cloud LLM for final pick per segment.
+        clips_per_segment: How many clips to place per segment (usually 1).
+        on_progress:       Callback(msg: str, fraction: float 0-1) for UI updates.
+
+    Returns:
+        AutonomousResult with per-segment outcomes.
+    """
+    result = AutonomousResult()
+
+    # ── Guard: transcript required ────────────────────────────────────
+    if not app.transcript:
+        result.warnings.append("No transcript — generate one in the Subtitles tab first.")
+        on_progress("No transcript.", 1.0)
+        return result
+
+    # ── 1. Extract keywords ───────────────────────────────────────────
+    on_progress("Extracting keywords from transcript…", 0.05)
+    from src.broll.keywords import extract_top_keywords
+    method = str(app.settings.get("broll_keyword_method", "spacy"))
+    keywords = extract_top_keywords(app.transcript, top_n=10, method=method)
+    if not keywords:
+        result.warnings.append("No keywords extracted from transcript.")
+        on_progress("No keywords found.", 1.0)
+        return result
+    log.info("[autonomous] keywords: %s", keywords)
+
+    # ── 2. Build transcript segments ──────────────────────────────────
+    on_progress("Segmenting transcript…", 0.08)
+    from src.broll.matcher import _build_segments, _semantic_suggest, _overlap_suggest
+    words = app.transcript
+    segments = _build_segments(words)
+    log.info("[autonomous] %d transcript segment(s)", len(segments))
+
+    # ── 3. Collect candidates ─────────────────────────────────────────
+    all_clips: list[dict] = []
+
+    if local_folder:
+        on_progress("Scanning local B-roll folder…", 0.10)
+        all_clips.extend(_collect_local(local_folder))
+
+    if providers:
+        online_clips = _collect_online(
+            keywords, providers, download_folder, app,
+            on_progress=on_progress,
+            max_clips=max_clips,
+        )
+        all_clips.extend(online_clips)
+
+    if not all_clips:
+        result.warnings.append("No candidate clips found (empty folder and/or no search results).")
+        on_progress("No clips found.", 1.0)
+        return result
+
+    log.info("[autonomous] total candidates: %d", len(all_clips))
+
+    # ── 4. Semantic rank across all candidates ────────────────────────
+    on_progress("Ranking clips against transcript…", 0.55)
+    transcript_text = " ".join(w["word"] for w in words if w.get("type") == "word")
+    semantic = _semantic_suggest(all_clips, words, top_k=len(all_clips))
+    if semantic is None:
+        # sentence-transformers unavailable — word-overlap fallback
+        ranked_global = _overlap_suggest(all_clips, transcript_text, top_k=len(all_clips))
+    else:
+        ranked_global = semantic
+
+    # ── 5. Per-segment matching + optional re-ranking ─────────────────
+    # Build a per-segment candidate list: for each segment, score candidates
+    # relative to that segment's text, then optionally re-rank with LLM/visual.
+    on_progress("Matching clips to timeline segments…", 0.65)
+
+    # Deduplicate placed clips across segments (don't use same clip twice)
+    used_paths: set[str] = set()
+
+    for seg_idx, (seg_text, seg_start) in enumerate(segments):
+        progress = 0.65 + (seg_idx / max(len(segments), 1)) * 0.25
+        on_progress(f"Segment {seg_idx + 1}/{len(segments)}: {seg_text[:40]}…", progress)
+
+        # Filter already-used clips
+        available = [c for c in ranked_global if c["path"] not in used_paths]
+        if not available:
+            result.segments.append(SegmentResult(seg_text, seg_start, None))
+            result.skipped_count += 1
+            continue
+
+        # Optionally re-rank top candidates with OpenCLIP
+        top_candidates = available[:10]
+        top_candidates = _visual_rerank_if_available(seg_text, top_candidates)
+
+        # Cloud LLM re-rank
+        reranked_flag = False
+        if cloud_rerank:
+            before = [c["clip_name"] for c in top_candidates[:3]]
+            top_candidates = rerank(seg_text, top_candidates, app.settings)
+            after = [c["clip_name"] for c in top_candidates[:3]]
+            reranked_flag = before != after
+
+        chosen = top_candidates[0] if top_candidates else None
+
+        if chosen is None:
+            result.segments.append(SegmentResult(seg_text, seg_start, None))
+            result.skipped_count += 1
+            continue
+
+        used_paths.add(chosen["path"])
+
+        # ── 6. Scene boundary alignment ───────────────────────────────
+        in_point = _clean_in_point(chosen["path"], 0.0)
+
+        # ── 7. Place on V2 ────────────────────────────────────────────
+        placer_res = place_clip(
+            app,
+            chosen["path"],
+            segment_start_sec=seg_start,
+            clip_duration_sec=chosen.get("duration_sec", 0.0),
+        )
+
+        seg_result = SegmentResult(
+            seg_text, seg_start, chosen,
+            placer_result=placer_res,
+            reranked=reranked_flag,
+        )
+        result.segments.append(seg_result)
+
+        if placer_res.placed:
+            result.placed_count += 1
+        else:
+            result.skipped_count += 1
+            result.warnings.append(
+                f"Segment {seg_idx + 1}: {placer_res.reason}"
+            )
+
+    on_progress("Done.", 1.0)
+    log.info("[autonomous] finished: %d placed, %d skipped",
+             result.placed_count, result.skipped_count)
+    return result

@@ -270,6 +270,69 @@ def search_online_thread(
         _ui(_reenable)
 
 
+def autonomous_thread(
+    w: dict,
+    frame: Any,
+    app: Any,
+    _state: dict,
+    local_folder: str | None,
+    providers: list[tuple[str, str]],
+    download_folder: str,
+    cloud_rerank: bool,
+    clips_per_segment: int,
+    max_clips: int,
+    on_progress: Callable,
+    set_auto_status: Callable,
+    _ui: Callable,
+) -> None:
+    """End-to-end autonomous B-roll pipeline on a daemon thread."""
+    from src.broll.autonomous import run_autonomous
+
+    try:
+        result = run_autonomous(
+            app=app,
+            local_folder=local_folder,
+            providers=providers,
+            download_folder=download_folder,
+            cloud_rerank=cloud_rerank,
+            clips_per_segment=clips_per_segment,
+            on_progress=on_progress,
+            max_clips=max_clips,
+        )
+
+        if result.warnings:
+            for warn in result.warnings:
+                log.warning("[autonomous] %s", warn)
+
+        placed = result.placed_count
+        skipped = result.skipped_count
+        total = placed + skipped
+
+        if placed == 0 and total == 0:
+            msg = result.warnings[0] if result.warnings else "No segments processed."
+            set_auto_status(msg, "#ffa726")
+        elif placed == 0:
+            set_auto_status(
+                f"Clips matched but not placed on timeline — check Resolve connection. "
+                f"({skipped} segment(s) skipped)",
+                "#ffa726",
+            )
+        else:
+            set_auto_status(
+                f"Done! {placed}/{total} segment(s) placed on V2."
+                + (f" {skipped} skipped." if skipped else ""),
+                "#66bb6a",
+            )
+
+    except Exception as e:
+        log.error("Autonomous B-roll error: %s", e)
+        set_auto_status(f"Error: {e}", "#ff6b6b")
+    finally:
+        _state["auto_running"] = False
+        _ui(lambda: w["auto_run_btn"].configure(state="normal"))
+        _ui(lambda: w["auto_progress"].pack_forget())
+
+
 def download_thread(
     frame: Any,
     app: Any,
