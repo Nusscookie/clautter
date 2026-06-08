@@ -19,16 +19,23 @@ def analyze_thread(
     set_progress: Callable,
     ui: Callable,
 ) -> None:
-    """Detect high-energy moments suitable for zoom cuts."""
+    """Detect zoom points via face detection or RMS audio peaks."""
     try:
-        from src.zooms.analyzer import detect_zoom_points
+        from src.zooms.analyzer import detect_zoom_points_auto
         from src.utils.resolve_api import get_clip_file_path
 
         set_btn("analyze_btn", False)
         set_btn("apply_btn", False)
         set_btn("preview_btn", False)
         set_progress(0, True)
-        set_status("Analyzing audio for high-energy moments...")
+
+        detect_method = w["detect_method"].get()
+        use_face = detect_method == "Face Detection"
+
+        if use_face:
+            set_status("Analyzing video for faces...")
+        else:
+            set_status("Analyzing audio for high-energy moments...")
 
         app.refresh_timeline()
         clips = app.get_video_clips(1)
@@ -37,13 +44,14 @@ def analyze_thread(
             set_progress(0, False)
             return
 
-        mode_name  = w["mode"].get()
-        sigma      = _MODE_SIGMA.get(mode_name, 1.0)
+        mode_name   = w["mode"].get()
+        sigma       = _MODE_SIGMA.get(mode_name, 1.0)
         max_per_min = int(w["max_per_min"].get())
-        zoom_pct   = w["zoom_slider"].get() / 100.0
+        zoom_pct    = w["zoom_slider"].get() / 100.0
 
         all_zoom_points = []
         state["clips"] = clips
+        fallback_used = False
 
         for i, clip in enumerate(clips):
             set_progress(int((i / len(clips)) * 90))
@@ -51,34 +59,58 @@ def analyze_thread(
             if not file_path:
                 continue
             try:
-                pts = detect_zoom_points(
+                common_kwargs = dict(
                     file_path=file_path,
                     clip_start_frame=clip.GetStart(),
                     src_start_frame=clip.GetSourceStartFrame(),
                     src_end_frame=clip.GetSourceEndFrame(),
                     fps=app.fps,
                     max_per_minute=max_per_min,
-                    sigma_multiplier=sigma,
                     zoom_amount=zoom_pct,
                 )
+                if use_face:
+                    pts = detect_zoom_points_auto(
+                        method="face",
+                        sample_interval_sec=1.0,
+                        **common_kwargs,
+                    )
+                    if not fallback_used and pts == [] and detect_method == "Face Detection":
+                        pass  # empty is valid — face just not found in this clip
+                else:
+                    pts = detect_zoom_points_auto(
+                        method="rms",
+                        sigma_multiplier=sigma,
+                        **common_kwargs,
+                    )
                 all_zoom_points.extend(pts)
             except Exception as e:
                 log.error("Zoom analysis error clip %d: %s", i, e)
+                if use_face and "opencv" in str(e).lower():
+                    set_status(
+                        "opencv-python not installed. "
+                        "Run: pip install opencv-python",
+                        "#ff6b6b",
+                    )
+                    set_progress(0, False)
+                    return
 
         state["zoom_points"] = all_zoom_points
-        ui(lambda: w["found_count"]._val.configure(text=str(len(all_zoom_points))))
+        _n = len(all_zoom_points)
+        ui(lambda: w["found_count"]._val.configure(text=str(_n)))
 
         set_progress(100)
+        method_label = "face" if use_face else "audio"
         if all_zoom_points:
             set_status(
-                f"Found {len(all_zoom_points)} zoom point(s). "
+                f"Found {_n} zoom point(s) via {method_label} detection. "
                 "Click Apply Zooms to create a new timeline.",
                 "#66bb6a",
             )
             set_btn("apply_btn", True)
             set_btn("preview_btn", True)
         else:
-            set_status("No zoom points detected. Try 'High Energy' mode.", "#ffa726")
+            hint = "Check that faces are visible in the clip." if use_face else "Try 'High Energy' mode."
+            set_status(f"No zoom points detected. {hint}", "#ffa726")
         set_progress(0, False)
 
     except Exception as e:
@@ -102,7 +134,7 @@ def apply_thread(
     try:
         from src.zooms.applier import apply_zooms
 
-        _mode, _target_tl = state["timeline_choice"]
+        _mode, _target_tl = state["timeline_choice"]["timeline"]
         set_btn("apply_btn", False)
         set_btn("analyze_btn", False)
         set_progress(0, True)
@@ -134,6 +166,16 @@ def apply_thread(
         app.settings.add_stat("total_edits", 1)
 
         ui(lambda: w["applied_count"]._val.configure(text=str(result.zooms_applied)))
+
+        if result.zooms_applied == 0:
+            set_status(
+                f"Timeline '{result.new_timeline_name}' built but no zooms applied. "
+                "Check that zoom points were detected.",
+                "#ffa726",
+            )
+            set_progress(0, False)
+            return
+
         set_progress(100)
         set_status(
             f"Done! {result.zooms_applied} zoom(s) applied. "

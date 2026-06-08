@@ -16,7 +16,7 @@ log = get_logger(__name__)
 def _segment_clips(
     clips: list[Any],
     fps: float,
-    zoom_map: dict[int, tuple[int, float]],
+    zoom_map: dict[int, tuple[int, float, float, float]],
     progress_callback: Optional[Callable[[int, int, str], None]],
     fade: bool = True,
 ) -> tuple[list[dict], list[dict], int, int]:
@@ -47,8 +47,8 @@ def _segment_clips(
         src_end = clip.GetSourceEndFrame()
 
         clip_zooms = [
-            (zs, ze, zf)
-            for zs, (ze, zf) in zoom_map.items()
+            (zs, ze, zf, pan, tilt)
+            for zs, (ze, zf, pan, tilt) in zoom_map.items()
             if clip_tl_start <= zs < clip_tl_end
         ]
         clip_zooms.sort(key=lambda x: x[0])
@@ -67,7 +67,7 @@ def _segment_clips(
         cursor_tl = clip_tl_start
         cursor_src = src_start
 
-        for zoom_start_tl, zoom_end_tl, zoom_factor in clip_zooms:
+        for zoom_start_tl, zoom_end_tl, zoom_factor, pan, tilt in clip_zooms:
             pre_tl_frames = zoom_start_tl - cursor_tl
             if pre_tl_frames > 0:
                 clip_infos.append({
@@ -90,6 +90,8 @@ def _segment_clips(
                     "is_zoom": True,
                     "zoom_amount": zoom_factor,
                     "fade": fade,
+                    "pan": pan,
+                    "tilt": tilt,
                 })
                 zooms_applied += 1
 

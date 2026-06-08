@@ -9,6 +9,7 @@ from typing import Any
 import customtkinter as ctk
 
 _MODES = ["Conservative", "Standard", "High Energy"]
+_DETECT_METHODS = ["Face Detection", "RMS Peaks"]
 
 
 def build(parent: Any) -> None:
@@ -16,7 +17,7 @@ def build(parent: Any) -> None:
 
     ctk.CTkLabel(
         parent,
-        text="AUTO ZOOMS  —  Apply dynamic zoom cuts based on audio energy",
+        text="AUTO ZOOMS  —  Apply dynamic zoom cuts based on face or audio energy",
         font=ctk.CTkFont(size=11, weight="bold"),
         text_color="#aaaaaa",
         anchor="w",
@@ -29,11 +30,29 @@ def build(parent: Any) -> None:
                  font=ctk.CTkFont(size=10, weight="bold"),
                  text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-    mode_row = ctk.CTkFrame(card, fg_color="transparent")
-    mode_row.pack(fill="x", padx=10, pady=2)
-    mode_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(mode_row, text="Energy Mode").grid(row=0, column=0, sticky="w", padx=(0, 12))
-    w["mode"] = ctk.CTkComboBox(mode_row, values=_MODES, state="readonly")
+    # Detection method dropdown
+    detect_row = ctk.CTkFrame(card, fg_color="transparent")
+    detect_row.pack(fill="x", padx=10, pady=2)
+    detect_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(detect_row, text="Detection Method").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["detect_method"] = ctk.CTkComboBox(detect_row, values=_DETECT_METHODS, state="readonly")
+    w["detect_method"].set("Face Detection")
+    w["detect_method"].grid(row=0, column=1, sticky="ew")
+
+    w["detect_note"] = ctk.CTkLabel(
+        card,
+        text="Face Detection requires opencv-python  •  pip install opencv-python",
+        font=ctk.CTkFont(size=10),
+        text_color="#888888",
+        anchor="w",
+    )
+    w["detect_note"].pack(fill="x", padx=10, pady=(0, 4))
+
+    # Energy Mode row — only visible when RMS Peaks selected
+    w["mode_row"] = ctk.CTkFrame(card, fg_color="transparent")
+    w["mode_row"].grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(w["mode_row"], text="Energy Mode").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["mode"] = ctk.CTkComboBox(w["mode_row"], values=_MODES, state="readonly")
     w["mode"].set("Standard")
     w["mode"].grid(row=0, column=1, sticky="ew")
 
@@ -58,7 +77,7 @@ def build(parent: Any) -> None:
 
     check_row = ctk.CTkFrame(card, fg_color="transparent")
     check_row.pack(fill="x", padx=10, pady=(2, 10))
-    w["fade_zoom"] = ctk.CTkCheckBox(check_row, text="Fade Zooms (Dynamic Zoom Ease)")
+    w["fade_zoom"] = ctk.CTkCheckBox(check_row, text="Smooth Zoom (Ease In/Out)")
     w["fade_zoom"].pack(side="left", padx=(0, 16))
     w["fade_zoom"].select()
     w["hard_cut"] = ctk.CTkCheckBox(check_row, text="Hard Cut Zooms")

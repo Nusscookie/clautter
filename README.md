@@ -133,9 +133,13 @@ Analyzes volume peaks in the audio to find high-energy moments:
 - **Standard** — medium sensitivity (σ × 1.0)
 - **High Energy** — aggressive, more frequent (σ × 0.5)
 
+Face Detection mode (OpenCV) zooms toward the speaker; RMS mode zooms on audio peaks.
+
 Apply shows the timeline dialog; creates a `_zooms` timeline or appends to an existing one.
-Zoom is applied via `SetProperty("ZoomX"/"ZoomY")` per segment.
-Fade mode uses DaVinci's `DynamicZoomEase` property.
+Zoom is applied per segment via `SetProperty("ZoomX"/"ZoomY")`, offset toward the
+detected face with `Pan`/`Tilt`. Smooth Zoom enables DaVinci's `DynamicZoomEase`
+so the transition eases in/out. (Per-clip Fusion keyframing is not used — the
+Resolve scripting API exposes no per-clip keyframe path; see `scripts/zoom_probe.py`.)
 
 ### B-Roll Assistant (Scaffold)
 

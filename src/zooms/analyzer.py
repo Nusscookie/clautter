@@ -12,6 +12,27 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+
+def detect_zoom_points_auto(
+    method: str = "face",
+    **kwargs,
+) -> list["ZoomPoint"]:
+    """Dispatch to face or RMS zoom detection with auto-fallback.
+
+    Args:
+        method: "face" (MediaPipe) or "rms" (volume peaks).
+        **kwargs: Forwarded to the chosen detector.
+    """
+    if method == "face":
+        try:
+            from src.zooms.face_analyzer import detect_zoom_points_face
+            face_kwargs = {k: v for k, v in kwargs.items() if k != "sigma_multiplier"}
+            return detect_zoom_points_face(**face_kwargs)
+        except ImportError as e:
+            log.warning("Face detection unavailable (%s) — falling back to RMS", e)
+    return detect_zoom_points(**kwargs)
+
+
 _WINDOW_MS = 100       # RMS window size in ms
 _ZOOM_DURATION_MS = 2500  # Default zoom region length (ms)
 
@@ -24,11 +45,14 @@ class ZoomPoint:
     duration_frames: int     # How long the zoom region lasts
     zoom_amount: float       # e.g. 1.15 = 115%
     energy_dbfs: float = 0.0 # RMS energy that triggered detection (debug info)
+    pan: float = 0.0         # Normalized horizontal subject offset [-0.5,0.5]; applier scales to Pan px
+    tilt: float = 0.0        # Normalized vertical subject offset [-0.5,0.5]; applier scales to Tilt px
 
     def __repr__(self) -> str:
         return (
             f"<ZoomPoint frame={self.timeline_frame} "
-            f"dur={self.duration_frames}fr zoom={self.zoom_amount:.2f}>"
+            f"dur={self.duration_frames}fr zoom={self.zoom_amount:.2f} "
+            f"pan={self.pan:.0f} tilt={self.tilt:.0f}>"
         )
 
 
