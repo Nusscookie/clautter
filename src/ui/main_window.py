@@ -10,6 +10,7 @@ from src.ui import (
     dashboard_tab, smartcuts_tab,
     subtitles_tab, zooms_tab, broll_tab, graphics_tab,
 )
+from src.ui.settings_window import open_settings
 
 log = get_logger(__name__)
 
@@ -92,6 +93,15 @@ class MainWindow:
             text_color="#888888",
         )
         self._status_lbl.pack(side="left", padx=6, pady=6)
+
+        ctk.CTkButton(
+            top, text="⚙",
+            font=ctk.CTkFont(size=15),
+            fg_color="transparent", hover_color="#2a2a2a",
+            text_color="#aaaaaa", width=32, height=32,
+            corner_radius=4,
+            command=lambda: open_settings(self._app),
+        ).pack(side="right", padx=(0, 6), pady=3)
 
         # ── Project-wide BETA banner ──
         # Single source of truth for "this build is not finished".

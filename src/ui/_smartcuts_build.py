@@ -164,10 +164,6 @@ def build(parent: Any) -> None:
         parent, text="", font=ctk.CTkFont(size=11), text_color="#66bb6a", anchor="w")
     w["new_timeline_lbl"].pack(fill="x", padx=12, pady=(6, 12))
 
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
-        fill="x", padx=10, pady=6)
-    _build_advanced_card(parent, w)
-
     parent._w = w
 
 
@@ -182,74 +178,6 @@ def _labeled_entry(parent: Any, label: str, default: str, unit: str) -> ctk.CTkE
     ctk.CTkLabel(row, text=unit, text_color="#888888",
                  font=ctk.CTkFont(size=11)).grid(row=0, column=2)
     return entry
-
-
-def _build_advanced_card(parent: Any, w: dict[str, Any]) -> None:
-    """Collapsible advanced settings — silence and retake detection method selectors."""
-    w["advanced_toggle"] = ctk.CTkButton(
-        parent,
-        text="▶  ADVANCED SETTINGS",
-        font=ctk.CTkFont(size=10, weight="bold"),
-        text_color="#888888",
-        fg_color="transparent",
-        hover_color="#1e1e1e",
-        anchor="w",
-        height=26,
-        corner_radius=0,
-    )
-    w["advanced_toggle"].pack(fill="x", padx=10, pady=(2, 2))
-
-    adv_frame = ctk.CTkFrame(parent, fg_color="#1e1e1e", corner_radius=4)
-    w["advanced_frame"] = adv_frame
-    # Not packed here — toggled by button in setup()
-
-    silence_row = ctk.CTkFrame(adv_frame, fg_color="transparent")
-    silence_row.pack(fill="x", padx=10, pady=(8, 4))
-
-    ctk.CTkLabel(
-        silence_row, text="Silence detection:",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa",
-        width=150, anchor="w",
-    ).pack(side="left")
-
-    w["silence_method"] = ctk.CTkOptionMenu(
-        silence_row,
-        values=["Silero VAD (recommended)", "pydub RMS (legacy)"],
-        width=230,
-        fg_color="#2a2a2a",
-        button_color="#2a2a2a",
-        button_hover_color="#3a3a3a",
-    )
-    w["silence_method"].pack(side="left", padx=(6, 0))
-
-    retake_row = ctk.CTkFrame(adv_frame, fg_color="transparent")
-    retake_row.pack(fill="x", padx=10, pady=(0, 4))
-
-    ctk.CTkLabel(
-        retake_row, text="Retake detection:",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa",
-        width=150, anchor="w",
-    ).pack(side="left")
-
-    w["retake_method"] = ctk.CTkOptionMenu(
-        retake_row,
-        values=["spaCy filler normalization (recommended)", "difflib only (legacy)"],
-        width=230,
-        fg_color="#2a2a2a",
-        button_color="#2a2a2a",
-        button_hover_color="#3a3a3a",
-    )
-    w["retake_method"].pack(side="left", padx=(6, 0))
-
-    ctk.CTkLabel(
-        adv_frame,
-        text="Silero VAD downloads a ~5 MB model on first run. "
-             "spaCy uses the en_core_web_sm model already installed.",
-        font=ctk.CTkFont(size=10),
-        text_color="#555555",
-        anchor="w",
-        wraplength=600,
-    ).pack(fill="x", padx=10, pady=(0, 8))
 
 
 def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:

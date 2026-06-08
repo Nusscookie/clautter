@@ -85,9 +85,6 @@ def build(parent: Any) -> None:
         anchor="w",
     ).pack(fill="x", padx=12, pady=(0, 8))
 
-    _divider(parent)
-    _build_advanced_card(parent, w)
-
     parent._w = w
 
 
@@ -101,53 +98,6 @@ def _set_textbox(tb: ctk.CTkTextbox, text: str) -> None:
 def _divider(parent: Any) -> None:
     ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
         fill="x", padx=10, pady=4)
-
-
-def _build_advanced_card(parent: Any, w: dict[str, Any]) -> None:
-    """Collapsible advanced settings — keyword extraction method selector."""
-    w["advanced_toggle"] = ctk.CTkButton(
-        parent,
-        text="▶  ADVANCED SETTINGS",
-        font=ctk.CTkFont(size=10, weight="bold"),
-        text_color="#888888",
-        fg_color="transparent",
-        hover_color="#1e1e1e",
-        anchor="w",
-        height=26,
-        corner_radius=0,
-    )
-    w["advanced_toggle"].pack(fill="x", padx=10, pady=(2, 2))
-
-    adv_frame = ctk.CTkFrame(parent, fg_color="#1e1e1e", corner_radius=4)
-    w["advanced_frame"] = adv_frame
-    # Not packed here — toggled by button in setup()
-
-    method_row = ctk.CTkFrame(adv_frame, fg_color="transparent")
-    method_row.pack(fill="x", padx=10, pady=8)
-
-    ctk.CTkLabel(
-        method_row, text="Keyword method:",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa",
-        width=130, anchor="w",
-    ).pack(side="left")
-
-    w["keyword_method"] = ctk.CTkOptionMenu(
-        method_row,
-        values=["spaCy (en_core_web_sm)", "YAKE", "KeyBERT", "Frequency (no deps)"],
-        width=210,
-        fg_color="#2a2a2a",
-        button_color="#2a2a2a",
-        button_hover_color="#3a3a3a",
-    )
-    w["keyword_method"].pack(side="left", padx=(6, 0))
-
-    ctk.CTkLabel(
-        adv_frame,
-        text="KeyBERT and spaCy download a model (~80 MB) on first use.",
-        font=ctk.CTkFont(size=10),
-        text_color="#555555",
-        anchor="w",
-    ).pack(fill="x", padx=10, pady=(0, 8))
 
 
 def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
@@ -179,41 +129,11 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     )
     w["provider"].grid(row=0, column=1, sticky="w")
 
-    # Pixabay key
-    px_row = ctk.CTkFrame(card, fg_color="transparent")
-    px_row.pack(fill="x", padx=10, pady=(4, 2))
-    px_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(px_row, text="Pixabay key:",
-                 font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=110, anchor="w").grid(row=0, column=0, sticky="w")
-    w["pixabay_key"] = ctk.CTkEntry(px_row, show="*", placeholder_text="Paste Pixabay API key")
-    w["pixabay_key"].grid(row=0, column=1, sticky="ew")
-    w["px_row"] = px_row
-
-    # Pexels key
-    pex_row = ctk.CTkFrame(card, fg_color="transparent")
-    pex_row.pack(fill="x", padx=10, pady=(2, 4))
-    pex_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(pex_row, text="Pexels key:",
-                 font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=110, anchor="w").grid(row=0, column=0, sticky="w")
-    w["pexels_key"] = ctk.CTkEntry(pex_row, show="*", placeholder_text="Paste Pexels API key")
-    w["pexels_key"].grid(row=0, column=1, sticky="ew")
-    w["pex_row"] = pex_row
-
-    w["save_keys_btn"] = ctk.CTkButton(
-        card, text="Save Keys",
-        fg_color="#1f6aa5", hover_color="#144870",
-        text_color="#ffffff", width=110,
-    )
-    w["save_keys_btn"].pack(anchor="w", padx=10, pady=(0, 6))
-
-    w["provider_status"] = ctk.CTkLabel(
-        card, text="",
-        font=ctk.CTkFont(size=10),
-        text_color="#aaaaaa", anchor="w", wraplength=800,
-    )
-    w["provider_status"].pack(fill="x", padx=10, pady=(0, 4))
+    ctk.CTkLabel(
+        card,
+        text="Pixabay / Pexels API keys → Settings  ( ⚙ top-right )",
+        font=ctk.CTkFont(size=11), text_color="#888888", anchor="w",
+    ).pack(fill="x", padx=10, pady=(0, 8))
 
     # Download target folder
     dl_row = ctk.CTkFrame(card, fg_color="transparent")

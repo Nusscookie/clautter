@@ -26,6 +26,7 @@ FUTURE.md
 SPECS.md
 UNOFFICIAL_DOC.md
 tests/
+scripts/
 
 # Editor
 .vscode/

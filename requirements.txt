@@ -30,7 +30,12 @@ silero-vad>=5.0        # Neural VAD silence detection — handles noise, music b
 torchaudio>=2.5.0,<2.9 # Audio I/O backend for silero-vad; pinned <2.9 because 2.9+ requires torchcodec
                         # which needs FFmpeg full-shared DLLs (Windows static build not supported)
 soundfile>=0.12.0      # torchaudio <2.9 audio backend on Windows (no DLLs needed)
+# torchcodec is intentionally NOT installed — requires FFmpeg full-shared DLLs unavailable on Windows static build
+# If it appears in your env, run: pip uninstall torchcodec
 onnxruntime>=1.18.0    # silero-vad ONNX backend (~20 MB); avoids full PyTorch install
+
+opencv-python>=4.8.0   # Frame extraction + Haar cascade face detection for auto-zoom
+# mediapipe>=0.10.0   # Optional: mediapipe 0.10+ uses Tasks API (requires model download); cv2 Haar cascade used instead
 
 # Optional — speeds up silence detection on large files:
 # librosa>=0.10.0

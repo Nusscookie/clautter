@@ -76,9 +76,9 @@ def generate_thread(
                 words = client.transcribe(audio_for_stt, language=lang_code)
             else:
                 from src.subtitles.elevenlabs import ElevenLabsClient
-                api_key = w["api_key"].get().strip()
+                api_key = (app.settings.api_key or "").strip()
                 if not api_key:
-                    set_status("API key is empty. Enter your ElevenLabs key first.", "#ff6b6b")
+                    set_status("ElevenLabs API key not set. Open Settings (⚙) to add it.", "#ff6b6b")
                     set_progress(0, False)
                     return
                 _name = audio_for_stt.replace("\\", "/").split("/")[-1]

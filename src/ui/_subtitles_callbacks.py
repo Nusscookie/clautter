@@ -34,14 +34,6 @@ def make_callbacks(
 ) -> dict[str, Callable]:
     """Return all subtitle-tab callbacks as closures over the provided state."""
 
-    def on_save_key() -> None:
-        key = w["api_key"].get().strip()
-        if key:
-            app.settings.api_key = key
-            w["key_status"].configure(text="API key saved.")
-        else:
-            w["key_status"].configure(text="Key is empty — not saved.")
-
     def on_whisper_model_changed(value: str) -> None:
         app.settings.set("whisper_model", value)
 
@@ -205,7 +197,6 @@ def make_callbacks(
         ).start()
 
     return {
-        "on_save_key": on_save_key,
         "on_whisper_model_changed": on_whisper_model_changed,
         "on_generate": on_generate,
         "on_create_track": on_create_track,

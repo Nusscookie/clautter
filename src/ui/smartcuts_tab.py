@@ -134,46 +134,8 @@ def setup(frame: Any, app: Any) -> None:
             daemon=True,
         ).start()
 
-    _SILENCE_METHOD_LABELS: dict[str, str] = {
-        "vad": "Silero VAD (recommended)",
-        "rms": "pydub RMS (legacy)",
-    }
-    _RETAKE_METHOD_LABELS: dict[str, str] = {
-        "spacy":   "spaCy filler normalization (recommended)",
-        "difflib": "difflib only (legacy)",
-    }
-
-    def on_advanced_toggle() -> None:
-        adv = w["advanced_frame"]
-        btn = w["advanced_toggle"]
-        if adv.winfo_ismapped():
-            adv.pack_forget()
-            btn.configure(text="▶  ADVANCED SETTINGS")
-        else:
-            adv.pack(fill="x", padx=10, pady=(0, 8))
-            btn.configure(text="▼  ADVANCED SETTINGS")
-
-    def on_silence_method_change(label: str) -> None:
-        key = next((k for k, v in _SILENCE_METHOD_LABELS.items() if v == label), "vad")
-        app.settings.set("smartcuts_silence_method", key)
-        _swap_threshold_field(key)
-
-    def on_retake_method_change(label: str) -> None:
-        key = next((k for k, v in _RETAKE_METHOD_LABELS.items() if v == label), "spacy")
-        app.settings.set("smartcuts_retake_method", key)
-
     saved_silence = str(app.settings.get("smartcuts_silence_method", "vad"))
-    saved_silence_lbl = _SILENCE_METHOD_LABELS.get(saved_silence, _SILENCE_METHOD_LABELS["vad"])
-    _ui(lambda lbl=saved_silence_lbl: w["silence_method"].set(lbl))
     _swap_threshold_field(saved_silence)
-
-    saved_retake = str(app.settings.get("smartcuts_retake_method", "spacy"))
-    saved_retake_lbl = _RETAKE_METHOD_LABELS.get(saved_retake, _RETAKE_METHOD_LABELS["spacy"])
-    _ui(lambda lbl=saved_retake_lbl: w["retake_method"].set(lbl))
-
-    w["advanced_toggle"].configure(command=on_advanced_toggle)
-    w["silence_method"].configure(command=on_silence_method_change)
-    w["retake_method"].configure(command=on_retake_method_change)
 
     w["analyze_btn"].configure(command=on_analyze)
     w["apply_btn"].configure(command=on_apply)

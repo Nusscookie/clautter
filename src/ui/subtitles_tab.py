@@ -82,11 +82,6 @@ def setup(frame: Any, app: Any) -> None:
             w["whisper_card"].pack(fill="x", padx=10, pady=4)
 
     # ── Load saved state ──
-    saved_key = app.settings.api_key
-    if saved_key:
-        w["api_key"].insert(0, saved_key)
-        w["key_status"].configure(text="API key loaded from settings.")
-
     saved_preset = app.settings.get("subtitle_preset", "YouTube")
     if saved_preset in STYLE_PRESETS:
         w["preset"].set(saved_preset)
@@ -112,7 +107,6 @@ def setup(frame: Any, app: Any) -> None:
     )
 
     # ── Wire up ──
-    w["save_key_btn"].configure(command=cbs["on_save_key"])
     w["generate_btn"].configure(command=cbs["on_generate"])
     w["create_track_btn"].configure(command=cbs["on_create_track"])
     w["export_srt_btn"].configure(command=cbs["on_export_srt"])

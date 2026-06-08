@@ -35,18 +35,11 @@ def build_provider_slot(parent: Any, w: dict) -> None:
                  font=ctk.CTkFont(size=10, weight="bold"),
                  text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-    key_row = ctk.CTkFrame(w["api_card"], fg_color="transparent")
-    key_row.pack(fill="x", padx=10, pady=(0, 4))
-    key_row.grid_columnconfigure(0, weight=1)
-
-    w["api_key"] = ctk.CTkEntry(key_row, placeholder_text="Enter ElevenLabs API key...", show="*")
-    w["api_key"].grid(row=0, column=0, sticky="ew", padx=(0, 6))
-    w["save_key_btn"] = ctk.CTkButton(key_row, text="Save", width=70)
-    w["save_key_btn"].grid(row=0, column=1)
-
-    w["key_status"] = ctk.CTkLabel(w["api_card"], text="", font=ctk.CTkFont(size=10),
-                                    text_color="#aaaaaa", anchor="w")
-    w["key_status"].pack(fill="x", padx=10, pady=(0, 8))
+    ctk.CTkLabel(
+        w["api_card"],
+        text="ElevenLabs API key → Settings  ( ⚙ top-right )",
+        font=ctk.CTkFont(size=11), text_color="#888888", anchor="w",
+    ).pack(fill="x", padx=10, pady=(0, 10))
 
     w["whisper_card"] = ctk.CTkFrame(_slot, fg_color="#2a2a2a", corner_radius=6)
 

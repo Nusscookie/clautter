@@ -7,15 +7,6 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_SILENCE_METHOD_KEYS: dict[str, str] = {
-    "Silero VAD (recommended)": "vad",
-    "pydub RMS (legacy)": "rms",
-}
-
-_RETAKE_METHOD_KEYS: dict[str, str] = {
-    "spaCy filler normalization (recommended)": "spacy",
-    "difflib only (legacy)": "difflib",
-}
 
 
 def analyze_thread(
@@ -50,7 +41,7 @@ def analyze_thread(
         vad_threshold = float(w["vad_threshold"].get())
         min_dur       = float(w["min_dur"].get())
         padding       = float(w["padding"].get())
-        silence_method = _SILENCE_METHOD_KEYS.get(w["silence_method"].get(), "vad")
+        silence_method = str(app.settings.get("smartcuts_silence_method", "vad"))
 
         state["clips"] = clips
         state["silence_regions"] = []
@@ -154,8 +145,8 @@ def apply_thread(
             set_status("Creating new timeline with silence removed...")
 
         _detect_retakes  = bool(w["retake_cb"].get())
-        _silence_method  = _SILENCE_METHOD_KEYS.get(w["silence_method"].get(), "vad")
-        _retake_method   = _RETAKE_METHOD_KEYS.get(w["retake_method"].get(), "spacy")
+        _silence_method  = str(app.settings.get("smartcuts_silence_method", "vad"))
+        _retake_method   = str(app.settings.get("smartcuts_retake_method", "spacy"))
         _vad_threshold   = float(w["vad_threshold"].get())
         _threshold_db    = float(w["threshold"].get())
 
