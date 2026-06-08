@@ -78,9 +78,9 @@ def analyze_thread(
                     vad_threshold=vad_threshold,
                 )
             except RuntimeError as e:
-                if "not installed" in str(e) and silence_method == "vad" and not _vad_fallback_warned:
+                if silence_method == "vad" and not _vad_fallback_warned:
                     _vad_fallback_warned = True
-                    set_status("Silero VAD not installed — falling back to pydub RMS", "#ffa726")
+                    set_status("Silero VAD unavailable — falling back to pydub RMS", "#ffa726")
                     silence_method = "rms"
                     state["silence_method"] = "rms"
                 try:

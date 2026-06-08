@@ -99,8 +99,8 @@ def _collect_segments(
                 vad_threshold=vad_threshold,
             )
         except RuntimeError as e:
-            if "not installed" in str(e) and silence_method == "vad":
-                log.warning("Silero VAD unavailable — falling back to pydub RMS: %s", e)
+            if silence_method == "vad":
+                log.warning("Silero VAD failed — falling back to pydub RMS: %s", e)
                 try:
                     all_regions = detect_silences_auto(
                         file_path,

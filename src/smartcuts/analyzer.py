@@ -141,6 +141,18 @@ def detect_silences_vad(
 
     import tempfile
 
+    # torchaudio ≥2.9 uses torchcodec for audio I/O; <2.9 needs an explicit backend.
+    # Set soundfile if no backend is active (avoids "no backend" crash on Windows static FFmpeg).
+    try:
+        import torchaudio  # type: ignore
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if not torchaudio.list_audio_backends():
+                torchaudio.set_audio_backend("soundfile")
+    except Exception:
+        pass
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Media file not found: {file_path}")
 

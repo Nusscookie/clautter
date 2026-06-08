@@ -68,6 +68,8 @@ def show_timeline_dialog(
     dialog.transient(root)
     dialog.lift()
     dialog.focus_force()
+    dialog.attributes('-topmost', True)
+    dialog.after(200, lambda: dialog.attributes('-topmost', False))
     dialog.after(10, dialog.grab_set)
 
     # Fetch existing timelines from the project

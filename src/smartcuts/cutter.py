@@ -149,7 +149,10 @@ def apply_cuts(
 
     result = media_pool.AppendToTimeline(track1_entries)
     if not result:
-        log.warning("AppendToTimeline returned falsy — timeline '%s' may be incomplete.", new_name)
+        raise RuntimeError(
+            f"AppendToTimeline returned falsy — timeline '{new_name}' was created but is empty.\n"
+            "Try re-analyzing (clip references may be stale)."
+        )
 
     retake_track_index = 0
     if retake_placements:

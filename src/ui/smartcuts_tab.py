@@ -65,6 +65,17 @@ def setup(frame: Any, app: Any) -> None:
         w["min_dur"].delete(0, "end")
         w["min_dur"].insert(0, str(p["min_silence_ms"]))
         app.settings.set("default_pace", level)
+        # Settings changed — previous results are stale
+        if _state.get("total_silences", 0) > 0 or _state.get("clips"):
+            w["found_count"]._val.configure(text="—")
+            w["time_saved"]._val.configure(text="—")
+            w["clips_count"]._val.configure(text="—")
+            w["apply_btn"].configure(state="disabled")
+            w["preview_btn"].configure(state="disabled")
+            w["status"].configure(
+                text="Settings changed — click Analyze to update results.",
+                text_color="#ffa726",
+            )
 
     def on_analyze() -> None:
         if not app.connected:
@@ -100,6 +111,7 @@ def setup(frame: Any, app: Any) -> None:
             set_status(f"Dialog error: {e}", "#ff6b6b")
             return
         if choice is None:
+            set_status("Apply cancelled.", "#aaaaaa")
             return
         _state["timeline_choice"] = choice["timeline"]
         _state["track_mode"] = choice.get("track_mode", "new")
