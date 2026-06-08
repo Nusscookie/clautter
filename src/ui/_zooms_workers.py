@@ -110,7 +110,7 @@ def analyze_thread(
             set_btn("preview_btn", True)
         else:
             hint = "Check that faces are visible in the clip." if use_face else "Try 'High Energy' mode."
-            set_status(f"No zoom points detected. {hint}", "#ffa726")
+            set_status(f"No zoom points detected. {hint}", "#E8903A")
         set_progress(0, False)
 
     except Exception as e:
@@ -171,7 +171,7 @@ def apply_thread(
             set_status(
                 f"Timeline '{result.new_timeline_name}' built but no zooms applied. "
                 "Check that zoom points were detected.",
-                "#ffa726",
+                "#E8903A",
             )
             set_progress(0, False)
             return

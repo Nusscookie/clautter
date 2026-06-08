@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import customtkinter as ctk
 
+from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -62,6 +63,7 @@ def show_timeline_dialog(
     ry = root.winfo_y() + (root.winfo_height() - dialog_height) // 2
 
     dialog = ctk.CTkToplevel(root)
+    apply_clutter_icon(dialog)
     dialog.title("Choose Timeline")
     dialog.geometry(f"420x{dialog_height}+{rx}+{ry}")
     dialog.resizable(False, False)
@@ -178,7 +180,7 @@ def show_timeline_dialog(
 
     ctk.CTkButton(
         btn_row, text="Continue", command=on_continue,
-        fg_color="#1565c0", hover_color="#1976d2", width=100,
+        fg_color="#B85F3A", hover_color="#C96A45", width=100,
     ).pack(side="left", padx=8)
 
     ctk.CTkButton(

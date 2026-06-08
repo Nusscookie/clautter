@@ -98,6 +98,9 @@ def setup(frame: Any, app: Any) -> None:
     _state["auto_dl_folder"] = auto_dl
     _state["auto_folder"] = auto_folder
 
+    auto_fill_frame = bool(app.settings.get("broll_auto_fill_frame", False))
+    auto_natural = bool(app.settings.get("broll_natural_placement", True))
+
     def _hydrate_auto() -> None:
         if auto_local:
             w["auto_use_local"].select()
@@ -114,6 +117,10 @@ def setup(frame: Any, app: Any) -> None:
             _set_readonly_entry(w["auto_folder"], auto_folder)
         w["auto_max_clips"].set(auto_max_clips)
         w["auto_max_clips_value"].configure(text=str(int(auto_max_clips)))
+        if auto_fill_frame:
+            w["auto_fill_frame"].select()
+        if auto_natural:
+            w["auto_natural_placement"].select()
 
     _ui(_hydrate_auto)
 
@@ -142,7 +149,7 @@ def setup(frame: Any, app: Any) -> None:
         _state["folder"] = path
         _set_readonly_entry(w["folder"], path)
         app.settings.set("last_broll_folder", path)
-        set_status(f"Selected: {path}", "#4fc3f7")
+        set_status(f"Selected: {path}", "#D97757")
         _ui(lambda: w["suggest_local_btn"].configure(state="normal"))
 
     def on_pick_dl_folder() -> None:
@@ -157,7 +164,7 @@ def setup(frame: Any, app: Any) -> None:
         _state["dl_folder"] = path
         _set_readonly_entry(w["dl_folder"], path)
         app.settings.set("last_broll_folder", path)
-        set_search_status(f"Download folder: {path}", "#4fc3f7")
+        set_search_status(f"Download folder: {path}", "#D97757")
 
     def on_provider_change(value: str) -> None:
         app.settings.set("broll_provider", value)
@@ -189,7 +196,7 @@ def setup(frame: Any, app: Any) -> None:
     def on_place() -> None:
         set_status(
             "Auto Place coming in a future update — will work for both local and online B-roll.",
-            "#ffa726",
+            "#E8903A",
         )
 
     def on_search_online() -> None:
@@ -221,7 +228,7 @@ def setup(frame: Any, app: Any) -> None:
             set_search_status("Select a provider first.", "#ff6b6b")
             return
         _ui(lambda: w["search_online_btn"].configure(state="disabled"))
-        set_search_status("Searching…", "#4fc3f7")
+        set_search_status("Searching…", "#D97757")
         threading.Thread(
             target=search_online_thread,
             args=(w, frame, app, _state, pairs,
@@ -294,6 +301,12 @@ def setup(frame: Any, app: Any) -> None:
         w["auto_max_clips_value"].configure(text=str(n))
         app.settings.set("broll_auto_max_clips", n)
 
+    def on_auto_fill_frame_change() -> None:
+        app.settings.set("broll_auto_fill_frame", bool(w["auto_fill_frame"].get()))
+
+    def on_auto_natural_change() -> None:
+        app.settings.set("broll_natural_placement", bool(w["auto_natural_placement"].get()))
+
     def on_auto_run() -> None:
         if _state.get("auto_running"):
             return
@@ -322,6 +335,12 @@ def setup(frame: Any, app: Any) -> None:
         cloud_rerank = False
         clips_per_seg = int(w["auto_clips_per_seg"].get() or 1)
         max_clips = int(round(float(w["auto_max_clips"].get())))
+        fill_frame = bool(w["auto_fill_frame"].get())
+        natural_placement = bool(w["auto_natural_placement"].get())
+        no_start_broll = bool(app.settings.get("broll_no_start_broll", True))
+        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 8.0))
+        min_gap_sec = float(app.settings.get("broll_min_gap_sec", 5.0))
+        max_broll_duration = float(app.settings.get("broll_max_broll_duration", 5.0))
 
         _state["auto_running"] = True
         _ui(lambda: w["auto_run_btn"].configure(state="disabled"))
@@ -336,7 +355,8 @@ def setup(frame: Any, app: Any) -> None:
             target=autonomous_thread,
             args=(w, frame, app, _state, local_folder, providers, dl_folder,
                   cloud_rerank, clips_per_seg, max_clips, _on_progress, set_auto_status, _ui,
-                  llm_director),
+                  llm_director, fill_frame, natural_placement, no_start_broll,
+                  intro_skip_sec, min_gap_sec, max_broll_duration),
             daemon=True,
         ).start()
 
@@ -362,6 +382,8 @@ def setup(frame: Any, app: Any) -> None:
     w["auto_provider"].configure(command=on_auto_provider_change)
     w["auto_clips_per_seg"].configure(command=on_auto_cps_change)
     w["auto_max_clips"].configure(command=on_auto_max_clips_change)
+    w["auto_fill_frame"].configure(command=on_auto_fill_frame_change)
+    w["auto_natural_placement"].configure(command=on_auto_natural_change)
     w["auto_run_btn"].configure(command=on_auto_run)
 
     # Initial state

@@ -74,7 +74,7 @@ def setup(frame: Any, app: Any) -> None:
             w["preview_btn"].configure(state="disabled")
             w["status"].configure(
                 text="Settings changed — click Analyze to update results.",
-                text_color="#ffa726",
+                text_color="#E8903A",
             )
 
     def on_analyze() -> None:

@@ -204,6 +204,26 @@ def _visual_rerank_if_available(
         return candidates
 
 
+# ── Pacing gate ───────────────────────────────────────────────────────────────
+
+def _should_place(
+    seg_start: float,
+    last_placed_end_sec: float,
+    natural_placement: bool,
+    no_start_broll: bool,
+    intro_skip_sec: float,
+    min_gap_sec: float,
+) -> tuple[bool, str]:
+    """Return (True, '') if segment is eligible for B-roll, else (False, reason)."""
+    if not natural_placement:
+        return True, ""
+    if no_start_broll and seg_start < intro_skip_sec:
+        return False, f"intro skip ({seg_start:.1f}s < {intro_skip_sec:.1f}s)"
+    if last_placed_end_sec > 0.0 and (seg_start - last_placed_end_sec) < min_gap_sec:
+        return False, f"gap too small ({seg_start - last_placed_end_sec:.1f}s < {min_gap_sec:.1f}s)"
+    return True, ""
+
+
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
 def run_autonomous(
@@ -216,6 +236,12 @@ def run_autonomous(
     on_progress: Callable[[str, float], None],
     max_clips: int = 10,
     llm_director_mode: bool = False,
+    fill_frame: bool = False,
+    natural_placement: bool = True,
+    no_start_broll: bool = True,
+    intro_skip_sec: float = 8.0,
+    min_gap_sec: float = 5.0,
+    max_broll_duration: float = 5.0,
 ) -> AutonomousResult:
     """Run the full autonomous B-roll pipeline.
 
@@ -227,6 +253,12 @@ def run_autonomous(
         cloud_rerank:      Whether to call cloud LLM for final pick per segment.
         clips_per_segment: How many clips to place per segment (usually 1).
         on_progress:       Callback(msg: str, fraction: float 0-1) for UI updates.
+        fill_frame:        Zoom-crop placed clips to eliminate black bars.
+        natural_placement: Apply pacing rules (intro skip, gap enforcement, duration cap).
+        no_start_broll:    Skip B-roll in the intro window when natural_placement=True.
+        intro_skip_sec:    Seconds at start of video reserved for speaker face.
+        min_gap_sec:       Minimum face-time gap between consecutive B-roll clips.
+        max_broll_duration: Cap on placed clip duration in seconds.
 
     Returns:
         AutonomousResult with per-segment outcomes.
@@ -290,6 +322,9 @@ def run_autonomous(
             candidates=all_clips,
             settings=app.settings,
             max_placements=max_clips,
+            intro_skip_sec=intro_skip_sec,
+            min_gap_sec=min_gap_sec,
+            max_clip_sec=max_broll_duration,
         )
         if not decisions:
             result.warnings.append(llm_err or "LLM director returned no placements.")
@@ -334,13 +369,29 @@ def run_autonomous(
                 result.segments.append(SegmentResult(decision.clip_name, decision.timeline_sec, None))
                 continue
 
-            duration = decision.clip_end_sec - decision.clip_start_sec
+            if natural_placement and no_start_broll and decision.timeline_sec < intro_skip_sec:
+                log.info(
+                    "[autonomous] LLM placement at %.1fs rejected (intro skip %.1fs)",
+                    decision.timeline_sec, intro_skip_sec,
+                )
+                result.skipped_count += 1
+                result.segments.append(SegmentResult(decision.clip_name, decision.timeline_sec, None))
+                continue
+
+            raw_dur = decision.clip_end_sec - decision.clip_start_sec
+            duration = (
+                min(raw_dur, max_broll_duration)
+                if max_broll_duration > 0 and raw_dur > 0
+                else raw_dur
+            )
+            duration = max(duration, 0.0) or match.get("duration_sec", 0.0)
             placer_res = place_clip(
                 app,
                 match["path"],
                 segment_start_sec=decision.timeline_sec,
-                clip_duration_sec=duration if duration > 0 else match.get("duration_sec", 0.0),
+                clip_duration_sec=duration,
                 clip_start_sec=decision.clip_start_sec,
+                fill_frame=fill_frame,
             )
             seg_result = SegmentResult(
                 decision.clip_name, decision.timeline_sec, match,
@@ -374,6 +425,7 @@ def run_autonomous(
 
     # Deduplicate placed clips across segments (don't use same clip twice)
     used_paths: set[str] = set()
+    last_placed_end_sec: float = 0.0
 
     for seg_idx, (seg_text, seg_start) in enumerate(segments):
         progress = 0.65 + (seg_idx / max(len(segments), 1)) * 0.25
@@ -405,18 +457,39 @@ def run_autonomous(
             result.skipped_count += 1
             continue
 
+        # ── Pacing gate ───────────────────────────────────────────────
+        ok, skip_reason = _should_place(
+            seg_start, last_placed_end_sec,
+            natural_placement, no_start_broll, intro_skip_sec, min_gap_sec,
+        )
+        if not ok:
+            log.debug("[autonomous] pacing skip seg %d (%.1fs): %s",
+                      seg_idx + 1, seg_start, skip_reason)
+            result.segments.append(SegmentResult(seg_text, seg_start, None))
+            result.skipped_count += 1
+            continue
+
         used_paths.add(chosen["path"])
 
         # ── 6. Scene boundary alignment ───────────────────────────────
         in_point = _clean_in_point(chosen["path"], 0.0)
 
         # ── 7. Place on B-Roll track ──────────────────────────────────
+        raw_duration = chosen.get("duration_sec", 0.0)
+        placed_duration = (
+            min(raw_duration - in_point, max_broll_duration)
+            if raw_duration > 0 and max_broll_duration > 0
+            else raw_duration
+        )
+        placed_duration = max(placed_duration, 0.0)
+
         placer_res = place_clip(
             app,
             chosen["path"],
             segment_start_sec=seg_start,
-            clip_duration_sec=chosen.get("duration_sec", 0.0),
+            clip_duration_sec=placed_duration,
             clip_start_sec=in_point,
+            fill_frame=fill_frame,
         )
 
         seg_result = SegmentResult(
@@ -428,6 +501,7 @@ def run_autonomous(
 
         if placer_res.placed:
             result.placed_count += 1
+            last_placed_end_sec = seg_start + (placed_duration if placed_duration > 0 else 5.0)
         else:
             result.skipped_count += 1
             result.warnings.append(

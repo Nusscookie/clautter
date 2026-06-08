@@ -43,7 +43,7 @@ def suggest_local_thread(
         _state["clips"] = clips
 
         if not clips:
-            set_status("No video clips found in folder.", "#ffa726")
+            set_status("No video clips found in folder.", "#E8903A")
             _ui(lambda: _set_textbox(w["suggestions"], "No clips found in the selected folder."))
             return
 
@@ -59,7 +59,7 @@ def suggest_local_thread(
             _ui(lambda: _set_textbox(w["suggestions"],
                 "No strong keyword matches found. "
                 "Try clips with more descriptive filenames."))
-            set_status("No matches. Rename clips with descriptive keywords.", "#ffa726")
+            set_status("No matches. Rename clips with descriptive keywords.", "#E8903A")
             return
 
         lines = ["B-ROLL SUGGESTIONS:\n"]
@@ -125,12 +125,12 @@ def search_online_thread(
 
         method = str(app.settings.get("broll_keyword_method", "spacy"))
         hint = " (may download model on first use)" if method in ("keybert", "spacy") else ""
-        set_search_status(f"Extracting keywords via {method}{hint}…", "#4fc3f7")
+        set_search_status(f"Extracting keywords via {method}{hint}…", "#D97757")
         keywords = extract_top_keywords(app.transcript, top_n=top_n, method=method)
         if not keywords:
             set_search_status(
                 "Couldn't extract keywords. Need at least a few non-stopword tokens in the transcript.",
-                "#ffa726",
+                "#E8903A",
             )
             return
 
@@ -170,7 +170,7 @@ def search_online_thread(
             for slot_name, client in list(slots):
                 set_search_status(
                     f"Searching {provider_label} for '{kw}' ({idx}/{len(keywords)})…",
-                    "#4fc3f7",
+                    "#D97757",
                 )
                 try:
                     hits = client.search(kw, per_page=5)
@@ -187,7 +187,7 @@ def search_online_thread(
                     set_search_status(
                         f"{slot_name} rate limit hit. Skipping it; "
                         f"continuing with others.",
-                        "#ffa726",
+                        "#E8903A",
                     )
                     slots = [(n, c) for n, c in slots if n != slot_name]
                     continue
@@ -221,7 +221,7 @@ def search_online_thread(
             msg = "No results for any keyword."
             if errors:
                 msg += f" ({len(errors)} error(s) — check log)"
-            set_search_status(msg, "#ffa726")
+            set_search_status(msg, "#E8903A")
             return
 
         # Store results in state so other code (debug) can inspect
@@ -285,6 +285,12 @@ def autonomous_thread(
     set_auto_status: Callable,
     _ui: Callable,
     llm_director_mode: bool = False,
+    fill_frame: bool = False,
+    natural_placement: bool = True,
+    no_start_broll: bool = True,
+    intro_skip_sec: float = 8.0,
+    min_gap_sec: float = 5.0,
+    max_broll_duration: float = 5.0,
 ) -> None:
     """End-to-end autonomous B-roll pipeline on a daemon thread."""
     from src.broll.autonomous import run_autonomous
@@ -300,6 +306,12 @@ def autonomous_thread(
             on_progress=on_progress,
             max_clips=max_clips,
             llm_director_mode=llm_director_mode,
+            fill_frame=fill_frame,
+            natural_placement=natural_placement,
+            no_start_broll=no_start_broll,
+            intro_skip_sec=intro_skip_sec,
+            min_gap_sec=min_gap_sec,
+            max_broll_duration=max_broll_duration,
         )
 
         if result.warnings:
@@ -312,13 +324,21 @@ def autonomous_thread(
 
         if placed == 0 and total == 0:
             msg = result.warnings[0] if result.warnings else "No segments processed."
-            set_auto_status(msg, "#ffa726")
+            set_auto_status(msg, "#E8903A")
         elif placed == 0:
-            set_auto_status(
-                f"Clips matched but not placed on timeline — check Resolve connection. "
-                f"({skipped} segment(s) skipped)",
-                "#ffa726",
-            )
+            if natural_placement and skipped > 0:
+                set_auto_status(
+                    f"No clips placed — all segments within intro skip or gap window. "
+                    f"Try disabling Natural Placement or shortening the intro skip. "
+                    f"({skipped} segment(s) skipped)",
+                    "#E8903A",
+                )
+            else:
+                set_auto_status(
+                    f"Clips matched but not placed on timeline — check Resolve connection. "
+                    f"({skipped} segment(s) skipped)",
+                    "#E8903A",
+                )
         else:
             set_auto_status(
                 f"Done! {placed}/{total} segment(s) placed on B-Roll track."
@@ -352,7 +372,7 @@ def download_thread(
     from src.broll.providers.base import NetworkError
 
     try:
-        on_status(f"Downloading {clip.title}…", "#4fc3f7")
+        on_status(f"Downloading {clip.title}…", "#D97757")
         downloader = BrollDownloader(Path(target_dir), app)
         result = downloader.download_and_import(clip)
         on_status(

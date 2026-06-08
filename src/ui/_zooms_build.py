@@ -63,7 +63,7 @@ def build(parent: Any) -> None:
     w["zoom_slider"] = ctk.CTkSlider(amount_row, from_=105, to=150, number_of_steps=45)
     w["zoom_slider"].set(115)
     w["zoom_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
-    w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color="#4fc3f7", width=44)
+    w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color="#D97757", width=44)
     w["zoom_lbl"].grid(row=0, column=2)
 
     max_row = ctk.CTkFrame(card, fg_color="transparent")

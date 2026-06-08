@@ -65,7 +65,7 @@ def build(parent: Any) -> None:
 
     w["level_lbl"] = ctk.CTkLabel(info_row, text="5",
                                    font=ctk.CTkFont(size=36, weight="bold"),
-                                   text_color="#4fc3f7", width=56)
+                                   text_color="#D97757", width=56)
     w["level_lbl"].pack(side="left")
 
     desc_frame = ctk.CTkFrame(info_row, fg_color="transparent")
@@ -93,9 +93,9 @@ def build(parent: Any) -> None:
     params_row.pack(fill="x", padx=10, pady=(0, 10))
     params_row.grid_columnconfigure((0, 1), weight=1)
 
-    w["thresh_val"] = _mini_stat(params_row, "Threshold", "-35 dB", "#4fc3f7")
+    w["thresh_val"] = _mini_stat(params_row, "Threshold", "-35 dB", "#D97757")
     w["thresh_val"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["dur_val"] = _mini_stat(params_row, "Min Silence", "350 ms", "#ffa726")
+    w["dur_val"] = _mini_stat(params_row, "Min Silence", "350 ms", "#E8903A")
     w["dur_val"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     est_row = ctk.CTkFrame(parent, fg_color="transparent")
@@ -112,7 +112,7 @@ def build(parent: Any) -> None:
     w["apply_btn"] = ctk.CTkButton(
         parent,
         text="Apply Pace  (runs Smart Cuts with these settings)",
-        fg_color="#1565c0", hover_color="#1976d2",
+        fg_color="#B85F3A", hover_color="#C96A45",
         font=ctk.CTkFont(size=13, weight="bold"),
         height=36,
     )

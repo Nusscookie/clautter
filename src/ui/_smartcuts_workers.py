@@ -71,7 +71,7 @@ def analyze_thread(
             except RuntimeError as e:
                 if silence_method == "vad" and not _vad_fallback_warned:
                     _vad_fallback_warned = True
-                    set_status("Silero VAD unavailable — falling back to pydub RMS", "#ffa726")
+                    set_status("Silero VAD unavailable — falling back to pydub RMS", "#E8903A")
                     silence_method = "rms"
                     state["silence_method"] = "rms"
                 try:
@@ -110,7 +110,7 @@ def analyze_thread(
             set_btn("apply_btn", True)
             set_btn("preview_btn", True)
         else:
-            set_status("No significant silences found. Try lowering the threshold.", "#ffa726")
+            set_status("No significant silences found. Try lowering the threshold.", "#E8903A")
         set_progress(0, False)
 
     except Exception as e:

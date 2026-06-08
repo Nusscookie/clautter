@@ -5,6 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 from src.ui import (
     dashboard_tab, smartcuts_tab,
@@ -49,26 +50,7 @@ class MainWindow:
         root.resizable(True, True)
         root.configure(fg_color="#141414")
 
-        try:
-            import sys, tempfile
-            from PIL import Image, ImageTk
-            from pathlib import Path
-            _icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.png"
-            if _icon_path.exists():
-                img = Image.open(str(_icon_path)).convert("RGBA")
-                # Set both iconphoto (title bar, macOS, Linux) and iconbitmap
-                # (Windows taskbar). Tk on Windows needs an .ico file with
-                # multi-res for the taskbar to pick it up.
-                self._icon_img = ImageTk.PhotoImage(img)
-                root.iconphoto(False, self._icon_img)
-                if sys.platform == "win32":
-                    _tmp = Path(tempfile.gettempdir()) / "clutter_icon.ico"
-                    # NEAREST keeps pixel art crisp. Single 256px frame — Windows
-                    # downscales for taskbar without blurring.
-                    img.resize((256, 256), Image.NEAREST).save(str(_tmp), format="ICO")
-                    root.iconbitmap(str(_tmp))
-        except Exception as _e:
-            log.debug("Icon load failed: %s", _e)
+        apply_clutter_icon(root)
 
         # ── Top bar ──
         top = ctk.CTkFrame(root, height=38, fg_color="#1a1a1a", corner_radius=0)
@@ -78,7 +60,7 @@ class MainWindow:
         ctk.CTkLabel(
             top, text="Clutter",
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#4fc3f7",
+            text_color="#D97757",
         ).pack(side="left", padx=(14, 6), pady=6)
 
         ctk.CTkLabel(
@@ -106,14 +88,14 @@ class MainWindow:
         # ── Project-wide BETA banner ──
         # Single source of truth for "this build is not finished".
         self._beta_banner = ctk.CTkFrame(
-            root, height=26, fg_color="#1a1200", corner_radius=0)
+            root, height=26, fg_color="#1A0E00", corner_radius=0)
         self._beta_banner.pack(fill="x", side="top", after=top)
         self._beta_banner.pack_propagate(False)
         ctk.CTkLabel(
             self._beta_banner,
             text="⚠  BETA / ALPHA — Clutter is in active development. Expect rough edges.",
             font=ctk.CTkFont(size=11),
-            text_color="#ff8f00",
+            text_color="#E8903A",
             anchor="w",
         ).pack(side="left", padx=12)
 

@@ -217,12 +217,12 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
 
     w["auto_max_clips_value"] = ctk.CTkLabel(
         max_clips_row, text="10",
-        font=ctk.CTkFont(size=11), text_color="#4fc3f7", width=28, anchor="e")
+        font=ctk.CTkFont(size=11), text_color="#D97757", width=28, anchor="e")
     w["auto_max_clips_value"].grid(row=0, column=2, padx=(6, 0))
 
     w["auto_max_clips"] = ctk.CTkSlider(
         max_clips_row, from_=1, to=30, number_of_steps=29,
-        progress_color="#4fc3f7",
+        progress_color="#D97757",
     )
     w["auto_max_clips"].set(10)
     w["auto_max_clips"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
@@ -253,6 +253,33 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
 
     _divider(card)
 
+    # Fill frame + Natural placement checkboxes
+    placement_row = ctk.CTkFrame(card, fg_color="transparent")
+    placement_row.pack(fill="x", padx=10, pady=(4, 2))
+
+    w["auto_fill_frame"] = ctk.CTkCheckBox(
+        placement_row,
+        text="Fill Frame (no black bars)",
+        font=ctk.CTkFont(size=11),
+        checkbox_width=16, checkbox_height=16,
+    )
+    w["auto_fill_frame"].pack(side="left", padx=(0, 16))
+
+    w["auto_natural_placement"] = ctk.CTkCheckBox(
+        placement_row,
+        text="Natural Placement (skip intro, space clips)",
+        font=ctk.CTkFont(size=11),
+        checkbox_width=16, checkbox_height=16,
+    )
+    w["auto_natural_placement"].pack(side="left")
+
+    ctk.CTkLabel(
+        card,
+        text="Fill Frame: zoom-crops clips to fill frame.  "
+             "Natural Placement: skips first 8s, enforces 5s gaps between clips, caps each clip at 5s.",
+        font=ctk.CTkFont(size=10), text_color="#555555", anchor="w", wraplength=760,
+    ).pack(fill="x", padx=10, pady=(0, 6))
+
     # Run button
     w["auto_run_btn"] = ctk.CTkButton(
         card,
@@ -268,7 +295,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_progress_frame"] = ctk.CTkFrame(card, fg_color="transparent")
     w["auto_progress_frame"].pack(fill="x", padx=10, pady=(0, 2))
     w["auto_progress"] = ctk.CTkProgressBar(w["auto_progress_frame"], height=6,
-                                              progress_color="#4fc3f7")
+                                              progress_color="#D97757")
     w["auto_progress"].set(0)
 
     w["auto_status"] = ctk.CTkLabel(
@@ -349,12 +376,12 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
 
     w["top_n_value"] = ctk.CTkLabel(topn_row, text="10",
                                      font=ctk.CTkFont(size=11),
-                                     text_color="#4fc3f7", width=24, anchor="e")
+                                     text_color="#D97757", width=24, anchor="e")
     w["top_n_value"].grid(row=0, column=2, padx=(6, 0))
 
     w["top_n_slider"] = ctk.CTkSlider(
         topn_row, from_=5, to=15, number_of_steps=10,
-        progress_color="#4fc3f7",
+        progress_color="#D97757",
     )
     w["top_n_slider"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
 

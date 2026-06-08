@@ -9,6 +9,7 @@
 #   ffmpeg — https://ffmpeg.org/download.html
 #   Add ffmpeg to your system PATH after installation.
 
+pydantic>=2.0.0     # Typed settings models, validation, JSON round-trip
 pydub>=0.25.1       # Audio loading and silence detection
 requests>=2.31.0    # ElevenLabs API HTTP calls
 numpy>=1.26.0       # RMS audio analysis for zoom detection

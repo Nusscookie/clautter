@@ -78,6 +78,35 @@ def _sec_to_frame(sec: float, fps: float) -> int:
     return max(0, int(round(sec * fps)))
 
 
+def _apply_fill_frame(timeline_item: Any, mpi: Any, project: Any) -> None:
+    """Zoom-crop clip to fill the timeline frame with no black bars (CSS cover math).
+
+    Silently skips if resolution data is unavailable.
+    """
+    try:
+        tl_w = int(project.GetSetting("timelineResolutionWidth") or 1920)
+        tl_h = int(project.GetSetting("timelineResolutionHeight") or 1080)
+        props = mpi.GetClipProperty() or {}
+        res_str = props.get("Resolution", "")
+        if not res_str or "x" not in res_str:
+            log.debug("[placer] fill_frame: no Resolution property — skipping")
+            return
+        parts = res_str.lower().split("x")
+        clip_w, clip_h = int(parts[0].strip()), int(parts[1].strip())
+        if clip_w == 0 or clip_h == 0:
+            return
+        if abs((tl_w / tl_h) - (clip_w / clip_h)) < 0.01:
+            return
+        # scale so neither dimension falls short of the frame
+        zoom = max(tl_w / clip_w, tl_h / clip_h)
+        timeline_item.SetProperty("ZoomX", zoom)
+        timeline_item.SetProperty("ZoomY", zoom)
+        timeline_item.SetProperty("ZoomGang", True)
+        log.debug("[placer] fill_frame: %dx%d → %dx%d zoom=%.4f", clip_w, clip_h, tl_w, tl_h, zoom)
+    except Exception as e:
+        log.warning("[placer] fill_frame failed (non-fatal): %s", e)
+
+
 def place_clip(
     app: Any,
     clip_path: str,
@@ -85,6 +114,7 @@ def place_clip(
     clip_duration_sec: float = 0.0,
     clip_start_sec: float = 0.0,
     track_index: int | None = None,
+    fill_frame: bool = False,
 ) -> PlacerResult:
     """Place *clip_path* on the B-Roll track at *segment_start_sec*.
 
@@ -98,6 +128,7 @@ def place_clip(
         clip_duration_sec:   Duration to use from clip; 0 = full clip.
         clip_start_sec:      In-point offset within the clip (seconds).
         track_index:         Explicit 1-based track index. None = auto-find/create.
+        fill_frame:          Zoom-crop to eliminate black bars on aspect mismatch.
 
     Returns:
         PlacerResult with placed=True on success.
@@ -174,6 +205,8 @@ def place_clip(
         log.debug("[placer] AppendToTimeline raw result: %r", placed)
         if placed:
             log.info("[placer] placed %s on track %d at %.1fs", clip_name, resolved_track, segment_start_sec)
+            if fill_frame and isinstance(placed, (list, tuple)) and placed:
+                _apply_fill_frame(placed[0], mpi, project)
             return PlacerResult(clip_path, segment_start_sec, True)
         log.warning(
             "[placer] AppendToTimeline returned empty for %s "

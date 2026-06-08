@@ -16,6 +16,7 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 from src.broll.providers.base import ClipResult
+from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -35,6 +36,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
         ui: Callable,
     ) -> None:
         super().__init__(master)
+        apply_clutter_icon(self)
 
         self._app = app
         self._set_status = set_status
@@ -91,7 +93,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
             text=f"B-Roll Results  —  {len(results_by_keyword)} keyword(s)  ·  "
                  f"{sum(len(v) for v in results_by_keyword.values())} clip(s)",
             font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#4fc3f7", anchor="w",
+            text_color="#D97757", anchor="w",
         ).pack(side="left", padx=14, pady=12)
 
         ctk.CTkLabel(
@@ -157,7 +159,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
             top, text=clip.source.upper(),
             font=ctk.CTkFont(size=9, weight="bold"),
             text_color="#141414",
-            fg_color="#4fc3f7" if clip.source == "pixabay" else "#ffa726",
+            fg_color="#A85A3E" if clip.source == "pixabay" else "#E8903A",
             corner_radius=3, width=64,
         ).grid(row=0, column=0, padx=(0, 8), sticky="w", ipady=2)
 
@@ -239,7 +241,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
 
         def on_download(clip=clip, btn=download_btn, lbl=status_lbl) -> None:
             btn.configure(state="disabled", text="Downloading…")
-            lbl.configure(text="Starting download…", text_color="#4fc3f7")
+            lbl.configure(text="Starting download…", text_color="#D97757")
 
             def per_card_status(msg: str, color: str) -> None:
                 self._ui(lambda m=msg, c=color: lbl.configure(text=m, text_color=c))
@@ -248,7 +250,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
                 from src.broll.downloader import BrollDownloader
                 from src.broll.providers.base import NetworkError
                 try:
-                    per_card_status(f"Downloading {clip.title}…", "#4fc3f7")
+                    per_card_status(f"Downloading {clip.title}…", "#D97757")
                     downloader = BrollDownloader(self._target_dir, self._app)
                     result = downloader.download_and_import(clip)
                     name = Path(result["path"]).name

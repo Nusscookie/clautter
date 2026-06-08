@@ -44,7 +44,7 @@ def build(parent: Any) -> None:
 
     w["pace_level_lbl"] = ctk.CTkLabel(info_row, text="5",
                                         font=ctk.CTkFont(size=22, weight="bold"),
-                                        text_color="#4fc3f7", width=36, anchor="w")
+                                        text_color="#D97757", width=36, anchor="w")
     w["pace_level_lbl"].pack(side="left")
 
     desc_col = ctk.CTkFrame(info_row, fg_color="transparent")
@@ -126,7 +126,7 @@ def build(parent: Any) -> None:
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
     w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Cuts",
-                                    fg_color="#1565c0", hover_color="#1976d2",
+                                    fg_color="#B85F3A", hover_color="#C96A45",
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
@@ -153,11 +153,11 @@ def build(parent: Any) -> None:
     results_row.pack(fill="x", padx=10, pady=2)
     results_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["found_count"] = _stat_card(results_row, "Silences Found", "0", "#4fc3f7")
+    w["found_count"] = _stat_card(results_row, "Silences Found", "0", "#D97757")
     w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
     w["time_saved"] = _stat_card(results_row, "Estimated Time Saved", "0.0 s", "#66bb6a")
     w["time_saved"].grid(row=0, column=1, padx=4, sticky="ew")
-    w["clips_count"] = _stat_card(results_row, "Clips Analyzed", "0", "#ffa726")
+    w["clips_count"] = _stat_card(results_row, "Clips Analyzed", "0", "#D97757")
     w["clips_count"].grid(row=0, column=2, padx=(4, 0), sticky="ew")
 
     w["new_timeline_lbl"] = ctk.CTkLabel(

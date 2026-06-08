@@ -59,7 +59,7 @@ def build_provider_slot(parent: Any, w: dict) -> None:
     w["whisper_model"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
     w["whisper_device_label"] = ctk.CTkLabel(whisper_row, text="CPU",
                                               font=ctk.CTkFont(size=10),
-                                              text_color="#4fc3f7", width=40, anchor="e")
+                                              text_color="#D97757", width=40, anchor="e")
     w["whisper_device_label"].grid(row=0, column=2, sticky="e")
 
     ctk.CTkLabel(
@@ -88,7 +88,7 @@ def build_style_controls(parent: Any, w: dict) -> None:
     w["wpl_slider"].set(7)
     w["wpl_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
     w["wpl_label"] = ctk.CTkLabel(wpl_row, text="7",
-                                   font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                   font=ctk.CTkFont(size=11), text_color="#D97757",
                                    width=24, anchor="e")
     w["wpl_label"].grid(row=0, column=2, sticky="e")
 
@@ -102,7 +102,7 @@ def build_style_controls(parent: Any, w: dict) -> None:
     w["lpb_slider"].set(2)
     w["lpb_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
     w["lpb_label"] = ctk.CTkLabel(lpb_row, text="2",
-                                   font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                   font=ctk.CTkFont(size=11), text_color="#D97757",
                                    width=24, anchor="e")
     w["lpb_label"].grid(row=0, column=2, sticky="e")
 
@@ -155,7 +155,7 @@ def build_text_style_card(parent: Any, w: dict) -> None:
     w["font_size_slider"].set(36)
     w["font_size_slider"].grid(row=0, column=3, padx=(0, 6))
     w["font_size_lbl"] = ctk.CTkLabel(font_row, text="36",
-                                       font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                       font=ctk.CTkFont(size=11), text_color="#D97757",
                                        width=28, anchor="w")
     w["font_size_lbl"].grid(row=0, column=4)
 
@@ -176,7 +176,7 @@ def build_text_style_card(parent: Any, w: dict) -> None:
     w["vpos_slider"].set(-90)
     w["vpos_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
     w["vpos_lbl"] = ctk.CTkLabel(vpos_row, text="-90%",
-                                  font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+                                  font=ctk.CTkFont(size=11), text_color="#D97757",
                                   width=40, anchor="e")
     w["vpos_lbl"].grid(row=0, column=2, sticky="e")
 
@@ -211,7 +211,7 @@ def build_text_style_card(parent: Any, w: dict) -> None:
     w["outline_width_slider"].set(3)
     w["outline_width_slider"].pack(side="left", padx=(0, 6))
     w["outline_width_lbl"] = ctk.CTkLabel(
-        color_row, text="3", font=ctk.CTkFont(size=11), text_color="#4fc3f7",
+        color_row, text="3", font=ctk.CTkFont(size=11), text_color="#D97757",
         width=20, anchor="w")
     w["outline_width_lbl"].pack(side="left")
 

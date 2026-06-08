@@ -29,8 +29,8 @@ def build(parent: Any) -> None:
         text="⚠  BETA — V1 provides suggestions only. "
              "Full AI-generated graphics coming in a future update.",
         font=ctk.CTkFont(size=11),
-        text_color="#ff8f00",
-        fg_color="#1a1200",
+        text_color="#E8903A",
+        fg_color="#1A0E00",
         corner_radius=4,
         anchor="w",
     ).pack(fill="x", padx=10, pady=4, ipady=6, ipadx=8)
@@ -77,7 +77,7 @@ def build(parent: Any) -> None:
     )
 
     # ── Future integrations ──
-    future_card = ctk.CTkFrame(parent, fg_color="#1a1a2e", corner_radius=6)
+    future_card = ctk.CTkFrame(parent, fg_color="#1A0E00", corner_radius=6)
     future_card.pack(fill="x", padx=10, pady=(0, 12))
 
     ctk.CTkLabel(future_card, text="FUTURE AI INTEGRATIONS  (not yet active)",

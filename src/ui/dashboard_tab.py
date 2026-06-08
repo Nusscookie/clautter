@@ -42,18 +42,18 @@ def build(parent: Any) -> None:
     row1.pack(fill="x", padx=10, pady=2)
     row1.grid_columnconfigure((0, 1), weight=1)
 
-    w["time_saved"] = _stat_card(row1, "Time Saved", "0.0 s", "#4fc3f7")
+    w["time_saved"] = _stat_card(row1, "Time Saved", "0.0 s", "#D97757")
     w["time_saved"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["total_edits"] = _stat_card(row1, "Total Edits", "0", "#4fc3f7")
+    w["total_edits"] = _stat_card(row1, "Total Edits", "0", "#D97757")
     w["total_edits"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     row2 = ctk.CTkFrame(parent, fg_color="transparent")
     row2.pack(fill="x", padx=10, pady=2)
     row2.grid_columnconfigure((0, 1), weight=1)
 
-    w["zooms"] = _stat_card(row2, "Zooms Applied", "0", "#4fc3f7")
+    w["zooms"] = _stat_card(row2, "Zooms Applied", "0", "#D97757")
     w["zooms"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["subs"] = _stat_card(row2, "Subtitles Generated", "0", "#4fc3f7")
+    w["subs"] = _stat_card(row2, "Subtitles Generated", "0", "#D97757")
     w["subs"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     _divider(parent)

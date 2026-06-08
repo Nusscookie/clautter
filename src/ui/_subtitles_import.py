@@ -46,7 +46,7 @@ def import_style_thread(
         if not item:
             set_status(
                 "No Fusion Title clip found. Move playhead over a subtitle clip and try again.",
-                "#ffa726",
+                "#E8903A",
             )
             return
 
@@ -55,7 +55,7 @@ def import_style_thread(
         except Exception:
             comp_count = 0
         if not comp_count:
-            set_status("Selected clip has no Fusion composition.", "#ffa726")
+            set_status("Selected clip has no Fusion composition.", "#E8903A")
             return
 
         comp = item.GetFusionCompByIndex(1)
@@ -63,7 +63,7 @@ def import_style_thread(
         if not text_tool:
             set_status(
                 "No Text+ tool in selected clip. Select a Fusion Title or Text+ generator.",
-                "#ffa726",
+                "#E8903A",
             )
             return
 
@@ -129,7 +129,7 @@ def import_style_thread(
             except Exception as _e:
                 log.debug("GetInputList failed: %s", _e)
             set_status(
-                "Could not read style from clip. Check log for available inputs.", "#ffa726")
+                "Could not read style from clip. Check log for available inputs.", "#E8903A")
             return
 
         log.info("Imported style from Resolve clip: %s", style)

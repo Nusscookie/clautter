@@ -71,7 +71,7 @@ def create_track_thread(
                     )
                     set_status(
                         f"Word count changed ({len(_orig_words)}→{len(_tokens)}) — timing approximated.",
-                        "#ffa726",
+                        "#E8903A",
                     )
                 else:
                     _words_src = state["words"]
@@ -130,7 +130,7 @@ def create_track_thread(
         else:
             set_status(
                 "Could not auto-import. Drag SRT from Media Pool to the subtitle track.",
-                "#ffa726",
+                "#E8903A",
             )
     except Exception as e:
         log.error("Create track error: %s", e)

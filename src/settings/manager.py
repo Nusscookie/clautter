@@ -1,9 +1,12 @@
-"""JSON-backed settings persistence for Clutter."""
+"""JSON-backed settings persistence for Clutter — typed via Pydantic v2."""
 
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from src.utils.logger import get_logger
 
@@ -12,117 +15,203 @@ log = get_logger(__name__)
 _CONFIG_DIR = Path.home() / ".clutter"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
 
-_DEFAULTS: dict[str, Any] = {
-    "elevenlabs_api_key": "",
-    "default_silence_threshold_db": -35,
-    "default_min_silence_ms": 350,
-    "default_padding_ms": 120,
-    "default_zoom_amount": 1.15,
-    "default_zoom_mode": "Standard",
-    "default_max_zooms_per_minute": 4,
-    "default_pace": 5,
-    "subtitle_language": "en",
-    "subtitle_preset": "YouTube",
-    "last_broll_folder": "",
-    "pixabay_api_key": "",
-    "pexels_api_key": "",
-    "broll_provider": "Both",
-    "broll_top_n": 10,
-    "broll_use_mock": False,
-    "broll_mode": "Manual",
-    "broll_auto_use_local": True,
-    "broll_auto_use_online": True,
-    "broll_auto_cloud_rerank": False,
-    "broll_auto_clips_per_segment": 1,
-    "broll_auto_max_clips": 10,
-    "broll_auto_provider": "Both",
-    "broll_auto_dl_folder": "",
-    "openai_api_key": "",
-    "gemini_api_key": "",
-    "minimax_api_key": "",
-    "active_subtitle_style": "Open Sans Semibold",
-    "subtitle_style_presets": {
-        "Open Sans Semibold": {"font_family": "Open Sans", "font_style": "Semibold", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 0, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
-        "YouTube":            {"font_family": "Open Sans", "font_style": None,       "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 3, "shadow": 1, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
-        "TikTok Bold":        {"font_family": "Open Sans", "font_style": None,       "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 4, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
-        "Minimal":            {"font_family": "Open Sans", "font_style": None,       "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 1, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
-    },
-    "stats": {
-        "total_time_saved_sec": 0.0,
-        "total_edits": 0,
-        "total_zooms_applied": 0,
-        "total_subtitles_generated": 0,
-    },
+
+# ---------------------------------------------------------------------------
+# Nested models
+# ---------------------------------------------------------------------------
+
+class SubtitleStylePreset(BaseModel):
+    font_family: str = "Open Sans"
+    font_style: str | None = None
+    font_size: int = 32
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    primary_color: str = "#FFFFFF"
+    outline_enabled: bool = False
+    outline_color: str = "#000000"
+    outline_width: int = 0
+    shadow: int = 0
+    vertical_align: int = 3
+    horizontal_align: int = 3
+    vertical_position: int = -90
+
+
+class StatsModel(BaseModel):
+    total_time_saved_sec: float = 0.0
+    total_edits: int = 0
+    total_zooms_applied: int = 0
+    total_subtitles_generated: int = 0
+
+
+_DEFAULT_STYLE_PRESETS: dict[str, dict[str, Any]] = {
+    "Open Sans Semibold": {"font_family": "Open Sans", "font_style": "Semibold", "font_size": 32, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 0, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+    "YouTube":            {"font_family": "Open Sans", "font_style": None,       "font_size": 36, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 3, "shadow": 1, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+    "TikTok Bold":        {"font_family": "Open Sans", "font_style": None,       "font_size": 48, "bold": True,  "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": True,  "outline_color": "#000000", "outline_width": 4, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
+    "Minimal":            {"font_family": "Open Sans", "font_style": None,       "font_size": 28, "bold": False, "italic": False, "underline": False, "primary_color": "#FFFFFF", "outline_enabled": False, "outline_color": "#000000", "outline_width": 1, "shadow": 0, "vertical_align": 3, "horizontal_align": 3, "vertical_position": -90},
 }
 
 
+# ---------------------------------------------------------------------------
+# Root settings model
+# ---------------------------------------------------------------------------
+
+class ClutterSettings(BaseModel):
+    # API keys
+    elevenlabs_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    minimax_api_key: str = ""
+    pixabay_api_key: str = ""
+    pexels_api_key: str = ""
+
+    # Smart Cuts
+    default_silence_threshold_db: float = -35.0
+    default_min_silence_ms: int = 350
+    default_padding_ms: int = 120
+    smartcuts_silence_method: str = "RMS"
+    smartcuts_retake_method: str = "None"
+
+    # Pace
+    default_pace: int = 5
+
+    # Zooms
+    default_zoom_amount: float = 1.15
+    default_zoom_mode: str = "Standard"
+    default_max_zooms_per_minute: int = 4
+
+    # Subtitles
+    subtitle_language: str = "en"
+    subtitle_preset: str = "YouTube"
+    stt_provider: str = "ElevenLabs"
+    whisper_model: str = "base"
+    active_subtitle_style: str = "Open Sans Semibold"
+    subtitle_style_presets: dict[str, SubtitleStylePreset] = Field(
+        default_factory=lambda: {
+            name: SubtitleStylePreset(**data)
+            for name, data in _DEFAULT_STYLE_PRESETS.items()
+        }
+    )
+
+    # B-Roll
+    last_broll_folder: str = ""
+    broll_provider: str = "Both"
+    broll_top_n: int = 10
+    broll_use_mock: bool = False
+    broll_mode: str = "Manual"
+    broll_auto_use_local: bool = True
+    broll_auto_use_online: bool = True
+    broll_auto_cloud_rerank: bool = False
+    broll_auto_clips_per_segment: int = 1
+    broll_auto_max_clips: int = 10
+    broll_auto_provider: str = "Both"
+    broll_auto_dl_folder: str = ""
+    broll_llm_mode: str = "Auto"
+    broll_keyword_method: str = "YAKE"
+    # Natural placement
+    broll_natural_placement: bool = True
+    broll_no_start_broll: bool = True
+    broll_intro_skip_sec: float = 8.0
+    broll_min_gap_sec: float = 5.0
+    broll_max_broll_duration: float = 5.0
+    # Fill frame
+    broll_auto_fill_frame: bool = False
+
+    # LLM model config
+    llm_openai_model: str = "gpt-4o-mini"
+    llm_gemini_model: str = "gemini-2.0-flash"
+    llm_minimax_model: str = "MiniMax-Text-01"
+    llm_max_tokens: int = 1500
+    llm_temperature: float = 0.1
+
+    # Stats
+    stats: StatsModel = Field(default_factory=StatsModel)
+
+    @field_validator("subtitle_style_presets", mode="before")
+    @classmethod
+    def _coerce_style_presets(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            merged: dict[str, Any] = {}
+            for name, data in _DEFAULT_STYLE_PRESETS.items():
+                merged[name] = data
+            for name, data in v.items():
+                if isinstance(data, dict):
+                    merged[name] = data
+                elif isinstance(data, SubtitleStylePreset):
+                    merged[name] = data.model_dump()
+            return merged
+        return v
+
+    model_config = {"extra": "allow"}
+
+
+# ---------------------------------------------------------------------------
+# Manager
+# ---------------------------------------------------------------------------
+
 class SettingsManager:
-    """Load and persist plugin settings as JSON."""
+    """Load and persist plugin settings as JSON, backed by ClutterSettings."""
 
     def __init__(self, path: Path = _CONFIG_FILE) -> None:
         self._path = path
-        self._data: dict[str, Any] = {}
+        self._model: ClutterSettings = ClutterSettings()
         self.load()
 
     # ------------------------------------------------------------------
-    # Public interface
+    # Public interface (unchanged shape — all callers work without edits)
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Load settings from disk, filling in defaults for missing keys."""
         _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         if self._path.exists():
             try:
                 with open(self._path, "r", encoding="utf-8") as f:
-                    loaded: dict[str, Any] = json.load(f)
-                self._data = {**_DEFAULTS, **loaded}
-                # Deep merge nested dicts so built-in entries survive config updates
-                self._data["stats"] = {**_DEFAULTS["stats"], **loaded.get("stats", {})}
-                self._data["subtitle_style_presets"] = {
-                    **_DEFAULTS["subtitle_style_presets"],
-                    **loaded.get("subtitle_style_presets", {}),
-                }
+                    raw: dict[str, Any] = json.load(f)
+                self._model = ClutterSettings.model_validate(raw)
                 log.debug("Settings loaded from %s", self._path)
             except Exception as e:
                 log.error("Failed to load settings (%s) — using defaults", e)
-                self._data = dict(_DEFAULTS)
+                self._model = ClutterSettings()
         else:
-            self._data = dict(_DEFAULTS)
-            self.save()  # create file with defaults
+            self._model = ClutterSettings()
+            self.save()
 
     def save(self) -> None:
-        """Persist current settings to disk."""
         try:
             _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, indent=2)
+                json.dump(self._model.model_dump(), f, indent=2)
         except Exception as e:
             log.error("Failed to save settings: %s", e)
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._data.get(key, default)
+        return self._model.model_dump().get(key, default)
 
     def set(self, key: str, value: Any) -> None:
-        self._data[key] = value
+        # model_dump → merge → re-validate keeps validation intact
+        data = self._model.model_dump()
+        data[key] = value
+        self._model = ClutterSettings.model_validate(data)
         self.save()
 
     def add_stat(self, stat_key: str, amount: float = 1.0) -> None:
-        """Increment a stats counter and persist."""
-        stats = self._data.setdefault("stats", {})
-        stats[stat_key] = stats.get(stat_key, 0) + amount
+        current = getattr(self._model.stats, stat_key, 0)
+        setattr(self._model.stats, stat_key, current + amount)
         self.save()
 
     @property
     def stats(self) -> dict[str, Any]:
-        return self._data.get("stats", {})
+        return self._model.stats.model_dump()
 
     def get_style_presets(self) -> dict[str, Any]:
-        """Return a shallow copy of all subtitle style presets."""
-        return dict(self._data.get("subtitle_style_presets", {}))
+        return {
+            name: (preset.model_dump() if isinstance(preset, SubtitleStylePreset) else preset)
+            for name, preset in self._model.subtitle_style_presets.items()
+        }
 
     @property
     def api_key(self) -> str:
-        return self._data.get("elevenlabs_api_key", "")
+        return self._model.elevenlabs_api_key
 
     @api_key.setter
     def api_key(self, value: str) -> None:

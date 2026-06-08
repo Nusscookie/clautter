@@ -25,7 +25,7 @@ log = get_logger(__name__)
 _OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
-_TIMEOUT = 45
+_TIMEOUT = 90
 
 # Returned when no API key is configured — caller can show a specific message
 NO_KEY_SENTINEL = "__no_key__"
@@ -46,6 +46,10 @@ def _build_prompt(
     keywords: list[str],
     candidates: list[dict],
     max_placements: int,
+    total_duration_sec: float = 0.0,
+    intro_skip_sec: float = 8.0,
+    min_gap_sec: float = 5.0,
+    max_clip_sec: float = 6.0,
 ) -> str:
     seg_lines = "\n".join(
         f"  [{i+1}] {start:.1f}s — \"{text[:150]}\""
@@ -59,9 +63,11 @@ def _build_prompt(
         for i, c in enumerate(candidates)
     )
     kw_line = ", ".join(keywords) if keywords else "(none extracted)"
+    duration_line = f"\nTOTAL VIDEO DURATION: {total_duration_sec:.1f}s\n" if total_duration_sec > 0 else ""
     return (
         "You are an expert video editor placing B-roll footage over a talking-head video.\n\n"
-        f"TRANSCRIPT (full):\n\"{transcript_text[:3000]}\"\n\n"
+        f"TRANSCRIPT (full):\n\"{transcript_text[:3000]}\"\n"
+        f"{duration_line}\n"
         f"KEY TOPICS FROM TRANSCRIPT: {kw_line}\n\n"
         "TRANSCRIPT SEGMENTS (index, start_time_seconds, spoken text):\n"
         f"{seg_lines}\n\n"
@@ -73,12 +79,16 @@ def _build_prompt(
         "  - timeline_sec: start time on the main timeline in seconds "
         "(use a value from the segment list above)\n"
         "  - clip_start_sec: in-point within the clip (0.0 to duration)\n"
-        "  - clip_end_sec: out-point within the clip (clip_start_sec + 2 to 8 seconds, <= duration)\n\n"
+        f"  - clip_end_sec: out-point within the clip (clip_start_sec + 2 to {max_clip_sec:.0f}s, <= duration)\n\n"
         "Rules:\n"
         "  - Use each clip at most once.\n"
         "  - Match clip content to what is being said at that moment.\n"
         "  - Prefer clips whose keywords overlap with the transcript topics.\n"
-        "  - Only use clips from the list above — no invented names.\n\n"
+        "  - Only use clips from the list above — no invented names.\n"
+        f"  - Do NOT place any B-roll in the first {intro_skip_sec:.0f} seconds "
+        "(the speaker's face must be visible at the start).\n"
+        f"  - Leave at least {min_gap_sec:.0f} seconds of face time between consecutive B-roll clips.\n"
+        "  - Do not cover more than 40% of the total video with B-roll.\n\n"
         "Respond with ONLY a valid JSON array, nothing else:\n"
         "[\n"
         "  {\"clip_name\": \"exact_name.mp4\", \"timeline_sec\": 5.2, "
@@ -90,20 +100,33 @@ def _build_prompt(
 
 def _extract_json(text: str) -> list[dict]:
     """Extract JSON array from LLM response, tolerating markdown fences, think blocks, trailing text."""
-    text = text.strip()
-    # Strip <think>...</think> reasoning blocks (Minimax M2.5+ emits these)
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    # Strip all markdown code fences (``` or ```json)
-    text = re.sub(r"```(?:json)?", "", text)
-    text = text.strip()
-    start = text.find("[")
-    if start == -1:
-        raise ValueError(f"no JSON array found in LLM response (first 200 chars): {text[:200]!r}")
-    # raw_decode stops at end of first valid JSON value, ignores trailing text
-    obj, _ = json.JSONDecoder().raw_decode(text, start)
-    if not isinstance(obj, list):
-        raise ValueError(f"LLM returned JSON but not an array: {type(obj)}")
-    return obj
+    original = text.strip()
+
+    # Try stripping <think> blocks first; if JSON is outside, use that
+    stripped = re.sub(r"<think>.*?</think>", "", original, flags=re.DOTALL).strip()
+    stripped = re.sub(r"```(?:json)?", "", stripped).strip()
+
+    # If JSON not found outside think block, search inside it as fallback
+    # (M2.5 sometimes puts the answer inside <think> when temperature=0)
+    think_match = re.search(r"<think>(.*?)</think>", original, flags=re.DOTALL)
+    candidates = [stripped]
+    if think_match:
+        inner = re.sub(r"```(?:json)?", "", think_match.group(1)).strip()
+        candidates.append(inner)
+
+    for text in candidates:
+        start = text.find("[")
+        if start == -1:
+            continue
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text, start)
+            if isinstance(obj, list):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    log.warning("[llm_director] full LLM reply (no JSON found): %r", original[:500])
+    raise ValueError(f"no JSON array found in LLM response (first 200 chars): {original[:200]!r}")
 
 
 def _parse_decisions(raw: list[dict]) -> list[PlacementDecision]:
@@ -132,13 +155,13 @@ def _parse_decisions(raw: list[dict]) -> list[PlacementDecision]:
     return decisions
 
 
-def _call_openai(prompt: str, api_key: str) -> str:
+def _call_openai(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
     import requests
     payload = {
-        "model": "gpt-4o-mini",
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1500,
-        "temperature": 0,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
     }
     resp = requests.post(
         _OPENAI_URL,
@@ -150,11 +173,15 @@ def _call_openai(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def _call_gemini(prompt: str, api_key: str) -> str:
+def _call_gemini(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
     import requests
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    url = _GEMINI_URL.replace("gemini-2.0-flash", model)
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+    }
     resp = requests.post(
-        f"{_GEMINI_URL}?key={api_key}",
+        f"{url}?key={api_key}",
         headers={"Content-Type": "application/json"},
         json=payload,
         timeout=_TIMEOUT,
@@ -164,14 +191,19 @@ def _call_gemini(prompt: str, api_key: str) -> str:
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _call_minimax(prompt: str, api_key: str) -> str:
+def _call_minimax(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
     import requests
     payload = {
-        "model": "MiniMax-M2.5",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": 1500,
-        "temperature": 0,
-        "thinking": {"type": "disabled"},
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are an expert video editor. Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
     }
     resp = requests.post(
         _MINIMAX_URL,
@@ -180,7 +212,12 @@ def _call_minimax(prompt: str, api_key: str) -> str:
         timeout=_TIMEOUT,
     )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    data = resp.json()
+    content = data["choices"][0]["message"]["content"]
+    if not content or not content.strip():
+        finish = data["choices"][0].get("finish_reason", "unknown")
+        raise ValueError(f"Minimax returned empty content (finish_reason={finish!r})")
+    return content
 
 
 def direct(
@@ -190,6 +227,9 @@ def direct(
     candidates: list[dict],
     settings: Any,
     max_placements: int = 10,
+    intro_skip_sec: float = 8.0,
+    min_gap_sec: float = 5.0,
+    max_clip_sec: float = 6.0,
 ) -> tuple[list[PlacementDecision], str]:
     """Ask a cloud LLM to produce a full B-roll placement plan.
 
@@ -226,22 +266,37 @@ def direct(
         w["word"] for w in transcript_words if w.get("type") == "word"
     )
 
-    prompt = _build_prompt(transcript_text, segments, keywords, enriched, max_placements)
+    openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
+    gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
+    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
+    max_tokens = int(settings.get("llm_max_tokens", 1500) or 1500)
+    temperature = float(settings.get("llm_temperature", 0.1) or 0.1)
+
+    total_duration_sec = segments[-1][1] + 5.0 if segments else 0.0
+    prompt = _build_prompt(
+        transcript_text, segments, keywords, enriched, max_placements,
+        total_duration_sec=total_duration_sec,
+        intro_skip_sec=intro_skip_sec,
+        min_gap_sec=min_gap_sec,
+        max_clip_sec=max_clip_sec,
+    )
     log.debug("[llm_director] prompt length: %d chars, %d candidates, %d segments",
               len(prompt), len(enriched), len(segments))
 
     try:
         if openai_key:
-            reply = _call_openai(prompt, openai_key)
+            reply = _call_openai(prompt, openai_key, openai_model, max_tokens, temperature)
             source = "OpenAI"
         elif gemini_key:
-            reply = _call_gemini(prompt, gemini_key)
+            reply = _call_gemini(prompt, gemini_key, gemini_model, max_tokens, temperature)
             source = "Gemini"
         else:
-            reply = _call_minimax(prompt, minimax_key)
+            reply = _call_minimax(prompt, minimax_key, minimax_model, max_tokens, temperature)
             source = "Minimax"
 
         log.debug("[llm_director] %s reply (first 600 chars): %s", source, reply[:600])
+        if not reply or not reply.strip():
+            return [], f"{source} returned an empty response. Check your API key and quota."
         raw = _extract_json(reply)
         decisions = _parse_decisions(raw)
         log.info("[llm_director] %s returned %d placement(s)", source, len(decisions))

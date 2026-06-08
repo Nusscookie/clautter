@@ -58,7 +58,7 @@ def build_action_buttons(parent: Any, w: dict) -> None:
     btn_row1.grid_columnconfigure((0, 1), weight=1)
 
     w["generate_btn"] = ctk.CTkButton(btn_row1, text="Generate Transcript",
-                                       fg_color="#1565c0", hover_color="#1976d2",
+                                       fg_color="#B85F3A", hover_color="#C96A45",
                                        font=ctk.CTkFont(weight="bold"))
     w["generate_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
 
