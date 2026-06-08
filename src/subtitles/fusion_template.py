@@ -37,8 +37,7 @@ def find_fusion_title_template(media_pool: Any) -> Any | None:
                 props = clip.GetClipProperty()
                 clip_name = props.get("Clip Name", "").lower()
                 if (props.get("Type") in FUSION_TITLE_TYPES
-                        or "text+" in clip_name
-                        or "clutter" in clip_name):
+                        or "text+" in clip_name):
                     log.debug("Fusion Title template: %s (type=%s)",
                               props.get("Clip Name"), props.get("Type"))
                     return clip
@@ -180,7 +179,7 @@ def bootstrap_textplus_template(
                         pass
                 v = style.get("vertical_position")
                 if v is not None:
-                    center_y = max(0.02, min(0.98, 0.5 + (v / 100.0) * 0.45))
+                    center_y = max(0.15, min(0.85, 0.5 + (v / 100.0) * 0.35))
                     try:
                         tool.SetInput("VerticalJustificationNew", 2)
                     except Exception:

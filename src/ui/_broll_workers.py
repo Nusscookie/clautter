@@ -319,7 +319,7 @@ def autonomous_thread(
             )
         else:
             set_auto_status(
-                f"Done! {placed}/{total} segment(s) placed on V2."
+                f"Done! {placed}/{total} segment(s) placed on B-Roll track."
                 + (f" {skipped} skipped." if skipped else ""),
                 "#66bb6a",
             )

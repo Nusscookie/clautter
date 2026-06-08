@@ -107,7 +107,12 @@ def apply_fusion_text_style(
 
         v = style.get("vertical_position")
         if v is not None:
-            center_y = max(0.02, min(0.98, 0.5 + (v / 100.0) * 0.45))
+            # Slider: -100 = bottom, 0 = center, +100 = top.
+            # Resolve Center Y: 0.0 = bottom, 1.0 = top.
+            # Range [0.15, 0.85] keeps text anchor away from edges so full
+            # text block stays visible at ±100.
+            center_y = 0.5 + (v / 100.0) * 0.35
+            center_y = max(0.15, min(0.85, center_y))
             try:
                 tool.SetInput("VerticalJustificationNew", 2)
             except Exception:
