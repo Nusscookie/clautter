@@ -1,0 +1,170 @@
+"""UI builder for the Music & SFX tab.
+
+Extracted from music_tab.py so the tab file stays under 200 lines.
+Follows the same pattern as _zooms_build.py / _broll_build.py.
+"""
+
+from __future__ import annotations
+from typing import Any
+
+import customtkinter as ctk
+
+
+def build(parent: Any) -> None:
+    w: dict[str, Any] = {}
+
+    ctk.CTkLabel(
+        parent,
+        text="MUSIC & SFX  —  Add mood-matched music and auto-placed sound effects",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color="#aaaaaa",
+        anchor="w",
+    ).pack(fill="x", padx=12, pady=(12, 6))
+
+    # ══════════════════════════════════════════════════════════════
+    #  BACKGROUND MUSIC CARD
+    # ══════════════════════════════════════════════════════════════
+    music_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    music_card.pack(fill="x", padx=10, pady=(0, 6))
+
+    ctk.CTkLabel(music_card, text="BACKGROUND MUSIC",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    # Music mode toggle
+    mode_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    mode_row.pack(fill="x", padx=10, pady=2)
+    mode_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(mode_row, text="Music Mode").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["music_mode"] = ctk.CTkSegmentedButton(mode_row, values=["Single Track", "Segments"])
+    w["music_mode"].set("Single Track")
+    w["music_mode"].grid(row=0, column=1, sticky="w")
+
+    # Mood engine toggle
+    mood_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    mood_row.pack(fill="x", padx=10, pady=2)
+    mood_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(mood_row, text="Mood Engine").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["mood_mode"] = ctk.CTkSegmentedButton(mood_row, values=["Keywords", "LLM"])
+    w["mood_mode"].set("Keywords")
+    w["mood_mode"].grid(row=0, column=1, sticky="w")
+
+    # Sections slider (hidden until "Segments" mode selected)
+    w["n_sections_frame"] = ctk.CTkFrame(music_card, fg_color="transparent")
+    sec_row = w["n_sections_frame"]
+    sec_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(sec_row, text="Sections").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["n_sections_slider"] = ctk.CTkSlider(sec_row, from_=1, to=5, number_of_steps=4)
+    w["n_sections_slider"].set(3)
+    w["n_sections_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
+    w["n_sections_lbl"] = ctk.CTkLabel(sec_row, text="3", text_color="#4fc3f7", width=28)
+    w["n_sections_lbl"].grid(row=0, column=2)
+
+    # Download folder row
+    w["dl_row"] = dl_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    dl_row.pack(fill="x", padx=10, pady=2)
+    dl_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(dl_row, text="Download To").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["dl_folder_entry"] = ctk.CTkEntry(dl_row, state="readonly")
+    w["dl_folder_entry"].grid(row=0, column=1, sticky="ew", padx=(0, 6))
+    w["dl_folder_btn"] = ctk.CTkButton(dl_row, text="Browse", width=70,
+                                        fg_color="#1e1e1e", hover_color="#2a2a2a")
+    w["dl_folder_btn"].grid(row=0, column=2)
+
+    # Run Music button
+    w["run_music_btn"] = ctk.CTkButton(
+        music_card,
+        text="▶  Add Background Music",
+        fg_color="#0d47a1",
+        hover_color="#1565c0",
+        height=32,
+    )
+    w["run_music_btn"].pack(fill="x", padx=10, pady=(8, 4))
+
+    # Music progress bar (hidden until running)
+    w["music_progress_frame"] = ctk.CTkFrame(music_card, height=6, fg_color="transparent")
+    w["music_progress_frame"].pack(fill="x", padx=10, pady=0)
+    w["music_progress"] = ctk.CTkProgressBar(music_card, height=6)
+    w["music_progress"].set(0)
+
+    w["status"] = ctk.CTkLabel(
+        music_card,
+        text="Requires transcript from Subtitles tab and a Jamendo Client ID (⚙ Settings).",
+        font=ctk.CTkFont(size=11),
+        text_color="#aaaaaa",
+        anchor="w",
+        wraplength=820,
+    )
+    w["status"].pack(fill="x", padx=10, pady=(2, 10))
+
+    # ══════════════════════════════════════════════════════════════
+    #  SOUND EFFECTS CARD
+    # ══════════════════════════════════════════════════════════════
+    sfx_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    sfx_card.pack(fill="x", padx=10, pady=(0, 6))
+
+    ctk.CTkLabel(sfx_card, text="SOUND EFFECTS",
+                 font=ctk.CTkFont(size=10, weight="bold"),
+                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+
+    ctk.CTkLabel(
+        sfx_card,
+        text="Places SFX clips at cut/zoom/B-roll events on a dedicated 'SFX' audio track.",
+        font=ctk.CTkFont(size=10),
+        text_color="#888888",
+        anchor="w",
+    ).pack(fill="x", padx=10, pady=(0, 6))
+
+    # Trigger checkboxes
+    trigger_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
+    trigger_row.pack(fill="x", padx=10, pady=2)
+    w["use_cuts_var"]  = ctk.IntVar(value=1)
+    w["use_zooms_var"] = ctk.IntVar(value=1)
+    w["use_broll_var"] = ctk.IntVar(value=1)
+    ctk.CTkCheckBox(trigger_row, text="SmartCuts Cuts",    variable=w["use_cuts_var"]).pack(
+        side="left", padx=(0, 14))
+    ctk.CTkCheckBox(trigger_row, text="AutoZoom Events",   variable=w["use_zooms_var"]).pack(
+        side="left", padx=(0, 14))
+    ctk.CTkCheckBox(trigger_row, text="B-Roll Entries",    variable=w["use_broll_var"]).pack(
+        side="left")
+
+    # Optional local SFX folder
+    sfx_folder_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
+    sfx_folder_row.pack(fill="x", padx=10, pady=2)
+    sfx_folder_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(sfx_folder_row, text="Local SFX Folder\n(optional)").grid(
+        row=0, column=0, sticky="w", padx=(0, 12))
+    w["sfx_folder_entry"] = ctk.CTkEntry(sfx_folder_row, state="readonly",
+                                          placeholder_text="Leave blank to use Pixabay SFX")
+    w["sfx_folder_entry"].grid(row=0, column=1, sticky="ew", padx=(0, 6))
+    w["sfx_folder_btn"] = ctk.CTkButton(sfx_folder_row, text="Browse", width=70,
+                                         fg_color="#1e1e1e", hover_color="#2a2a2a")
+    w["sfx_folder_btn"].grid(row=0, column=2)
+
+    # Run SFX button
+    w["run_sfx_btn"] = ctk.CTkButton(
+        sfx_card,
+        text="▶  Auto-Place Sound Effects",
+        fg_color="#1a237e",
+        hover_color="#283593",
+        height=32,
+    )
+    w["run_sfx_btn"].pack(fill="x", padx=10, pady=(8, 4))
+
+    # SFX progress bar (hidden until running)
+    w["sfx_progress_frame"] = ctk.CTkFrame(sfx_card, height=6, fg_color="transparent")
+    w["sfx_progress_frame"].pack(fill="x", padx=10, pady=0)
+    w["sfx_progress"] = ctk.CTkProgressBar(sfx_card, height=6)
+    w["sfx_progress"].set(0)
+
+    w["sfx_status"] = ctk.CTkLabel(
+        sfx_card,
+        text="Requires Freesound API key (⚙ Settings). Run SmartCuts, Auto Zooms, or B-Roll first.",
+        font=ctk.CTkFont(size=11),
+        text_color="#aaaaaa",
+        anchor="w",
+        wraplength=820,
+    )
+    w["sfx_status"].pack(fill="x", padx=10, pady=(2, 10))
+
+    parent._w = w

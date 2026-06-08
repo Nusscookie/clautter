@@ -95,6 +95,7 @@ def analyze_thread(
                     return
 
         state["zoom_points"] = all_zoom_points
+        app.zoom_points = all_zoom_points
         _n = len(all_zoom_points)
         ui(lambda: w["found_count"]._val.configure(text=str(_n)))
 

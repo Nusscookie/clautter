@@ -71,15 +71,27 @@ class _SettingsWindow(ctk.CTkToplevel):
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
 
-        self._el_entry, self._el_status = _key_row(api_card, "ElevenLabs")
-        self._px_entry, self._px_status = _key_row(api_card, "Pixabay")
+        self._el_entry,  self._el_status  = _key_row(api_card, "ElevenLabs")
+        self._px_entry,  self._px_status  = _key_row(api_card, "Pixabay")
         self._pex_entry, self._pex_status = _key_row(api_card, "Pexels")
+        self._fs_entry,  self._fs_status  = _key_row(api_card, "Freesound")
+        self._jam_entry, self._jam_status = _key_row(api_card, "Jamendo Client ID",
+                                                      placeholder="Jamendo app client_id")
 
+        ctk.CTkLabel(
+            api_card,
+            text="Freesound (freesound.org/apiv2): SFX placement.  "
+                 "Jamendo (devportal.jamendo.com): background music.  Both free accounts.",
+            font=ctk.CTkFont(size=10), text_color="#555555",
+            anchor="w", wraplength=500,
+        ).pack(fill="x", padx=12, pady=(0, 8))
 
         # Pre-fill from settings
-        _prefill(self._el_entry, str(app.settings.get("elevenlabs_api_key", "") or ""))
-        _prefill(self._px_entry, str(app.settings.get("pixabay_api_key", "") or ""))
-        _prefill(self._pex_entry, str(app.settings.get("pexels_api_key", "") or ""))
+        _prefill(self._el_entry,  str(app.settings.get("elevenlabs_api_key",  "") or ""))
+        _prefill(self._px_entry,  str(app.settings.get("pixabay_api_key",     "") or ""))
+        _prefill(self._pex_entry, str(app.settings.get("pexels_api_key",      "") or ""))
+        _prefill(self._fs_entry,  str(app.settings.get("freesound_api_key",   "") or ""))
+        _prefill(self._jam_entry, str(app.settings.get("jamendo_client_id",   "") or ""))
 
         # ── CLOUD LLM RE-RANK ─────────────────────────────────────────
         llm_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
@@ -254,9 +266,11 @@ class _SettingsWindow(ctk.CTkToplevel):
 
     def _on_save_keys(self) -> None:
         app = self._app
-        el = self._el_entry.get().strip()
-        px = self._px_entry.get().strip()
+        el  = self._el_entry.get().strip()
+        px  = self._px_entry.get().strip()
         pex = self._pex_entry.get().strip()
+        fs  = self._fs_entry.get().strip()
+        jam = self._jam_entry.get().strip()
 
         if el:
             app.settings.set("elevenlabs_api_key", el)
@@ -264,6 +278,10 @@ class _SettingsWindow(ctk.CTkToplevel):
             app.settings.set("pixabay_api_key", px)
         if pex:
             app.settings.set("pexels_api_key", pex)
+        if fs:
+            app.settings.set("freesound_api_key", fs)
+        if jam:
+            app.settings.set("jamendo_client_id", jam)
 
         saved: list[str] = []
         if el:
@@ -275,6 +293,12 @@ class _SettingsWindow(ctk.CTkToplevel):
         if pex:
             saved.append("Pexels")
             self._pex_status.configure(text="Saved.", text_color="#66bb6a")
+        if fs:
+            saved.append("Freesound")
+            self._fs_status.configure(text="Saved.", text_color="#66bb6a")
+        if jam:
+            saved.append("Jamendo")
+            self._jam_status.configure(text="Saved.", text_color="#66bb6a")
 
         log.info("Settings: saved keys: %s", ", ".join(saved) if saved else "none")
 
@@ -346,15 +370,18 @@ class _SettingsWindow(ctk.CTkToplevel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _key_row(parent: Any, label: str) -> tuple[ctk.CTkEntry, ctk.CTkLabel]:
+def _key_row(
+    parent: Any, label: str, placeholder: str | None = None
+) -> tuple[ctk.CTkEntry, ctk.CTkLabel]:
     row = ctk.CTkFrame(parent, fg_color="transparent")
     row.pack(fill="x", padx=12, pady=(0, 4))
     row.grid_columnconfigure(1, weight=1)
 
     ctk.CTkLabel(row, text=f"{label}:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=90, anchor="w").grid(row=0, column=0, sticky="w")
+                 text_color="#aaaaaa", width=130, anchor="w").grid(row=0, column=0, sticky="w")
 
-    entry = ctk.CTkEntry(row, show="*", placeholder_text=f"Paste {label} API key")
+    entry = ctk.CTkEntry(row, show="*",
+                         placeholder_text=placeholder or f"Paste {label} API key")
     entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
     status = ctk.CTkLabel(parent, text="", font=ctk.CTkFont(size=10),

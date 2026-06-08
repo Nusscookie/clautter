@@ -31,6 +31,7 @@ class CutResult:
     total_clips_processed: int
     retakes_found: int = 0
     retake_track_index: int = 0  # 0 = no retake track created
+    segment_records: list = None  # type: ignore[assignment]  # list[SegmentRecord] for Music/SFX tab
 
 
 def apply_cuts(
@@ -177,4 +178,5 @@ def apply_cuts(
         total_clips_processed=clips_processed,
         retakes_found=retakes_found,
         retake_track_index=retake_track_index,
+        segment_records=all_segment_records,
     )

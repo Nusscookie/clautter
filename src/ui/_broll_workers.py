@@ -318,6 +318,13 @@ def autonomous_thread(
             for warn in result.warnings:
                 log.warning("[autonomous] %s", warn)
 
+        # Expose placer results for Music & SFX tab SFX engine
+        placed_results = [
+            sr.placer_result for sr in result.segments
+            if sr.placer_result is not None and sr.placer_result.placed
+        ]
+        app.broll_placer_results = placed_results
+
         placed = result.placed_count
         skipped = result.skipped_count
         total = placed + skipped

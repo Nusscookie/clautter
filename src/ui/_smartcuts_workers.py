@@ -171,6 +171,8 @@ def apply_thread(
         )
 
         app.refresh_timeline()
+        if result.segment_records:
+            app.smartcuts_segments = result.segment_records
         app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
         app.settings.add_stat("total_edits", 1)
 

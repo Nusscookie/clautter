@@ -9,7 +9,7 @@ from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 from src.ui import (
     dashboard_tab, smartcuts_tab,
-    subtitles_tab, zooms_tab, broll_tab, graphics_tab,
+    subtitles_tab, zooms_tab, broll_tab, graphics_tab, music_tab,
 )
 from src.ui.settings_window import open_settings
 
@@ -24,6 +24,7 @@ _TABS: list[tuple[str, Any]] = [
     ("Subtitles",       subtitles_tab),
     ("Auto Zooms",      zooms_tab),
     ("B-Roll",          broll_tab),
+    ("Music & SFX",     music_tab),
     ("Motion Graphics", graphics_tab),
 ]
 

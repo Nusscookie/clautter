@@ -28,6 +28,11 @@ class ClutterApp:
         # Shared transcript — populated by Subtitles tab, consumed by Zooms + B-Roll
         self.transcript: list[dict] = []  # list of {word, start_sec, end_sec}
 
+        # Shared analysis results — written by feature workers, read by Music & SFX tab
+        self.smartcuts_segments: list = []   # list[SegmentRecord] — set after SmartCuts apply
+        self.zoom_points: list = []          # list[ZoomPoint] — set after Auto Zooms analyze
+        self.broll_placer_results: list = [] # list[PlacerResult] — set after B-Roll autonomous run
+
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
