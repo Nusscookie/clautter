@@ -180,6 +180,10 @@ def run_sfx_pipeline(
                 log.error("[sfx_engine] SFX download failed for %r: %s", term, e)
                 continue
 
+        # Apply fixed -10 dB gain reduction (baked into a cached processed copy)
+        from src.music.audio_processor import get_or_process_sfx, SFX_GAIN_DB
+        local_path = get_or_process_sfx(local_path, dl_path / "processed", SFX_GAIN_DB)
+
         on_progress(f"SFX: placing at {event.position_sec:.1f}s…", progress * 0.9)
         result = place_audio_clip(app, local_path, event.position_sec, track_name="SFX")
         results.append(result)

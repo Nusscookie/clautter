@@ -17,10 +17,11 @@ def setup(frame: Any, app: Any) -> None:
     w = frame._w
 
     _state: dict[str, Any] = {
-        "running":           False,
-        "sfx_running":       False,
-        "dl_folder":         "",
+        "running":            False,
+        "sfx_running":        False,
+        "dl_folder":          "",
         "local_music_folder": "",
+        "music_volume_pct":   35,
     }
 
     def _ui(fn: Any) -> None:
@@ -61,6 +62,15 @@ def setup(frame: Any, app: Any) -> None:
         w["n_sections_lbl"].configure(text=str(int(val)))
 
     w["n_sections_slider"].configure(command=on_sections_slider)
+
+    # ── Volume slider label update ───────────────────────────────────
+    def on_vol_slider(val: float) -> None:
+        pct = int(val)
+        _state["music_volume_pct"] = pct
+        w["music_vol_lbl"].configure(text=f"{pct}%")
+        app.settings.set("music_volume_pct", pct)
+
+    w["music_vol_slider"].configure(command=on_vol_slider)
 
     # ── Music source toggle: show/hide local folder row ─────────────
     def _update_local_music_row_visibility(source: str) -> None:
@@ -117,6 +127,22 @@ def setup(frame: Any, app: Any) -> None:
     _state["local_music_folder"] = saved_local_music
     if saved_local_music:
         _ui(lambda: _set_readonly_entry(w["local_music_entry"], saved_local_music))
+
+    saved_vol = max(10, min(100, int(app.settings.get("music_volume_pct", 35) or 35)))
+    _state["music_volume_pct"] = saved_vol
+    _ui(lambda: (
+        w["music_vol_slider"].set(saved_vol),
+        w["music_vol_lbl"].configure(text=f"{saved_vol}%"),
+    ))
+
+    saved_fade_enabled = bool(app.settings.get("music_fade_enabled", True))
+    _ui(lambda: w["music_fade_var"].set(1 if saved_fade_enabled else 0))
+
+    saved_fade_dur = str(app.settings.get("music_fade_duration_sec", "2") or "2")
+    _ui(lambda: (
+        w["music_fade_dur_entry"].delete(0, "end"),
+        w["music_fade_dur_entry"].insert(0, saved_fade_dur),
+    ))
 
     saved_sfx_folder = str(app.settings.get("sfx_local_folder", "") or "")
     if saved_sfx_folder:
@@ -183,14 +209,25 @@ def setup(frame: Any, app: Any) -> None:
         _state["running"] = True
         _ui(lambda: w["run_music_btn"].configure(state="disabled"))
 
-        music_mode    = "segments" if w["music_mode"].get() == "Segments" else "single"
-        mood_mode     = "llm" if w["mood_mode"].get() == "LLM" else "keywords"
-        n_sections    = max(1, min(5, int(w["n_sections_slider"].get())))
-        dl_folder     = _state["dl_folder"] or str(Path.home() / "audio_downloads")
-        music_source  = w["music_source"].get().lower()
-        local_music   = _state["local_music_folder"] or None
+        music_mode       = "segments" if w["music_mode"].get() == "Segments" else "single"
+        mood_mode        = "llm" if w["mood_mode"].get() == "LLM" else "keywords"
+        n_sections       = max(1, min(5, int(w["n_sections_slider"].get())))
+        dl_folder        = _state["dl_folder"] or str(Path.home() / "audio_downloads")
+        music_source     = w["music_source"].get().lower()
+        local_music      = _state["local_music_folder"] or None
+        music_volume_pct = int(w["music_vol_slider"].get())
+        fade_enabled     = bool(w["music_fade_var"].get())
+        try:
+            fade_dur_sec = max(0.1, min(10.0, float(w["music_fade_dur_entry"].get().strip() or "2")))
+        except ValueError:
+            fade_dur_sec = 2.0
+        fade_in_ms  = int(fade_dur_sec * 1000) if fade_enabled else 0
+        fade_out_ms = int(fade_dur_sec * 1000) if fade_enabled else 0
 
-        app.settings.set("music_n_sections", n_sections)
+        app.settings.set("music_n_sections",        n_sections)
+        app.settings.set("music_volume_pct",        music_volume_pct)
+        app.settings.set("music_fade_enabled",      fade_enabled)
+        app.settings.set("music_fade_duration_sec", str(fade_dur_sec))
 
         threading.Thread(
             target=music_thread,
@@ -199,6 +236,7 @@ def setup(frame: Any, app: Any) -> None:
                 jamendo_client_id=jamendo_id, download_folder=dl_folder,
                 music_mode=music_mode, mood_mode=mood_mode, n_sections=n_sections,
                 music_source=music_source, local_music_folder=local_music,
+                music_volume_pct=music_volume_pct, fade_in_ms=fade_in_ms, fade_out_ms=fade_out_ms,
                 set_status=set_status, set_progress=set_progress, _ui=_ui, w=w,
             ),
             daemon=True,

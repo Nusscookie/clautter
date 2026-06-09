@@ -91,6 +91,28 @@ def build(parent: Any) -> None:
                                         fg_color="#1e1e1e", hover_color="#2a2a2a")
     w["dl_folder_btn"].grid(row=0, column=2)
 
+    # Volume slider
+    vol_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    vol_row.pack(fill="x", padx=10, pady=2)
+    vol_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(vol_row, text="Music Volume").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["music_vol_slider"] = ctk.CTkSlider(vol_row, from_=10, to=100, number_of_steps=90)
+    w["music_vol_slider"].set(35)
+    w["music_vol_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
+    w["music_vol_lbl"] = ctk.CTkLabel(vol_row, text="35%", text_color="#4fc3f7", width=44)
+    w["music_vol_lbl"].grid(row=0, column=2)
+
+    # Fade in & out
+    fade_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    fade_row.pack(fill="x", padx=10, pady=(2, 4))
+    w["music_fade_var"] = ctk.IntVar(value=1)
+    ctk.CTkCheckBox(fade_row, text="Fade in & out", variable=w["music_fade_var"]).pack(
+        side="left", padx=(0, 14))
+    w["music_fade_dur_entry"] = ctk.CTkEntry(fade_row, width=44, justify="center")
+    w["music_fade_dur_entry"].insert(0, "2")
+    w["music_fade_dur_entry"].pack(side="left", padx=(0, 4))
+    ctk.CTkLabel(fade_row, text="s", text_color="#aaaaaa").pack(side="left")
+
     # Run Music button
     w["run_music_btn"] = ctk.CTkButton(
         music_card,

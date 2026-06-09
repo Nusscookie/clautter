@@ -37,6 +37,9 @@ def music_thread(
     w: dict,
     music_source: str = "jamendo",
     local_music_folder: str | None = None,
+    music_volume_pct: int = 35,
+    fade_in_ms: int = 2000,
+    fade_out_ms: int = 2000,
 ) -> None:
     """Analyze mood, find music (local / Jamendo / both), place on 'Music' audio track."""
     try:
@@ -109,6 +112,13 @@ def music_thread(
             if audio_path is None:
                 log.warning("[music_worker] no audio found for section %d (%s)", i, section.mood)
                 continue
+
+            # Bake volume + fades into a processed copy (pydub, cached on disk)
+            from src.music.audio_processor import get_or_process_music
+            processed_dir = Path(download_folder) / "processed"
+            audio_path = get_or_process_music(
+                audio_path, processed_dir, music_volume_pct, fade_in_ms, fade_out_ms,
+            )
 
             fname = Path(audio_path).name
             set_status(f"Placing '{fname}' at {section.start_sec:.1f}s…")
