@@ -92,6 +92,7 @@ def _segment_clips(
                     "fade": fade,
                     "pan": pan,
                     "tilt": tilt,
+                    "seg_len": zoom_frames,  # segment length in frames — drives Fusion keyframe ramp
                 })
                 zooms_applied += 1
 

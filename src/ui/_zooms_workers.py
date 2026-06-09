@@ -144,7 +144,7 @@ def apply_thread(
         else:
             set_status("Applying zooms to new timeline...")
 
-        fade     = w["fade_zoom"].get() == 1
+        fade     = w["zoom_style"].get().startswith("Smooth")
         zoom_pct = w["zoom_slider"].get() / 100.0
 
         def progress_cb(cur: int, total: int, msg: str) -> None:

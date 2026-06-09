@@ -2,17 +2,20 @@
 
 Strategy (same non-destructive new-timeline approach as Smart Cuts):
   1. For each clip, split it into sub-segments at zoom boundaries.
-  2. On zoom segments, set static ZoomX/ZoomY via SetProperty, offset toward the
-     detected face with Pan/Tilt, and enable DynamicZoomEase when fade=True so
-     Resolve eases the zoom transition.
+  2. On zoom segments, apply the zoom. With "Smooth Zoom" (fade=True) this is a
+     true animated ease via a Fusion Transform node keyframed Size 1.0 → zoom →
+     hold → 1.0, optionally tracking Center toward the detected face. With a hard
+     cut (fade=False) — or if the Fusion path fails — it falls back to static
+     ZoomX/ZoomY/Pan/Tilt via SetProperty.
   3. Create a new timeline containing the reconstructed segments.
 
-Why SetProperty and not Fusion keyframes: a probe of the Resolve scripting API
-(see scripts/zoom_probe.py) confirmed TimelineItem exposes only Get/SetProperty
-— no per-clip keyframe API — and that a scripted Fusion Transform tool is not
-wired into the comp's render graph, so `SetInput("Size", …)` is a silent no-op.
-ZoomX/ZoomY/Pan/Tilt/DynamicZoomEase all read back correctly and do move the
-picture; that is the path used here.
+Why Fusion keyframes now work: an earlier probe added a Transform tool but never
+connected it into the comp's render graph (MediaIn → Transform → MediaOut), so
+`SetInput("Size", …)` was a silent no-op and the code fell back to static
+SetProperty (a hard cut). The fix — proven by docs/autocut_templates/zoom.comp —
+is to wire the Transform's `Input` to MediaIn's Output and route MediaOut's
+`Input` from the Transform. Once wired, Size/Center keyframes animate and render,
+giving a real eased zoom. Static SetProperty remains the per-segment fallback.
 
 Clip segmentation logic lives in applier_props.py.
 """
@@ -29,6 +32,74 @@ from src.zooms.analyzer import ZoomPoint
 log = get_logger(__name__)
 
 _DYNAMIC_ZOOM_EASE_IN_OUT = 3  # Resolve DynamicZoomEase value for ease in & out
+_EASE_SECONDS = 0.4            # ramp-in / ramp-out duration for the Fusion Size keyframes
+
+
+def _apply_fusion_zoom(
+    item: Any,
+    zoom_amount: float,
+    pan: float,
+    tilt: float,
+    seg_len_frames: int,
+    fps: float,
+) -> None:
+    """Apply an animated ease-in/hold/ease-out zoom via a Fusion Transform node.
+
+    Wires MediaIn → Transform → MediaOut (the step the old probe missed) so the
+    Transform renders, then animates Size 1.0 → zoom → hold → 1.0 by connecting a
+    BezierSpline modifier to the Size input and keyframing the spline. Inline
+    `SetInput("Size", value, frame)` does NOT animate in Resolve's Fusion API — it
+    only overwrites a constant value (probe-confirmed); keyframes must live in a
+    separate spline op, the same pattern AutoCut's caption comp uses
+    (LINE_N_KEYFRAMES). The spline's default bezier handles give the ease for free.
+
+    Center is set statically toward the detected face (Pivot-style anchor, as in
+    docs/autocut_templates/zoom.comp). pan/tilt are normalized subject offsets in
+    [-0.5, 0.5]. Resolve Pan>0 moves the image right, so the face sits at
+    Center.X = 0.5 - pan; Tilt>0 moves it up, so Center.Y = 0.5 + tilt.
+
+    Comp frames are clip-local (0 .. seg_len_frames-1). Raises on any failure so
+    the caller can fall back to the static SetProperty path.
+    """
+    comp = item.GetFusionCompByIndex(1) or item.AddFusionComp()
+    if comp is None:
+        raise RuntimeError("could not acquire or create a Fusion comp on the clip")
+
+    mediain = comp.FindTool("MediaIn1")
+    mediaout = comp.FindTool("MediaOut1")
+    if mediain is None or mediaout is None:
+        raise RuntimeError("clip comp is missing MediaIn1/MediaOut1")
+
+    xf = comp.FindTool("Transform1") or comp.AddTool("Transform", -32768, -32768)
+    if xf is None:
+        raise RuntimeError("could not add a Transform tool")
+
+    # Wire the Transform into the render graph — the step that makes it render.
+    xf.SetInput("Input", mediain)
+    mediaout.SetInput("Input", xf)
+
+    ramp = max(1, round(_EASE_SECONDS * fps))
+    last = max(1, seg_len_frames - 1)
+    # On short segments, clamp the ease points so they don't cross (single peak).
+    if 2 * ramp >= last:
+        ramp = max(1, last // 2)
+    hold = last - ramp
+
+    # Static Center toward the face (point input: {1: x, 2: y}).
+    xf.SetInput("Center", {1: 0.5 - pan, 2: 0.5 + tilt})
+
+    # Animated Size via a connected BezierSpline. Keyframes are {frame: {1: value}};
+    # the spline interpolates with eased bezier handles by default.
+    size_spline = comp.AddTool("BezierSpline", -32768, -32768)
+    if size_spline is None:
+        raise RuntimeError("could not add a BezierSpline for Size animation")
+    xf.SetInput("Size", size_spline)
+    size_spline.SetKeyFrames({
+        0:    {1: 1.0},
+        ramp: {1: zoom_amount},
+        hold: {1: zoom_amount},
+        last: {1: 1.0},
+    })
 
 
 @dataclass
@@ -163,20 +234,37 @@ def apply_zooms(
     for i, (item, meta) in enumerate(zip(appended, zoom_meta)):
         if not meta.get("is_zoom"):
             continue
-        try:
-            _apply_segment_zoom(
-                item,
-                meta.get("zoom_amount", zoom_amount),
-                meta.get("pan", 0.0),
-                meta.get("tilt", 0.0),
-                meta.get("fade", fade),
-                frame_w,
-                frame_h,
-            )
-            applied_ok += 1
-            log.debug("Zoom applied to segment %d: %.2f", i, meta.get("zoom_amount", zoom_amount))
-        except Exception as e:
-            log.warning("Zoom property failed on segment %d: %s", i, e)
+
+        seg_zoom = meta.get("zoom_amount", zoom_amount)
+        seg_pan = meta.get("pan", 0.0)
+        seg_tilt = meta.get("tilt", 0.0)
+        seg_fade = meta.get("fade", fade)
+
+        applied_via: Optional[str] = None
+        if seg_fade:  # "Smooth Zoom" → animated Fusion ease (primary path)
+            try:
+                _apply_fusion_zoom(
+                    item, seg_zoom, seg_pan, seg_tilt,
+                    seg_len_frames=int(meta.get("seg_len", 1)), fps=fps,
+                )
+                applied_via = "fusion"
+            except Exception as e:
+                log.warning(
+                    "Fusion zoom failed on segment %d, falling back to static: %s", i, e
+                )
+
+        if applied_via is None:  # hard cut requested, or Fusion failed → static
+            try:
+                _apply_segment_zoom(
+                    item, seg_zoom, seg_pan, seg_tilt, seg_fade, frame_w, frame_h,
+                )
+                applied_via = "static"
+            except Exception as e:
+                log.warning("Zoom property failed on segment %d: %s", i, e)
+                continue
+
+        applied_ok += 1
+        log.debug("Zoom applied to segment %d via %s: %.2f", i, applied_via, seg_zoom)
 
     if applied_ok == 0 and zooms_applied > 0:
         raise RuntimeError(

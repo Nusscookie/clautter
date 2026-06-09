@@ -75,13 +75,16 @@ def build(parent: Any) -> None:
     w["max_per_min"].insert(0, "4")
     w["max_per_min"].grid(row=0, column=1, sticky="w")
 
-    check_row = ctk.CTkFrame(card, fg_color="transparent")
-    check_row.pack(fill="x", padx=10, pady=(2, 10))
-    w["fade_zoom"] = ctk.CTkCheckBox(check_row, text="Smooth Zoom (Ease In/Out)")
-    w["fade_zoom"].pack(side="left", padx=(0, 16))
-    w["fade_zoom"].select()
-    w["hard_cut"] = ctk.CTkCheckBox(check_row, text="Hard Cut Zooms")
-    w["hard_cut"].pack(side="left")
+    # Smooth vs Hard are mutually exclusive — a single segmented control avoids
+    # the old contradictory two-checkbox state. The worker reads zoom_style:
+    # "Smooth" -> fade=True (animated Fusion ease), "Hard Cut" -> static zoom.
+    style_row = ctk.CTkFrame(card, fg_color="transparent")
+    style_row.pack(fill="x", padx=10, pady=(2, 10))
+    ctk.CTkLabel(style_row, text="Zoom Style").pack(side="left", padx=(0, 12))
+    w["zoom_style"] = ctk.CTkSegmentedButton(
+        style_row, values=["Smooth (Ease In/Out)", "Hard Cut"])
+    w["zoom_style"].set("Smooth (Ease In/Out)")
+    w["zoom_style"].pack(side="left")
 
     btn_row = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row.pack(fill="x", padx=10, pady=6)

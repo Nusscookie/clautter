@@ -25,6 +25,9 @@ desktop.ini
 FUTURE.md
 SPECS.md
 UNOFFICIAL_DOC.md
+docs/autocut_teardown.md
+docs/autocut_templates/
+docs/package-evaluation-autocut.md
 tests/
 scripts/
 
