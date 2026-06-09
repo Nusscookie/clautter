@@ -60,6 +60,26 @@ def build(parent: Any) -> None:
     w["n_sections_lbl"] = ctk.CTkLabel(sec_row, text="3", text_color="#4fc3f7", width=28)
     w["n_sections_lbl"].grid(row=0, column=2)
 
+    # Music source toggle
+    source_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    source_row.pack(fill="x", padx=10, pady=2)
+    source_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(source_row, text="Music Source").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["music_source"] = ctk.CTkSegmentedButton(source_row, values=["Jamendo", "Local", "Both"])
+    w["music_source"].set("Jamendo")
+    w["music_source"].grid(row=0, column=1, sticky="w")
+
+    # Local music folder row (shown only when source = Local or Both)
+    w["local_music_row"] = local_music_row = ctk.CTkFrame(music_card, fg_color="transparent")
+    local_music_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(local_music_row, text="Local Music Folder").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["local_music_entry"] = ctk.CTkEntry(local_music_row, state="readonly",
+                                           placeholder_text="Folder with .mp3 / .wav tracks")
+    w["local_music_entry"].grid(row=0, column=1, sticky="ew", padx=(0, 6))
+    w["local_music_btn"] = ctk.CTkButton(local_music_row, text="Browse", width=70,
+                                          fg_color="#1e1e1e", hover_color="#2a2a2a")
+    w["local_music_btn"].grid(row=0, column=2)
+
     # Download folder row
     w["dl_row"] = dl_row = ctk.CTkFrame(music_card, fg_color="transparent")
     dl_row.pack(fill="x", padx=10, pady=2)
@@ -89,7 +109,7 @@ def build(parent: Any) -> None:
 
     w["status"] = ctk.CTkLabel(
         music_card,
-        text="Requires transcript from Subtitles tab and a Jamendo Client ID (⚙ Settings).",
+        text="Requires transcript. Jamendo Client ID (⚙ Settings) needed unless using Local source.",
         font=ctk.CTkFont(size=11),
         text_color="#aaaaaa",
         anchor="w",

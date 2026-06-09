@@ -35,10 +35,11 @@ def music_thread(
     set_progress: Callable,
     _ui: Callable,
     w: dict,
+    music_source: str = "jamendo",
+    local_music_folder: str | None = None,
 ) -> None:
-    """Analyze mood, search Jamendo music, download, place on 'Music' audio track."""
+    """Analyze mood, find music (local / Jamendo / both), place on 'Music' audio track."""
     try:
-        from src.music.audio_provider import JamendoClient
         from src.music.mood_analyzer import analyze_mood_keywords, analyze_mood_llm
         from src.music.placer import place_audio_clip
 
@@ -57,9 +58,17 @@ def music_thread(
             set_progress(0, False)
             return
 
-        client = JamendoClient(jamendo_client_id)
+        use_jamendo = music_source in ("jamendo", "both")
+        use_local   = music_source in ("local", "both")
+
+        client = None
+        if use_jamendo:
+            from src.music.audio_provider import JamendoClient
+            client = JamendoClient(jamendo_client_id)
+
         dl_path = Path(download_folder)
-        dl_path.mkdir(parents=True, exist_ok=True)
+        if use_jamendo:
+            dl_path.mkdir(parents=True, exist_ok=True)
 
         placed_count = 0
         total = len(sections)
@@ -69,30 +78,46 @@ def music_thread(
             set_progress(pct)
             set_status(f"Searching music for '{section.mood}' mood ({i + 1}/{total})…")
 
-            hits = client.search_music(section.search_term, per_page=5)
-            if not hits:
-                log.warning("[music_worker] no results for %r — skipping section %d", section.search_term, i)
-                continue
+            audio_path: str | None = None
 
-            hit = hits[0]
-            dest = dl_path / _music_filename(hit)
-            set_status(f"Downloading: {hit.title}…")
+            # Local folder: try to find a file whose name contains a mood keyword
+            if use_local and local_music_folder:
+                audio_path = _find_local_music(local_music_folder, section.search_term)
+                if audio_path:
+                    log.debug("[music_worker] local match: %s", audio_path)
 
-            if not dest.exists():
-                try:
-                    _download_audio(hit.download_url, dest)
-                except Exception as e:
-                    log.error("[music_worker] download failed: %s", e)
-                    set_status(f"Download failed: {e}", "#ff6b6b")
+            # Jamendo fallback (or primary if source=jamendo)
+            if audio_path is None and use_jamendo and client is not None:
+                hits = client.search_music(section.search_term, per_page=5)
+                if not hits:
+                    log.warning("[music_worker] no Jamendo results for %r — skipping section %d",
+                                section.search_term, i)
                     continue
 
-            set_status(f"Placing '{hit.title}' at {section.start_sec:.1f}s…")
+                hit = hits[0]
+                dest = dl_path / _music_filename(hit)
+                set_status(f"Downloading: {hit.title}…")
+                if not dest.exists():
+                    try:
+                        _download_audio(hit.download_url, dest)
+                    except Exception as e:
+                        log.error("[music_worker] download failed: %s", e)
+                        set_status(f"Download failed: {e}", "#ff6b6b")
+                        continue
+                audio_path = str(dest)
+
+            if audio_path is None:
+                log.warning("[music_worker] no audio found for section %d (%s)", i, section.mood)
+                continue
+
+            fname = Path(audio_path).name
+            set_status(f"Placing '{fname}' at {section.start_sec:.1f}s…")
             duration = section.end_sec - section.start_sec if music_mode == "segments" else 0.0
-            result = place_audio_clip(app, str(dest), section.start_sec, duration, "Music")
+            result = place_audio_clip(app, audio_path, section.start_sec, duration, "Music")
 
             if result.placed:
                 placed_count += 1
-                log.info("[music_worker] placed %s at %.1fs", dest.name, section.start_sec)
+                log.info("[music_worker] placed %s at %.1fs", fname, section.start_sec)
             else:
                 log.warning("[music_worker] placement failed: %s", result.reason)
 
@@ -102,7 +127,7 @@ def music_thread(
         elif placed_count > 0:
             set_status(f"Placed {placed_count}/{total} track(s). Check logs for details.", "#ffa726")
         else:
-            set_status("No tracks placed — check Resolve connection and Pixabay key.", "#ff6b6b")
+            set_status("No tracks placed — check Resolve connection and audio source settings.", "#ff6b6b")
 
         set_progress(0, False)
 
@@ -113,6 +138,26 @@ def music_thread(
     finally:
         _ui(lambda: w["run_music_btn"].configure(state="normal"))
         state["running"] = False
+
+
+def _find_local_music(folder: str, search_term: str) -> str | None:
+    """Return path to first local audio file whose name contains a search-term keyword."""
+    import os, re
+    term_words = set(re.sub(r"[^a-z0-9 ]+", "", search_term.lower()).split())
+    try:
+        for fname in os.listdir(folder):
+            if not fname.lower().endswith((".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a")):
+                continue
+            name_lower = fname.lower()
+            if any(w in name_lower for w in term_words):
+                return str(Path(folder) / fname)
+        # no keyword match — return first audio file as fallback
+        for fname in os.listdir(folder):
+            if fname.lower().endswith((".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a")):
+                return str(Path(folder) / fname)
+    except Exception as e:
+        log.warning("[music_worker] local music scan failed: %s", e)
+    return None
 
 
 def sfx_thread(
