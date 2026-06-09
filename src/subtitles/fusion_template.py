@@ -88,6 +88,21 @@ def bootstrap_textplus_template(
     AppendToTimeline. Returns None on any failure.
     """
     try:
+        # Move playhead to end of timeline so InsertFusionTitleIntoTimeline
+        # doesn't split an existing clip at the current cursor position.
+        try:
+            fps = float(timeline.GetSetting("timelineFrameRate") or 24)
+            end_frame = timeline.GetEndFrame()
+            start_frame = timeline.GetStartFrame()
+            total_frames = max(0, end_frame - start_frame)
+            h = int(total_frames // (fps * 3600))
+            m = int((total_frames % (fps * 3600)) // (fps * 60))
+            s = int((total_frames % (fps * 60)) // fps)
+            f = int(total_frames % fps)
+            timeline.SetCurrentTimecode(f"{h:02d}:{m:02d}:{s:02d}:{f:02d}")
+        except Exception as _e:
+            log.debug("Bootstrap: could not move playhead to end: %s", _e)
+
         bootstrap_clip = timeline.InsertFusionTitleIntoTimeline("Text+")
         if not bootstrap_clip:
             log.warning("Bootstrap: InsertFusionTitleIntoTimeline returned None")

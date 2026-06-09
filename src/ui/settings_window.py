@@ -10,8 +10,9 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_WIN_W = 560
-_WIN_H = 860
+_WIN_W = 900
+_WIN_H = 580
+_NAV_W = 160
 
 _OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
 _GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-pro"]
@@ -32,6 +33,8 @@ _KEYWORD_METHOD_LABELS: dict[str, str] = {
     "frequency": "Frequency (no deps)",
 }
 
+_TABS = ["API Keys", "LLM Keys", "LLM Models", "Smart Cuts", "B-Roll"]
+
 _open_window: ctk.CTkToplevel | None = None
 
 
@@ -47,137 +50,233 @@ def open_settings(app: Any) -> None:
 class _SettingsWindow(ctk.CTkToplevel):
     def __init__(self, app: Any) -> None:
         super().__init__()
-        apply_clutter_icon(self)
         self._app = app
         self.title("Clutter — Settings")
         self.geometry(f"{_WIN_W}x{_WIN_H}")
-        self.resizable(False, False)
+        self.minsize(780, 480)
+        self.resizable(True, True)
         self.configure(fg_color="#141414")
         self.grab_set()
+        # Defer icon so the window is fully realized on Windows before applying
+        self.after(100, lambda: apply_clutter_icon(self))
+        self._panels: dict[str, ctk.CTkFrame] = {}
+        self._nav_buttons: dict[str, ctk.CTkButton] = {}
+        self._active_tab = _TABS[0]
         self._build()
 
+    # ── Layout ────────────────────────────────────────────────────────────────
+
     def _build(self) -> None:
-        app = self._app
+        # Outer container: nav | content stacked vertically with bottom bar
+        outer = ctk.CTkFrame(self, fg_color="transparent")
+        outer.pack(fill="both", expand=True)
+        outer.rowconfigure(0, weight=1)
+        outer.columnconfigure(1, weight=1)
 
-        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
-        scroll.pack(fill="both", expand=True, padx=0, pady=0)
+        # ── Left nav panel ────────────────────────────────────────────────
+        nav = ctk.CTkFrame(outer, fg_color="#1e1e1e", corner_radius=0, width=_NAV_W)
+        nav.grid(row=0, column=0, sticky="nsw")
+        nav.pack_propagate(False)
+
+        ctk.CTkLabel(
+            nav, text="SETTINGS",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color="#555555",
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        for tab in _TABS:
+            btn = ctk.CTkButton(
+                nav,
+                text=tab,
+                anchor="w",
+                fg_color="transparent",
+                hover_color="#2a2a2a",
+                text_color="#aaaaaa",
+                font=ctk.CTkFont(size=12),
+                corner_radius=4,
+                height=32,
+                command=lambda t=tab: self._switch_tab(t),
+            )
+            btn.pack(fill="x", padx=8, pady=2)
+            self._nav_buttons[tab] = btn
+
+        # ── Right content area ────────────────────────────────────────────
+        content_host = ctk.CTkFrame(outer, fg_color="transparent")
+        content_host.grid(row=0, column=1, sticky="nsew", padx=(1, 0))
+        content_host.rowconfigure(0, weight=1)
+        content_host.columnconfigure(0, weight=1)
+
+        scroll = ctk.CTkScrollableFrame(content_host, fg_color="transparent", corner_radius=0)
+        scroll.grid(row=0, column=0, sticky="nsew")
         scroll.grid_columnconfigure(0, weight=1)
+        self._scroll = scroll
 
-        # ── API KEYS ──────────────────────────────────────────────────
-        api_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
-        api_card.pack(fill="x", padx=12, pady=(12, 4))
+        # Build all panels (hidden except first)
+        self._build_api_keys(scroll)
+        self._build_llm_keys(scroll)
+        self._build_llm_models(scroll)
+        self._build_smart_cuts(scroll)
+        self._build_broll(scroll)
 
-        ctk.CTkLabel(api_card, text="API KEYS",
+        # ── Bottom bar ────────────────────────────────────────────────────
+        bottom_host = ctk.CTkFrame(self, fg_color="#1a1a1a", corner_radius=0, height=52)
+        bottom_host.pack(fill="x", side="bottom")
+        bottom_host.pack_propagate(False)
+
+        ctk.CTkButton(
+            bottom_host, text="Apply",
+            fg_color="#B85F3A", hover_color="#C96A45",
+            text_color="#ffffff", width=100,
+            command=self._on_apply,
+        ).pack(side="right", padx=(0, 8), pady=10)
+
+        ctk.CTkButton(
+            bottom_host, text="Done",
+            fg_color="#2a2a2a", hover_color="#3a3a3a",
+            text_color="#aaaaaa", width=100,
+            command=self.destroy,
+        ).pack(side="right", padx=(0, 4), pady=10)
+
+        # Activate first tab
+        self._switch_tab(_TABS[0])
+
+    def _switch_tab(self, tab: str) -> None:
+        for name, panel in self._panels.items():
+            if name == tab:
+                panel.pack(fill="x", padx=12, pady=(12, 4))
+            else:
+                panel.pack_forget()
+        for name, btn in self._nav_buttons.items():
+            if name == tab:
+                btn.configure(text_color="#4fc3f7", fg_color="#2a2a2a")
+            else:
+                btn.configure(text_color="#aaaaaa", fg_color="transparent")
+        self._active_tab = tab
+
+    # ── Panel builders ────────────────────────────────────────────────────────
+
+    def _build_api_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="API KEYS",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
 
-        self._el_entry,  self._el_status  = _key_row(api_card, "ElevenLabs")
-        self._px_entry,  self._px_status  = _key_row(api_card, "Pixabay")
-        self._pex_entry, self._pex_status = _key_row(api_card, "Pexels")
-        self._fs_entry,  self._fs_status  = _key_row(api_card, "Freesound")
-        self._jam_entry, self._jam_status = _key_row(api_card, "Jamendo Client ID",
+        self._el_entry,  self._el_status  = _key_row(panel, "ElevenLabs")
+        self._px_entry,  self._px_status  = _key_row(panel, "Pixabay")
+        self._pex_entry, self._pex_status = _key_row(panel, "Pexels")
+        self._fs_entry,  self._fs_status  = _key_row(panel, "Freesound")
+        self._jam_entry, self._jam_status = _key_row(panel, "Jamendo Client ID",
                                                       placeholder="Jamendo app client_id")
 
         ctk.CTkLabel(
-            api_card,
+            panel,
             text="Freesound (freesound.org/apiv2): SFX placement.  "
                  "Jamendo (devportal.jamendo.com): background music.  Both free accounts.",
             font=ctk.CTkFont(size=10), text_color="#555555",
-            anchor="w", wraplength=500,
-        ).pack(fill="x", padx=12, pady=(0, 8))
+            anchor="w", wraplength=640,
+        ).pack(fill="x", padx=12, pady=(0, 12))
 
-        # Pre-fill from settings
         _prefill(self._el_entry,  str(app.settings.get("elevenlabs_api_key",  "") or ""))
         _prefill(self._px_entry,  str(app.settings.get("pixabay_api_key",     "") or ""))
         _prefill(self._pex_entry, str(app.settings.get("pexels_api_key",      "") or ""))
         _prefill(self._fs_entry,  str(app.settings.get("freesound_api_key",   "") or ""))
         _prefill(self._jam_entry, str(app.settings.get("jamendo_client_id",   "") or ""))
 
-        # ── CLOUD LLM RE-RANK ─────────────────────────────────────────
-        llm_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
-        llm_card.pack(fill="x", padx=12, pady=(4, 4))
+        self._panels["API Keys"] = panel
 
-        ctk.CTkLabel(llm_card, text="CLOUD LLM RE-RANK",
+    def _build_llm_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="CLOUD LLM RE-RANK",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
 
         ctk.CTkLabel(
-            llm_card,
+            panel,
             text="Optional: used by Autonomous B-Roll to pick the best clip per segment. "
                  "Leave blank to use semantic ranking only.",
             font=ctk.CTkFont(size=10), text_color="#555555",
-            anchor="w", wraplength=500,
+            anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 6))
 
-        self._oai_entry, self._oai_status = _key_row(llm_card, "OpenAI")
-        self._gem_entry, self._gem_status = _key_row(llm_card, "Gemini")
-        self._mmx_entry, self._mmx_status = _key_row(llm_card, "Minimax")
+        self._oai_entry, self._oai_status = _key_row(panel, "OpenAI")
+        self._gem_entry, self._gem_status = _key_row(panel, "Gemini")
+        self._mmx_entry, self._mmx_status = _key_row(panel, "Minimax")
 
+        ctk.CTkFrame(panel, fg_color="transparent", height=8).pack()
 
         _prefill(self._oai_entry, str(app.settings.get("openai_api_key", "") or ""))
         _prefill(self._gem_entry, str(app.settings.get("gemini_api_key", "") or ""))
         _prefill(self._mmx_entry, str(app.settings.get("minimax_api_key", "") or ""))
 
-        # ── LLM MODEL CONFIG ──────────────────────────────────────────
-        mc_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
-        mc_card.pack(fill="x", padx=12, pady=(4, 4))
+        self._panels["LLM Keys"] = panel
 
-        ctk.CTkLabel(mc_card, text="LLM MODEL CONFIG",
+    def _build_llm_models(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="LLM MODEL CONFIG",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 4))
 
         ctk.CTkLabel(
-            mc_card,
+            panel,
             text="Model and generation settings used by Full Director mode. "
                  "Applied to whichever provider has an API key.",
             font=ctk.CTkFont(size=10), text_color="#555555",
-            anchor="w", wraplength=500,
+            anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 6))
 
-        self._oai_model = _option_row(mc_card, "OpenAI model:", _OPENAI_MODELS)
-        self._gem_model = _option_row(mc_card, "Gemini model:", _GEMINI_MODELS)
-        self._mmx_model = _option_row(mc_card, "Minimax model:", _MINIMAX_MODELS)
+        self._oai_model = _option_row(panel, "OpenAI model:", _OPENAI_MODELS)
+        self._gem_model = _option_row(panel, "Gemini model:", _GEMINI_MODELS)
+        self._mmx_model = _option_row(panel, "Minimax model:", _MINIMAX_MODELS)
 
         self._llm_max_tokens_entry = _numeric_row(
-            mc_card, "Max tokens:", 200, 8000,
+            panel, "Max tokens:", 200, 8000,
             str(int(app.settings.get("llm_max_tokens", 1500) or 1500)),
             hint="Tokens LLM may generate. Higher = longer but slower.",
         )
         self._llm_temp_entry = _numeric_row(
-            mc_card, "Temperature:", 0.0, 2.0,
+            panel, "Temperature:", 0.0, 2.0,
             f"{float(app.settings.get('llm_temperature', 0.1) or 0.1):.2f}",
             hint="0 = deterministic, higher = more creative.",
         )
 
+        ctk.CTkFrame(panel, fg_color="transparent", height=8).pack()
 
         self._oai_model.set(str(app.settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"))
         self._gem_model.set(str(app.settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash"))
         self._mmx_model.set(str(app.settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"))
 
-        # ── SMART CUTS ────────────────────────────────────────────────
-        sc_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
-        sc_card.pack(fill="x", padx=12, pady=4)
+        self._panels["LLM Models"] = panel
 
-        ctk.CTkLabel(sc_card, text="SMART CUTS",
+    def _build_smart_cuts(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="SMART CUTS",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
 
         self._silence_menu = _option_row(
-            sc_card, "Silence detection:",
+            panel, "Silence detection:",
             list(_SILENCE_METHOD_LABELS.values()),
         )
         self._retake_menu = _option_row(
-            sc_card, "Retake detection:",
+            panel, "Retake detection:",
             list(_RETAKE_METHOD_LABELS.values()),
         )
 
         ctk.CTkLabel(
-            sc_card,
+            panel,
             text="Silero VAD downloads ~5 MB model on first run. "
                  "spaCy uses en_core_web_sm (already installed).",
             font=ctk.CTkFont(size=10), text_color="#555555",
-            anchor="w", wraplength=500,
-        ).pack(fill="x", padx=12, pady=(2, 10))
+            anchor="w", wraplength=640,
+        ).pack(fill="x", padx=12, pady=(2, 12))
 
         saved_silence = str(app.settings.get("smartcuts_silence_method", "vad"))
         self._silence_menu.set(
@@ -191,46 +290,49 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._silence_menu.configure(command=self._on_silence_method)
         self._retake_menu.configure(command=self._on_retake_method)
 
-        # ── B-ROLL ────────────────────────────────────────────────────
-        br_card = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
-        br_card.pack(fill="x", padx=12, pady=(4, 4))
+        self._panels["Smart Cuts"] = panel
 
-        ctk.CTkLabel(br_card, text="B-ROLL",
+    def _build_broll(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="B-ROLL",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
 
         self._keyword_menu = _option_row(
-            br_card, "Keyword method:",
+            panel, "Keyword method:",
             list(_KEYWORD_METHOD_LABELS.values()),
         )
 
         ctk.CTkLabel(
-            br_card,
+            panel,
             text="KeyBERT and spaCy download a model (~80 MB) on first use.",
             font=ctk.CTkFont(size=10), text_color="#555555",
             anchor="w",
         ).pack(fill="x", padx=12, pady=(2, 8))
 
-        ctk.CTkLabel(br_card, text="NATURAL PLACEMENT",
+        ctk.CTkLabel(panel, text="NATURAL PLACEMENT",
                      font=ctk.CTkFont(size=10, weight="bold"),
                      text_color="#888888").pack(anchor="w", padx=12, pady=(4, 4))
 
         self._intro_skip_entry = _numeric_row(
-            br_card, "Intro skip (s):", 0.0, 60.0,
+            panel, "Intro skip (s):", 0.0, 60.0,
             f"{float(app.settings.get('broll_intro_skip_sec', 8.0)):.1f}",
             hint="No B-roll before this time. Default: 8s.",
         )
         self._min_gap_entry = _numeric_row(
-            br_card, "Min gap (s):", 0.0, 30.0,
+            panel, "Min gap (s):", 0.0, 30.0,
             f"{float(app.settings.get('broll_min_gap_sec', 5.0)):.1f}",
             hint="Minimum face time between clips. Default: 5s.",
         )
         self._max_clip_entry = _numeric_row(
-            br_card, "Max clip (s):", 1.0, 30.0,
+            panel, "Max clip (s):", 1.0, 30.0,
             f"{float(app.settings.get('broll_max_broll_duration', 5.0)):.1f}",
             hint="Maximum B-roll clip duration. Default: 5s.",
         )
 
+        ctk.CTkFrame(panel, fg_color="transparent", height=8).pack()
 
         saved_kw = str(app.settings.get("broll_keyword_method", "keybert"))
         self._keyword_menu.set(
@@ -238,25 +340,9 @@ class _SettingsWindow(ctk.CTkToplevel):
         )
         self._keyword_menu.configure(command=self._on_keyword_method)
 
-        # ── Bottom bar ────────────────────────────────────────────────
-        bottom = ctk.CTkFrame(scroll, fg_color="transparent")
-        bottom.pack(anchor="e", padx=12, pady=(8, 12))
+        self._panels["B-Roll"] = panel
 
-        ctk.CTkButton(
-            bottom, text="Apply",
-            fg_color="#B85F3A", hover_color="#C96A45",
-            text_color="#ffffff", width=100,
-            command=self._on_apply,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            bottom, text="Done",
-            fg_color="#2a2a2a", hover_color="#3a3a3a",
-            text_color="#aaaaaa", width=100,
-            command=self.destroy,
-        ).pack(side="left")
-
-    # ── Handlers ──────────────────────────────────────────────────────
+    # ── Handlers ──────────────────────────────────────────────────────────────
 
     def _on_apply(self) -> None:
         self._on_save_keys()

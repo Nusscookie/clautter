@@ -85,9 +85,9 @@ def build_style_controls(parent: Any, w: dict) -> None:
                  font=ctk.CTkFont(size=11), text_color="#aaaaaa",
                  width=120, anchor="w").grid(row=0, column=0, sticky="w")
     w["wpl_slider"] = ctk.CTkSlider(wpl_row, from_=1, to=12, number_of_steps=11)
-    w["wpl_slider"].set(7)
+    w["wpl_slider"].set(2)
     w["wpl_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
-    w["wpl_label"] = ctk.CTkLabel(wpl_row, text="7",
+    w["wpl_label"] = ctk.CTkLabel(wpl_row, text="2",
                                    font=ctk.CTkFont(size=11), text_color="#D97757",
                                    width=24, anchor="e")
     w["wpl_label"].grid(row=0, column=2, sticky="e")
@@ -99,9 +99,9 @@ def build_style_controls(parent: Any, w: dict) -> None:
                  font=ctk.CTkFont(size=11), text_color="#aaaaaa",
                  width=120, anchor="w").grid(row=0, column=0, sticky="w")
     w["lpb_slider"] = ctk.CTkSlider(lpb_row, from_=1, to=3, number_of_steps=2)
-    w["lpb_slider"].set(2)
+    w["lpb_slider"].set(1)
     w["lpb_slider"].grid(row=0, column=1, sticky="ew", padx=(8, 8))
-    w["lpb_label"] = ctk.CTkLabel(lpb_row, text="2",
+    w["lpb_label"] = ctk.CTkLabel(lpb_row, text="1",
                                    font=ctk.CTkFont(size=11), text_color="#D97757",
                                    width=24, anchor="e")
     w["lpb_label"].grid(row=0, column=2, sticky="e")
@@ -221,5 +221,6 @@ def build_text_style_card(parent: Any, w: dict) -> None:
         color_row, text="", width=36, height=26, corner_radius=4,
         fg_color="#FFFF00", hover_color="#FFFF00",
         border_width=2, border_color="#555555",
+        state="disabled",
     )
     w["highlight_color_btn"].pack(side="left")

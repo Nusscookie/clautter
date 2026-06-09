@@ -94,7 +94,7 @@ class MainWindow:
         self._beta_banner.pack_propagate(False)
         ctk.CTkLabel(
             self._beta_banner,
-            text="⚠  BETA / ALPHA — Clutter is in active development. Expect rough edges.",
+            text="⚠  ALPHA — Clutter is in active development. Expect rough edges.",
             font=ctk.CTkFont(size=11),
             text_color="#E8903A",
             anchor="w",
