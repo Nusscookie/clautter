@@ -38,6 +38,7 @@ the API budget for operations that actually need it.
 | **Subtitles** | ✅ Full | ElevenLabs or local Whisper STT → styled ASS subtitle track. Hormozi/TikTok word-by-word mode. |
 | **Auto Zooms** | ✅ Full | Face Detection (OpenCV) or RMS peaks → zoom cuts with Fusion ease-in/out. |
 | **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline with optional LLM re-rank + V2 auto-placement. |
+| **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
 | **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation planned for V2. |
 
 ---
@@ -80,16 +81,18 @@ Primary accent: `#D97757` (terracotta orange, from the app icon).
 | Package | Purpose |
 |---|---|
 | `customtkinter` | GUI toolkit |
-| `faster-whisper` | Local speech-to-text (optional) |
-| `silero-vad` + `onnxruntime` | VAD-based silence detection |
-| `spacy` | Retake detection filler normalization |
+| `pydantic` | Typed settings models + validation |
+| `faster-whisper` | Local speech-to-text (subtitles) |
+| `silero-vad` + `torchaudio` + `soundfile` + `onnxruntime` | VAD-based silence detection |
+| `spacy` + `en-core-web-sm` | Keyword extraction (B-roll) + retake filler normalization |
+| `yake` + `keybert` + `joblib` | Keyword extraction + embedding cache (B-roll search) |
+| `sentence-transformers` | Semantic B-roll matching + mood analysis |
 | `opencv-python` | Face-based zoom detection |
-| `sentence-transformers` | Semantic B-roll matching |
-| `pydub` | Audio loading and RMS detection |
-| `requests` | ElevenLabs API + HTTP bridge client + online B-roll search |
+| `scenedetect` | B-roll boundary detection (autonomous mode) |
+| `pydub` | Audio loading, RMS detection, music/SFX volume + fades |
+| `requests` | ElevenLabs API + HTTP bridge client + online B-roll/music/SFX search |
 | `numpy` | RMS computation |
 | `Pillow` | App icon loading |
-| `scenedetect` | B-roll boundary detection |
 | `ffmpeg` (system) | Audio decoding (required by pydub) |
 
 Install with `py -3.12 -m pip install -r requirements.txt`.
