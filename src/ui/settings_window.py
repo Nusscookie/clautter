@@ -205,12 +205,22 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._oai_entry, self._oai_status = _key_row(panel, "OpenAI")
         self._gem_entry, self._gem_status = _key_row(panel, "Gemini")
         self._mmx_entry, self._mmx_status = _key_row(panel, "Minimax")
+        self._nv_entry, self._nv_status = _key_row(panel, "NVIDIA")
+
+        ctk.CTkLabel(
+            panel,
+            text="NVIDIA gives free access to many open-source models. "
+                 "Set the model id in the LLM Models tab.",
+            font=ctk.CTkFont(size=10), text_color="#555555",
+            anchor="w", wraplength=640,
+        ).pack(fill="x", padx=12, pady=(0, 4))
 
         ctk.CTkFrame(panel, fg_color="transparent", height=8).pack()
 
         _prefill(self._oai_entry, str(app.settings.get("openai_api_key", "") or ""))
         _prefill(self._gem_entry, str(app.settings.get("gemini_api_key", "") or ""))
         _prefill(self._mmx_entry, str(app.settings.get("minimax_api_key", "") or ""))
+        _prefill(self._nv_entry, str(app.settings.get("nvidia_api_key", "") or ""))
 
         self._panels["LLM Keys"] = panel
 
@@ -233,6 +243,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._oai_model = _option_row(panel, "OpenAI model:", _OPENAI_MODELS)
         self._gem_model = _option_row(panel, "Gemini model:", _GEMINI_MODELS)
         self._mmx_model = _option_row(panel, "Minimax model:", _MINIMAX_MODELS)
+        self._nv_model = _text_row(panel, "NVIDIA model id:", placeholder="e.g. moonshotai/kimi-k2.6")
 
         self._llm_max_tokens_entry = _numeric_row(
             panel, "Max tokens:", 200, 8000,
@@ -250,6 +261,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._oai_model.set(str(app.settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"))
         self._gem_model.set(str(app.settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash"))
         self._mmx_model.set(str(app.settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"))
+        _prefill(self._nv_model, str(app.settings.get("llm_nvidia_model", "") or ""))
 
         self._panels["LLM Models"] = panel
 
@@ -407,6 +419,11 @@ class _SettingsWindow(ctk.CTkToplevel):
             app.settings.set("minimax_api_key", mmx)
             saved.append("Minimax")
             self._mmx_status.configure(text="Saved.", text_color="#66bb6a")
+        nv = self._nv_entry.get().strip()
+        if nv:
+            app.settings.set("nvidia_api_key", nv)
+            saved.append("NVIDIA")
+            self._nv_status.configure(text="Saved.", text_color="#66bb6a")
 
         log.info("Settings: saved LLM keys: %s", ", ".join(saved) if saved else "none")
 
@@ -415,6 +432,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         app.settings.set("llm_openai_model", self._oai_model.get())
         app.settings.set("llm_gemini_model", self._gem_model.get())
         app.settings.set("llm_minimax_model", self._mmx_model.get())
+        app.settings.set("llm_nvidia_model", self._nv_model.get().strip())
         try:
             app.settings.set("llm_max_tokens", int(self._llm_max_tokens_entry.get().strip()))
         except ValueError:
@@ -490,6 +508,20 @@ def _option_row(parent: Any, label: str, values: list[str]) -> ctk.CTkOptionMenu
     )
     menu.pack(side="left", padx=(6, 0))
     return menu
+
+
+def _text_row(parent: Any, label: str, placeholder: str = "") -> ctk.CTkEntry:
+    """Single-line free-text input row (visible, not masked)."""
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    row.pack(fill="x", padx=12, pady=(0, 6))
+    row.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11),
+                 text_color="#aaaaaa", width=150, anchor="w").grid(row=0, column=0, sticky="w")
+
+    entry = ctk.CTkEntry(row, placeholder_text=placeholder)
+    entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+    return entry
 
 
 def _numeric_row(

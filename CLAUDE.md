@@ -1,8 +1,26 @@
 # CLAUDE.md — Clutter
 
 > DaVinci Resolve plugin for talking-head video editing (silence cutting,
-> subtitles, auto-zooms, B-roll, motion graphics). Read this before touching
-> the codebase.
+> subtitles, auto-zooms, B-roll, music/SFX, motion graphics). Read this
+> before touching the codebase.
+
+---
+
+## Docs map (read these first)
+
+Docs live at repo root or under `docs/`:
+
+| Doc | What it is |
+|---|---|
+| **CLAUDE.md** (this file) | Architecture, conventions, gotchas. Authoritative for *how the code works*. |
+| **README.md** | User-facing overview: features, philosophy, deps, quick start. |
+| **future.md** | **Roadmap + backlog.** Every feature idea with status (✅ done · 🔶 partial · ⬜ not started), impl notes, packages, effort, priority tiers. Check before building a feature — may already be specced or done. Gitignored. |
+| **SPECS.md** | Original product brief (per-tab requirements). Historical intent, not current state. |
+| **INSTALL.md** | End-user install guide (Python pin, ffmpeg, Scripts stub, troubleshooting). |
+| **package-evaluation.md** | Dep cost/benefit analysis feeding `future.md` priority tiers. |
+| **UNOFFICIAL_DOC.md** / **docs/resolve_api_reference.md** | Resolve API refs; free-edition quirks in the latter. |
+| **docs/autocut_*.md** | AutoCut plugin reverse-engineering notes. Gitignored research. |
+| **design/palette.md** | Brand color palette (terracotta `#D97757`). LICENSE.md = GPLv3. |
 
 ---
 
@@ -78,7 +96,28 @@ talks to it through a localhost proxy that looks identical to a real
 | Subtitles | `ui/subtitles_tab.py` | `subtitles/elevenlabs.py` + `generator.py` + `exporter.py` |
 | Auto Zooms | `ui/zooms_tab.py` | `zooms/analyzer.py` + `applier.py` |
 | B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` |
+| Music & SFX | `ui/music_tab.py` | `music/audio_provider.py` + `mood_analyzer.py` + `sfx_engine.py` + `placer.py` |
 | Motion Graphics | `ui/graphics_tab.py` | `graphics/suggester.py` |
+
+### Repo layout
+
+```
+main.py  gui.py  install.py  requirements.txt  config.example.json
+src/
+  app.py        AIEditorApp — framework-agnostic state holder
+  ui/           Tabs (build/setup) + main_window + settings_window.
+                Big tabs split into _<tab>_build.py / _<tab>_workers.py helpers.
+  smartcuts/    Silence detection (VAD/RMS) + cutter + retake detection
+  pace/         Pace slider → smartcuts param mapping
+  subtitles/    ElevenLabs + faster-whisper STT → ASS/Fusion titles
+  zooms/        Face/RMS zoom detection + Fusion keyframe applier
+  broll/        Scan + match + online providers/ + autonomous agent
+  music/        Mood-matched music + auto SFX (providers, ducking, placer)
+  graphics/     Motion-graphics suggester (BETA stub)
+  settings/     JSON config manager (~/.clutter/config.json)
+  utils/        rpc_server, rpc_client, resolve_api, logger
+tests/ (ad-hoc probes, not pytest)   docs/  design/  assets/  install.py
+```
 
 ---
 
@@ -115,8 +154,7 @@ def _work_thread():
 
 ### Imports
 
-- Top-of-file: stdlib + third-party.
-- **Lazy** imports for heavy/Resolve-touching modules (e.g. `from src.subtitles.elevenlabs import ...` inside the worker function). Keeps tab startup snappy.
+Top-of-file: stdlib + third-party. **Lazy**-import heavy/Resolve-touching modules inside the worker function (e.g. `from src.subtitles.elevenlabs import ...`) to keep tab startup snappy.
 
 ### Code style
 
@@ -128,13 +166,7 @@ def _work_thread():
 
 ## Reference: AutoSubs (working free-edition Resolve script)
 
-AutoSubs (tmoroney/auto-subs) is installed alongside Clutter at:
-
-```
-%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\AutoSubs\
-```
-
-It is a working example of a DaVinci Resolve script that runs in the **free edition**. It works because it runs inside Resolve's process (Scripts menu), where `resolve` is available as a module global — the same mechanism Clutter's `main.py` uses. Consult it when debugging in-Resolve scripting behaviour or verifying a Resolve API call.
+AutoSubs (tmoroney/auto-subs) is installed alongside Clutter at `…\Scripts\Utility\AutoSubs\`. A working example of a Resolve script that runs in the **free edition** — it works because it runs inside Resolve's process (Scripts menu), where `resolve` is a module global, the same mechanism Clutter's `main.py` uses. Consult it when debugging in-Resolve scripting or verifying an API call.
 
 ---
 
@@ -159,12 +191,8 @@ py -3.12 main.py   # simulate Scripts menu launcher
 py -3.12 install.py
 ```
 
-## Adding a feature
+## Adding a feature / dep
 
 1. New folder `src/<feature>/` (logic, no widgets) + `src/ui/<feature>_tab.py` with `build()` + `setup()`.
-2. Register in `src/ui/main_window.py` `_TABS`.
-3. Document in `README.md`.
-
-## Adding a dep
-
-Add pinned lower-bound to `requirements.txt` with a comment. Verify on 3.10/3.11/3.12. Lazy-import heavy deps inside the tab's worker.
+2. Register in `src/ui/main_window.py` `_TABS`. Document in `README.md` + update status in `future.md`.
+3. New dep: pinned lower-bound in `requirements.txt` with a comment. Verify on 3.10/3.11/3.12. Lazy-import heavy deps inside the tab's worker.

@@ -192,7 +192,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
                  text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
     w["auto_llm_mode"] = ctk.CTkSegmentedButton(
         llm_row,
-        values=["Off", "Full Director"],
+        values=["Off"],  # real provider segments are set at setup() from configured keys
         font=ctk.CTkFont(size=11),
         selected_color="#1b5e20",
         selected_hover_color="#2e7d32",
@@ -204,7 +204,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_llm_mode"].pack(side="left", padx=(6, 0))
     ctk.CTkLabel(
         llm_row,
-        text="Full Director: LLM picks clips + positions (needs OpenAI/Gemini/Minimax key)",
+        text="Pick a provider to let the LLM choose clips + positions. Only providers with an API key are shown.",
         font=ctk.CTkFont(size=10), text_color="#555555",
     ).pack(side="left", padx=(10, 0))
 

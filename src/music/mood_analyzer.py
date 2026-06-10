@@ -20,6 +20,7 @@ log = get_logger(__name__)
 _OPENAI_URL  = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
+_NVIDIA_URL  = "https://integrate.api.nvidia.com/v1/chat/completions"
 _TIMEOUT     = 60
 
 MOOD_BUCKETS: dict[str, str] = {
@@ -140,11 +141,10 @@ def analyze_mood_llm(
     n_sections: int = 1,
 ) -> list[MoodSection]:
     """Ask a cloud LLM for mood sections. Falls back to keyword mode on failure."""
-    openai_key  = (settings.get("openai_api_key",  "") or "").strip()
-    gemini_key  = (settings.get("gemini_api_key",  "") or "").strip()
-    minimax_key = (settings.get("minimax_api_key", "") or "").strip()
+    from src.utils.llm_providers import api_key_for, resolve_provider
 
-    if not openai_key and not gemini_key and not minimax_key:
+    chosen = resolve_provider(settings, None)
+    if chosen is None:
         log.warning("[mood_llm] no cloud API key — falling back to keyword mode")
         return analyze_mood_keywords(transcript, n_sections)
 
@@ -171,15 +171,23 @@ def analyze_mood_llm(
     openai_model  = str(settings.get("llm_openai_model",  "gpt-4o-mini") or "gpt-4o-mini")
     gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
     minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
+    nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
     max_tokens    = int(settings.get("llm_max_tokens", 500) or 500)
 
+    if chosen == "NVIDIA" and not nvidia_model:
+        log.warning("[mood_llm] NVIDIA selected but no model id set — falling back to keywords")
+        return analyze_mood_keywords(transcript, n_sections)
+
+    key = api_key_for(settings, chosen)
     try:
-        if openai_key:
-            reply = _call_openai(prompt, openai_key, openai_model, max_tokens)
-        elif gemini_key:
-            reply = _call_gemini(prompt, gemini_key, gemini_model, max_tokens)
+        if chosen == "OpenAI":
+            reply = _call_openai(prompt, key, openai_model, max_tokens)
+        elif chosen == "Gemini":
+            reply = _call_gemini(prompt, key, gemini_model, max_tokens)
+        elif chosen == "NVIDIA":
+            reply = _call_nvidia(prompt, key, nvidia_model, max_tokens)
         else:
-            reply = _call_minimax(prompt, minimax_key, minimax_model, max_tokens)
+            reply = _call_minimax(prompt, key, minimax_model, max_tokens)
 
         raw = _extract_json(reply)
         sections = _parse_sections(raw, total_end)
@@ -230,6 +238,23 @@ def _call_minimax(prompt: str, api_key: str, model: str, max_tokens: int) -> str
                   {"role": "user", "content": prompt},
               ],
               "max_tokens": max_tokens, "temperature": 0.1},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+
+def _call_nvidia(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+    resp = requests.post(  # noqa: F821
+        _NVIDIA_URL,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": model,
+              "messages": [
+                  {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
+                  {"role": "user", "content": prompt},
+              ],
+              "max_tokens": max_tokens, "temperature": 0.1,
+              "chat_template_kwargs": {"thinking": False}},
         timeout=_TIMEOUT,
     )
     resp.raise_for_status()

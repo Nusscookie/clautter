@@ -28,6 +28,12 @@ genuinely requires a model. Silence detection, zoom placement, and B-roll matchi
 those run locally with zero API calls. This keeps everyday editing free and fast, and leaves
 the API budget for operations that actually need it.
 
+For the operations that *do* use a cloud LLM (autonomous B-roll direction, B-roll re-rank,
+music mood analysis), Clutter supports OpenAI, Gemini, Minimax, and **NVIDIA**. NVIDIA grants
+free access to many open-source models via an OpenAI-compatible API, so you can run the
+cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model
+id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
+
 ---
 
 ## Features
@@ -37,7 +43,7 @@ the API budget for operations that actually need it.
 | **Smart Cuts** | ✅ Full | Remove silences with a pace slider (1–10) + fine-grained controls. VAD-based detection. |
 | **Subtitles** | ✅ Full | ElevenLabs or local Whisper STT → styled ASS subtitle track. Hormozi/TikTok word-by-word mode. |
 | **Auto Zooms** | ✅ Full | Face Detection (OpenCV) or RMS peaks → zoom cuts with Fusion ease-in/out. |
-| **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline with optional LLM re-rank + V2 auto-placement. |
+| **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline. The **LLM mode** button is a provider picker — `Off` plus one segment per cloud LLM you have a key for (OpenAI / Gemini / Minimax / NVIDIA); pick one to let the LLM choose clips and positions. |
 | **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
 | **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation planned for V2. |
 

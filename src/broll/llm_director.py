@@ -25,6 +25,7 @@ log = get_logger(__name__)
 _OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
+_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 _TIMEOUT = 90
 
 # Returned when no API key is configured — caller can show a specific message
@@ -220,12 +221,45 @@ def _call_minimax(prompt: str, api_key: str, model: str, max_tokens: int, temper
     return content
 
 
+def _call_nvidia(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
+    import requests
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are an expert video editor. Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        # Many NVIDIA-hosted models are reasoning models; suppress <think> blocks
+        # so the reply is clean JSON. Ignored by non-reasoning models.
+        "chat_template_kwargs": {"thinking": False},
+    }
+    resp = requests.post(
+        _NVIDIA_URL,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    content = data["choices"][0]["message"]["content"]
+    if not content or not content.strip():
+        finish = data["choices"][0].get("finish_reason", "unknown")
+        raise ValueError(f"NVIDIA returned empty content (finish_reason={finish!r})")
+    return content
+
+
 def direct(
     transcript_words: list[dict],
     segments: list[tuple[str, float]],
     keywords: list[str],
     candidates: list[dict],
     settings: Any,
+    provider: str | None = None,
     max_placements: int = 10,
     intro_skip_sec: float = 8.0,
     min_gap_sec: float = 5.0,
@@ -248,12 +282,11 @@ def direct(
     if not segments or not candidates:
         return [], "No segments or candidates to send to LLM."
 
-    openai_key = (settings.get("openai_api_key", "") or "").strip()
-    gemini_key = (settings.get("gemini_api_key", "") or "").strip()
-    minimax_key = (settings.get("minimax_api_key", "") or "").strip()
+    from src.utils.llm_providers import api_key_for, resolve_provider
 
-    if not openai_key and not gemini_key and not minimax_key:
-        return [], "No cloud API key set. Add OpenAI, Gemini, or Minimax key in Settings (⚙)."
+    chosen = resolve_provider(settings, provider)
+    if chosen is None:
+        return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, or NVIDIA key in Settings (⚙)."
 
     # Attach canonical name to each candidate for prompt + matching
     enriched: list[dict] = []
@@ -269,6 +302,9 @@ def direct(
     openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
     gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
     minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
+    nvidia_model = str(settings.get("llm_nvidia_model", "") or "").strip()
+    if chosen == "NVIDIA" and not nvidia_model:
+        return [], "Set an NVIDIA model id in Settings (⚙ → LLM Models)."
     max_tokens = int(settings.get("llm_max_tokens", 1500) or 1500)
     temperature = float(settings.get("llm_temperature", 0.1) or 0.1)
 
@@ -283,16 +319,17 @@ def direct(
     log.debug("[llm_director] prompt length: %d chars, %d candidates, %d segments",
               len(prompt), len(enriched), len(segments))
 
+    key = api_key_for(settings, chosen)
+    source = chosen
     try:
-        if openai_key:
-            reply = _call_openai(prompt, openai_key, openai_model, max_tokens, temperature)
-            source = "OpenAI"
-        elif gemini_key:
-            reply = _call_gemini(prompt, gemini_key, gemini_model, max_tokens, temperature)
-            source = "Gemini"
+        if chosen == "OpenAI":
+            reply = _call_openai(prompt, key, openai_model, max_tokens, temperature)
+        elif chosen == "Gemini":
+            reply = _call_gemini(prompt, key, gemini_model, max_tokens, temperature)
+        elif chosen == "NVIDIA":
+            reply = _call_nvidia(prompt, key, nvidia_model, max_tokens, temperature)
         else:
-            reply = _call_minimax(prompt, minimax_key, minimax_model, max_tokens, temperature)
-            source = "Minimax"
+            reply = _call_minimax(prompt, key, minimax_model, max_tokens, temperature)
 
         log.debug("[llm_director] %s reply (first 600 chars): %s", source, reply[:600])
         if not reply or not reply.strip():

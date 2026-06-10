@@ -62,6 +62,7 @@ class ClutterSettings(BaseModel):
     openai_api_key: str = ""
     gemini_api_key: str = ""
     minimax_api_key: str = ""
+    nvidia_api_key: str = ""
     pixabay_api_key: str = ""
     pexels_api_key: str = ""
 
@@ -106,7 +107,7 @@ class ClutterSettings(BaseModel):
     broll_auto_max_clips: int = 10
     broll_auto_provider: str = "Both"
     broll_auto_dl_folder: str = ""
-    broll_llm_mode: str = "Auto"
+    broll_llm_mode: str = "Off"  # "Off" or a provider name (OpenAI/Gemini/Minimax/NVIDIA)
     broll_keyword_method: str = "YAKE"
     # Natural placement
     broll_natural_placement: bool = True
@@ -121,6 +122,7 @@ class ClutterSettings(BaseModel):
     llm_openai_model: str = "gpt-4o-mini"
     llm_gemini_model: str = "gemini-2.0-flash"
     llm_minimax_model: str = "MiniMax-Text-01"
+    llm_nvidia_model: str = ""  # free-text NVIDIA model id (e.g. moonshotai/kimi-k2.6)
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.1
 

@@ -18,6 +18,7 @@ log = get_logger(__name__)
 _OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 _TIMEOUT = 15
 
 
@@ -97,10 +98,30 @@ def _call_minimax(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
+def _call_nvidia(prompt: str, api_key: str, model: str) -> str:
+    import requests
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 8,
+        "temperature": 0,
+        "chat_template_kwargs": {"thinking": False},
+    }
+    resp = requests.post(
+        _NVIDIA_URL,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+
 def rerank(
     segment_text: str,
     candidates: list[dict],
     settings: Any,
+    provider: str | None = None,
 ) -> list[dict]:
     """Re-rank *candidates* using a cloud LLM if an API key is available.
 
@@ -120,26 +141,29 @@ def rerank(
     top = candidates[:3]
     rest = candidates[3:]
 
-    openai_key = (settings.get("openai_api_key", "") or "").strip()
-    gemini_key = (settings.get("gemini_api_key", "") or "").strip()
-    minimax_key = (settings.get("minimax_api_key", "") or "").strip()
+    from src.utils.llm_providers import api_key_for, resolve_provider
 
-    if not openai_key and not gemini_key and not minimax_key:
+    chosen = resolve_provider(settings, provider)
+    if chosen is None:
         log.debug("[reranker] no cloud API key — skipping re-rank")
+        return candidates
+    if chosen == "NVIDIA" and not (settings.get("llm_nvidia_model", "") or "").strip():
+        log.debug("[reranker] NVIDIA selected but no model id set — skipping re-rank")
         return candidates
 
     prompt = _build_prompt(segment_text, top)
+    key = api_key_for(settings, chosen)
+    source = chosen
 
     try:
-        if openai_key:
-            reply = _call_openai(prompt, openai_key)
-            source = "OpenAI"
-        elif gemini_key:
-            reply = _call_gemini(prompt, gemini_key)
-            source = "Gemini"
+        if chosen == "OpenAI":
+            reply = _call_openai(prompt, key)
+        elif chosen == "Gemini":
+            reply = _call_gemini(prompt, key)
+        elif chosen == "NVIDIA":
+            reply = _call_nvidia(prompt, key, str(settings.get("llm_nvidia_model", "")).strip())
         else:
-            reply = _call_minimax(prompt, minimax_key)
-            source = "Minimax"
+            reply = _call_minimax(prompt, key)
 
         best_idx = _parse_index(reply, len(top))
         log.info("[reranker] %s picked candidate %d for segment %r",

@@ -85,8 +85,10 @@ def setup(frame: Any, app: Any) -> None:
     # ── Hydrate autonomous settings ─────────────────────────────────
     auto_local = bool(app.settings.get("broll_auto_use_local", True))
     auto_online = bool(app.settings.get("broll_auto_use_online", True))
+    from src.utils.llm_providers import available_providers
+    llm_mode_values = ["Off"] + available_providers(app.settings)
     auto_llm_mode = str(app.settings.get("broll_llm_mode", "Off"))
-    if auto_llm_mode not in ("Off", "Full Director"):
+    if auto_llm_mode not in llm_mode_values:
         auto_llm_mode = "Off"
     auto_cps = str(app.settings.get("broll_auto_clips_per_segment", 1))
     auto_provider = str(app.settings.get("broll_auto_provider", "Both"))
@@ -106,6 +108,7 @@ def setup(frame: Any, app: Any) -> None:
             w["auto_use_local"].select()
         if auto_online:
             w["auto_use_online"].select()
+        w["auto_llm_mode"].configure(values=llm_mode_values)
         w["auto_llm_mode"].set(auto_llm_mode)
         if auto_cps in ("1", "2", "3"):
             w["auto_clips_per_seg"].set(auto_cps)
@@ -331,7 +334,9 @@ def setup(frame: Any, app: Any) -> None:
                 if k:
                     providers.append(("Pexels", k))
 
-        llm_director = w["auto_llm_mode"].get() == "Full Director"
+        llm_sel = w["auto_llm_mode"].get()
+        llm_director = llm_sel != "Off"
+        llm_provider = llm_sel if llm_director else None
         cloud_rerank = False
         clips_per_seg = int(w["auto_clips_per_seg"].get() or 1)
         max_clips = int(round(float(w["auto_max_clips"].get())))
@@ -356,7 +361,7 @@ def setup(frame: Any, app: Any) -> None:
             args=(w, frame, app, _state, local_folder, providers, dl_folder,
                   cloud_rerank, clips_per_seg, max_clips, _on_progress, set_auto_status, _ui,
                   llm_director, fill_frame, natural_placement, no_start_broll,
-                  intro_skip_sec, min_gap_sec, max_broll_duration),
+                  intro_skip_sec, min_gap_sec, max_broll_duration, llm_provider),
             daemon=True,
         ).start()
 

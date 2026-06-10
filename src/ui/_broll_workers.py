@@ -291,6 +291,7 @@ def autonomous_thread(
     intro_skip_sec: float = 8.0,
     min_gap_sec: float = 5.0,
     max_broll_duration: float = 5.0,
+    llm_provider: str | None = None,
 ) -> None:
     """End-to-end autonomous B-roll pipeline on a daemon thread."""
     from src.broll.autonomous import run_autonomous
@@ -306,6 +307,7 @@ def autonomous_thread(
             on_progress=on_progress,
             max_clips=max_clips,
             llm_director_mode=llm_director_mode,
+            llm_provider=llm_provider,
             fill_frame=fill_frame,
             natural_placement=natural_placement,
             no_start_broll=no_start_broll,
