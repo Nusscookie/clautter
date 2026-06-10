@@ -49,6 +49,21 @@ def build(parent: Any) -> None:
     w["mood_mode"].set("Keywords")
     w["mood_mode"].grid(row=0, column=1, sticky="w")
 
+    # LLM provider picker (hidden until Mood Engine = "LLM"). Values set in setup().
+    w["mood_llm_row"] = ctk.CTkFrame(music_card, fg_color="transparent")
+    llm_row = w["mood_llm_row"]
+    llm_row.grid_columnconfigure(2, weight=1)
+    ctk.CTkLabel(llm_row, text="LLM Provider").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["mood_llm_provider"] = ctk.CTkOptionMenu(
+        llm_row, values=["—"], width=160,
+        fg_color="#1e1e1e", button_color="#1e1e1e", button_hover_color="#3a3a3a",
+    )
+    w["mood_llm_provider"].grid(row=0, column=1, sticky="w")
+    w["mood_llm_hint"] = ctk.CTkLabel(
+        llm_row, text="", font=ctk.CTkFont(size=10), text_color="#888888", anchor="w",
+    )
+    w["mood_llm_hint"].grid(row=0, column=2, sticky="w", padx=(10, 0))
+
     # Sections slider (hidden until "Segments" mode selected)
     w["n_sections_frame"] = ctk.CTkFrame(music_card, fg_color="transparent")
     sec_row = w["n_sections_frame"]

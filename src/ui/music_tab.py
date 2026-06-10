@@ -95,10 +95,40 @@ def setup(frame: Any, app: Any) -> None:
 
     w["music_mode"].configure(command=on_music_mode)
 
+    def _refresh_llm_picker() -> None:
+        """Show/populate the LLM provider row based on Mood Engine + available keys."""
+        from src.utils.llm_providers import available_providers
+        is_llm = w["mood_mode"].get() == "LLM"
+        if not is_llm:
+            w["mood_llm_row"].pack_forget()
+            return
+        w["mood_llm_row"].pack(fill="x", padx=10, pady=2, before=w["dl_row"])
+
+        provs = available_providers(app.settings)
+        if provs:
+            saved = str(app.settings.get("music_llm_provider", "") or "")
+            current = saved if saved in provs else provs[0]
+            w["mood_llm_provider"].configure(values=provs, state="normal")
+            w["mood_llm_provider"].set(current)
+            w["mood_llm_hint"].configure(text="")
+        else:
+            w["mood_llm_provider"].configure(values=["—"], state="disabled")
+            w["mood_llm_provider"].set("—")
+            w["mood_llm_hint"].configure(
+                text="No LLM key — add one in Settings (⚙).", text_color="#E8903A",
+            )
+
     def on_mood_mode(value: str) -> None:
         app.settings.set("music_mood_mode", "llm" if value == "LLM" else "keywords")
+        _refresh_llm_picker()
+
+    def on_mood_llm_provider(value: str) -> None:
+        if value and value != "—":
+            app.settings.set("music_llm_provider", value)
 
     w["mood_mode"].configure(command=on_mood_mode)
+    w["mood_llm_provider"].configure(command=on_mood_llm_provider)
+    app.on_settings_changed(_refresh_llm_picker)
 
     # ── Hydrate settings ─────────────────────────────────────────────
     saved_dl = str(app.settings.get("music_dl_folder", "") or
@@ -111,6 +141,7 @@ def setup(frame: Any, app: Any) -> None:
 
     saved_mood_mode = str(app.settings.get("music_mood_mode", "keywords") or "keywords")
     _ui(lambda: w["mood_mode"].set("LLM" if saved_mood_mode == "llm" else "Keywords"))
+    _ui(_refresh_llm_picker)
 
     saved_n = max(1, min(5, int(app.settings.get("music_n_sections", 3) or 3)))
     _ui(lambda: (
@@ -211,6 +242,8 @@ def setup(frame: Any, app: Any) -> None:
 
         music_mode       = "segments" if w["music_mode"].get() == "Segments" else "single"
         mood_mode        = "llm" if w["mood_mode"].get() == "LLM" else "keywords"
+        _sel_provider    = w["mood_llm_provider"].get()
+        mood_provider    = _sel_provider if (mood_mode == "llm" and _sel_provider not in ("", "—")) else None
         n_sections       = max(1, min(5, int(w["n_sections_slider"].get())))
         dl_folder        = _state["dl_folder"] or str(Path.home() / "audio_downloads")
         music_source     = w["music_source"].get().lower()
@@ -234,7 +267,8 @@ def setup(frame: Any, app: Any) -> None:
             kwargs=dict(
                 frame=frame, app=app, state=_state,
                 jamendo_client_id=jamendo_id, download_folder=dl_folder,
-                music_mode=music_mode, mood_mode=mood_mode, n_sections=n_sections,
+                music_mode=music_mode, mood_mode=mood_mode, mood_provider=mood_provider,
+                n_sections=n_sections,
                 music_source=music_source, local_music_folder=local_music,
                 music_volume_pct=music_volume_pct, fade_in_ms=fade_in_ms, fade_out_ms=fade_out_ms,
                 set_status=set_status, set_progress=set_progress, _ui=_ui, w=w,

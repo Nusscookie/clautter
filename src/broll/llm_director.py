@@ -348,3 +348,85 @@ def direct(
     except Exception as e:
         log.warning("[llm_director] API call or parse failed: %s", e)
         return [], f"LLM call failed: {e}"
+
+
+def _dispatch_call(
+    chosen: str, prompt: str, settings: Any, max_tokens: int, temperature: float,
+) -> str:
+    """Route a prompt to the chosen provider. Caller resolves provider + model guard."""
+    from src.utils.llm_providers import api_key_for
+    key = api_key_for(settings, chosen)
+    if chosen == "OpenAI":
+        model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
+        return _call_openai(prompt, key, model, max_tokens, temperature)
+    if chosen == "Gemini":
+        model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
+        return _call_gemini(prompt, key, model, max_tokens, temperature)
+    if chosen == "NVIDIA":
+        model = str(settings.get("llm_nvidia_model", "") or "").strip()
+        return _call_nvidia(prompt, key, model, max_tokens, temperature)
+    model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
+    return _call_minimax(prompt, key, model, max_tokens, temperature)
+
+
+def _extract_str_array(text: str) -> list[str]:
+    """Extract a JSON array of strings from an LLM reply, tolerating fences/think blocks."""
+    raw = _extract_json(text)  # reuses the tolerant array parser
+    out: list[str] = []
+    for item in raw:
+        s = str(item).strip()
+        if s:
+            out.append(s)
+    return out
+
+
+def generate_search_terms(
+    transcript_text: str,
+    settings: Any,
+    provider: str | None = None,
+    max_terms: int = 10,
+) -> tuple[list[str], str]:
+    """Ask a cloud LLM for concrete, visual B-roll search queries from the transcript.
+
+    Returns (terms, error_str). error_str is "" on success. Returns
+    ([], NO_KEY_SENTINEL) when no provider key is configured so the caller can
+    fall back to heuristic keyword extraction cleanly.
+    """
+    text = (transcript_text or "").strip()
+    if not text:
+        return [], "Empty transcript."
+
+    from src.utils.llm_providers import resolve_provider
+
+    chosen = resolve_provider(settings, provider)
+    if chosen is None:
+        return [], NO_KEY_SENTINEL
+    if chosen == "NVIDIA" and not str(settings.get("llm_nvidia_model", "") or "").strip():
+        return [], "Set an NVIDIA model id in Settings (⚙ → LLM Models)."
+
+    max_tokens = int(settings.get("llm_max_tokens", 1500) or 1500)
+    temperature = float(settings.get("llm_temperature", 0.1) or 0.1)
+
+    prompt = (
+        "You are an expert video editor sourcing B-roll for a talking-head video.\n\n"
+        f"TRANSCRIPT:\n\"{text[:3000]}\"\n\n"
+        f"List up to {max_terms} concrete, visual B-roll search queries that a stock "
+        "footage site (Pixabay / Pexels) could return clips for. Each query should be "
+        "2-3 words, describe something filmable (objects, places, actions), and relate "
+        "to what is being discussed. Avoid abstract terms.\n\n"
+        "Respond with ONLY a valid JSON array of strings, nothing else:\n"
+        "[\"city skyline\", \"typing keyboard\", \"ocean waves\"]"
+    )
+
+    try:
+        reply = _dispatch_call(chosen, prompt, settings, max_tokens, temperature)
+        if not reply or not reply.strip():
+            return [], f"{chosen} returned an empty response."
+        terms = _extract_str_array(reply)[:max_terms]
+        log.info("[llm_director] %s search terms: %s", chosen, terms)
+        if not terms:
+            return [], f"{chosen} returned no usable search terms."
+        return terms, ""
+    except Exception as e:
+        log.warning("[llm_director] search-term generation failed: %s", e)
+        return [], f"LLM call failed: {e}"

@@ -1,7 +1,7 @@
 """Central application coordinator for Clutter."""
 
 from __future__ import annotations
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from src.settings.manager import SettingsManager
 from src.utils.logger import get_logger
@@ -25,6 +25,10 @@ class ClutterApp:
 
         self._connected = False
 
+        # Settings-change listeners — tabs register refresh callbacks so UI can
+        # update live when Settings → Apply is pressed (no app restart needed).
+        self._settings_listeners: list[Callable[[], None]] = []
+
         # Shared transcript — populated by Subtitles tab, consumed by Zooms + B-Roll
         self.transcript: list[dict] = []  # list of {word, start_sec, end_sec}
 
@@ -32,6 +36,26 @@ class ClutterApp:
         self.smartcuts_segments: list = []   # list[SegmentRecord] — set after SmartCuts apply
         self.zoom_points: list = []          # list[ZoomPoint] — set after Auto Zooms analyze
         self.broll_placer_results: list = [] # list[PlacerResult] — set after B-Roll autonomous run
+
+    # ------------------------------------------------------------------
+    # Settings-change notification
+    # ------------------------------------------------------------------
+
+    def on_settings_changed(self, cb: Callable[[], None]) -> None:
+        """Register a callback fired after Settings → Apply.
+
+        Callbacks run on the Tk main thread (Apply is a main-thread handler),
+        so they may touch widgets directly.
+        """
+        self._settings_listeners.append(cb)
+
+    def notify_settings_changed(self) -> None:
+        """Notify all registered listeners that settings changed."""
+        for cb in list(self._settings_listeners):
+            try:
+                cb()
+            except Exception as e:
+                log.error("settings listener failed: %s", e)
 
     # ------------------------------------------------------------------
     # Connection

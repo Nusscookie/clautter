@@ -272,11 +272,32 @@ def run_autonomous(
         on_progress("No transcript.", 1.0)
         return result
 
-    # ── 1. Extract keywords ───────────────────────────────────────────
-    on_progress("Extracting keywords from transcript…", 0.05)
+    # ── 1. Extract keywords / LLM-generated search terms ──────────────
     from src.broll.keywords import extract_top_keywords
     method = str(app.settings.get("broll_keyword_method", "spacy"))
-    keywords = extract_top_keywords(app.transcript, top_n=10, method=method)
+    keywords: list[str] = []
+
+    # Full LLM-directed workflow: when an online search will run, let the LLM
+    # produce the Pixabay/Pexels search terms from the transcript. Fall back to
+    # heuristic extraction on any failure / no key.
+    if llm_director_mode and providers:
+        on_progress("Asking LLM for B-roll search terms…", 0.05)
+        from src.broll.llm_director import generate_search_terms
+        transcript_text = " ".join(
+            w["word"] for w in app.transcript if w.get("type") == "word"
+        )
+        terms, err = generate_search_terms(
+            transcript_text, app.settings, provider=llm_provider, max_terms=10,
+        )
+        if terms:
+            keywords = terms
+        else:
+            log.warning("[autonomous] LLM search terms unavailable (%s) — "
+                        "falling back to heuristic keywords", err)
+
+    if not keywords:
+        on_progress("Extracting keywords from transcript…", 0.05)
+        keywords = extract_top_keywords(app.transcript, top_n=10, method=method)
     if not keywords:
         result.warnings.append("No keywords extracted from transcript.")
         on_progress("No keywords found.", 1.0)

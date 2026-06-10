@@ -361,6 +361,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._on_save_llm_keys()
         self._on_save_model_config()
         self._on_save_placement()
+        self._app.notify_settings_changed()
 
     def _on_save_keys(self) -> None:
         app = self._app

@@ -118,6 +118,9 @@ class ClutterSettings(BaseModel):
     # Fill frame
     broll_auto_fill_frame: bool = False
 
+    # Music & SFX
+    music_llm_provider: str = ""  # explicit Mood-Engine LLM provider, "" = auto
+
     # LLM model config
     llm_openai_model: str = "gpt-4o-mini"
     llm_gemini_model: str = "gemini-2.0-flash"

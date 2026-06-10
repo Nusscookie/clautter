@@ -139,11 +139,12 @@ def analyze_mood_llm(
     transcript: list[dict],
     settings: Any,
     n_sections: int = 1,
+    provider: str | None = None,
 ) -> list[MoodSection]:
     """Ask a cloud LLM for mood sections. Falls back to keyword mode on failure."""
     from src.utils.llm_providers import api_key_for, resolve_provider
 
-    chosen = resolve_provider(settings, None)
+    chosen = resolve_provider(settings, provider)
     if chosen is None:
         log.warning("[mood_llm] no cloud API key — falling back to keyword mode")
         return analyze_mood_keywords(transcript, n_sections)

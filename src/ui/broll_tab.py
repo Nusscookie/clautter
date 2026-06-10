@@ -86,10 +86,6 @@ def setup(frame: Any, app: Any) -> None:
     auto_local = bool(app.settings.get("broll_auto_use_local", True))
     auto_online = bool(app.settings.get("broll_auto_use_online", True))
     from src.utils.llm_providers import available_providers
-    llm_mode_values = ["Off"] + available_providers(app.settings)
-    auto_llm_mode = str(app.settings.get("broll_llm_mode", "Off"))
-    if auto_llm_mode not in llm_mode_values:
-        auto_llm_mode = "Off"
     auto_cps = str(app.settings.get("broll_auto_clips_per_segment", 1))
     auto_provider = str(app.settings.get("broll_auto_provider", "Both"))
     auto_dl = str(app.settings.get("broll_auto_dl_folder", "") or str(Path.home() / "broll_downloads"))
@@ -103,13 +99,29 @@ def setup(frame: Any, app: Any) -> None:
     auto_fill_frame = bool(app.settings.get("broll_auto_fill_frame", False))
     auto_natural = bool(app.settings.get("broll_natural_placement", True))
 
+    def _refresh_llm_mode() -> None:
+        """Populate the autonomous LLM-mode dropdown from currently-keyed providers.
+
+        Preserves the live selection if still valid, else the saved value, else "Off".
+        """
+        vals = ["Off"] + available_providers(app.settings)
+        try:
+            current = w["auto_llm_mode"].get()
+        except Exception:
+            current = ""
+        saved = str(app.settings.get("broll_llm_mode", "Off"))
+        chosen = current if current in vals else (saved if saved in vals else "Off")
+        _ui(lambda: (
+            w["auto_llm_mode"].configure(values=vals),
+            w["auto_llm_mode"].set(chosen),
+        ))
+
     def _hydrate_auto() -> None:
         if auto_local:
             w["auto_use_local"].select()
         if auto_online:
             w["auto_use_online"].select()
-        w["auto_llm_mode"].configure(values=llm_mode_values)
-        w["auto_llm_mode"].set(auto_llm_mode)
+        _refresh_llm_mode()
         if auto_cps in ("1", "2", "3"):
             w["auto_clips_per_seg"].set(auto_cps)
         if auto_provider in ("Pixabay", "Pexels", "Both"):
@@ -394,3 +406,8 @@ def setup(frame: Any, app: Any) -> None:
     # Initial state
     _refresh_search_button()
     _refresh_auto_run_btn()
+
+    # Live refresh when Settings → Apply adds/changes a key (no restart needed)
+    app.on_settings_changed(_refresh_llm_mode)
+    app.on_settings_changed(_refresh_search_button)
+    app.on_settings_changed(_refresh_auto_run_btn)

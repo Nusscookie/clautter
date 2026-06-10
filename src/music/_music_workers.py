@@ -31,6 +31,7 @@ def music_thread(
     music_mode: str,
     mood_mode: str,
     n_sections: int,
+    mood_provider: str | None,
     set_status: Callable,
     set_progress: Callable,
     _ui: Callable,
@@ -52,7 +53,8 @@ def music_thread(
         sections_count = n_sections if music_mode == "segments" else 1
 
         if mood_mode == "llm":
-            sections = analyze_mood_llm(app.transcript, app.settings, sections_count)
+            sections = analyze_mood_llm(app.transcript, app.settings, sections_count,
+                                        provider=mood_provider)
         else:
             sections = analyze_mood_keywords(app.transcript, sections_count)
 
