@@ -8,16 +8,13 @@ from typing import Any
 
 import customtkinter as ctk
 
-_MODES = ["Conservative", "Standard", "High Energy"]
-_DETECT_METHODS = ["Face Detection", "RMS Peaks"]
-
 
 def build(parent: Any) -> None:
     w: dict[str, Any] = {}
 
     ctk.CTkLabel(
         parent,
-        text="AUTO ZOOMS  —  Apply dynamic zoom cuts based on face or audio energy",
+        text="AUTO ZOOMS  —  Apply dynamic zoom cuts at your edit's cut points",
         font=ctk.CTkFont(size=11, weight="bold"),
         text_color="#aaaaaa",
         anchor="w",
@@ -30,31 +27,22 @@ def build(parent: Any) -> None:
                  font=ctk.CTkFont(size=10, weight="bold"),
                  text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
 
-    # Detection method dropdown
-    detect_row = ctk.CTkFrame(card, fg_color="transparent")
-    detect_row.pack(fill="x", padx=10, pady=2)
-    detect_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(detect_row, text="Detection Method").grid(row=0, column=0, sticky="w", padx=(0, 12))
-    w["detect_method"] = ctk.CTkComboBox(detect_row, values=_DETECT_METHODS, state="readonly")
-    w["detect_method"].set("Face Detection")
-    w["detect_method"].grid(row=0, column=1, sticky="ew")
+    # Track-face checkbox — centers each zoom on the speaker. Off = plain center
+    # zoom (no OpenCV). Zooms are *triggered* by cut points either way.
+    track_row = ctk.CTkFrame(card, fg_color="transparent")
+    track_row.pack(fill="x", padx=10, pady=2)
+    w["track_face"] = ctk.CTkCheckBox(track_row, text="Track face — center zoom on speaker")
+    w["track_face"].select()  # default ON
+    w["track_face"].pack(side="left")
 
     w["detect_note"] = ctk.CTkLabel(
         card,
-        text="Face Detection requires opencv-python  •  pip install opencv-python",
+        text="Face tracking requires opencv-python  •  pip install opencv-python",
         font=ctk.CTkFont(size=10),
         text_color="#888888",
         anchor="w",
     )
     w["detect_note"].pack(fill="x", padx=10, pady=(0, 4))
-
-    # Energy Mode row — only visible when RMS Peaks selected
-    w["mode_row"] = ctk.CTkFrame(card, fg_color="transparent")
-    w["mode_row"].grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(w["mode_row"], text="Energy Mode").grid(row=0, column=0, sticky="w", padx=(0, 12))
-    w["mode"] = ctk.CTkComboBox(w["mode_row"], values=_MODES, state="readonly")
-    w["mode"].set("Standard")
-    w["mode"].grid(row=0, column=1, sticky="ew")
 
     amount_row = ctk.CTkFrame(card, fg_color="transparent")
     amount_row.pack(fill="x", padx=10, pady=2)
@@ -65,6 +53,15 @@ def build(parent: Any) -> None:
     w["zoom_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
     w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color="#D97757", width=44)
     w["zoom_lbl"].grid(row=0, column=2)
+
+    take_row = ctk.CTkFrame(card, fg_color="transparent")
+    take_row.pack(fill="x", padx=10, pady=2)
+    take_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(take_row, text="Min Take Length (s)").grid(row=0, column=0, sticky="w",
+                                                            padx=(0, 12))
+    w["min_take"] = ctk.CTkEntry(take_row, width=70, justify="center")
+    w["min_take"].insert(0, "2.0")
+    w["min_take"].grid(row=0, column=1, sticky="w")
 
     max_row = ctk.CTkFrame(card, fg_color="transparent")
     max_row.pack(fill="x", padx=10, pady=2)
@@ -90,7 +87,7 @@ def build(parent: Any) -> None:
     btn_row.pack(fill="x", padx=10, pady=6)
     btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio")
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Cuts")
     w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
     w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
@@ -109,7 +106,7 @@ def build(parent: Any) -> None:
     w["progress_frame"].pack(fill="x", padx=10, pady=(2, 0))
 
     w["status"] = ctk.CTkLabel(
-        parent, text="Click Analyze to detect high-energy moments for zooms.",
+        parent, text="Run Smart Cuts first, then Analyze Cuts to place zooms at your cut points.",
         font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
     w["status"].pack(fill="x", padx=12, pady=(2, 4))
 

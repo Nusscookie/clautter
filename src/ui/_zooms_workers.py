@@ -7,7 +7,72 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_MODE_SIGMA: dict[str, float] = {"Conservative": 2.0, "Standard": 1.0, "High Energy": 0.5}
+
+def _clip_for_frame(clips: list, timeline_frame: int) -> Any:
+    """Return the clip whose timeline span contains ``timeline_frame``, or None."""
+    for clip in clips:
+        try:
+            if clip.GetStart() <= timeline_frame < clip.GetEnd():
+                return clip
+        except Exception:
+            continue
+    return None
+
+
+def _broll_zoom_points(app: Any, zoom_pct: float, zoom_dur_frames: int) -> list:
+    """Build ZoomPoints at B-roll insertion timecodes (empty if no B-roll run)."""
+    from src.zooms.analyzer import ZoomPoint
+
+    results = getattr(app, "broll_placer_results", None) or []
+    if not results:
+        return []
+    try:
+        tl_start = int(app.timeline.GetStartFrame())
+    except Exception:
+        tl_start = 0
+
+    points = []
+    for r in results:
+        if not getattr(r, "placed", False):
+            continue
+        sec = getattr(r, "segment_start_sec", None)
+        if sec is None:
+            continue
+        frame = tl_start + round(sec * app.fps)
+        points.append(ZoomPoint(
+            timeline_frame=int(frame),
+            duration_frames=zoom_dur_frames,
+            zoom_amount=zoom_pct,
+        ))
+    return points
+
+
+def _apply_face_centering(zoom_points: list, clips: list, app: Any, set_progress: Callable) -> None:
+    """Fill pan/tilt on each ZoomPoint by sampling the speaker's face in-place.
+
+    Maps each point's timeline_frame back to its owning clip and source frame, then
+    asks face_offset_at for a normalized offset. No face / no clip → leave at 0
+    (plain center zoom for that point). Raises ImportError if OpenCV is missing.
+    """
+    from src.zooms.face_analyzer import face_offset_at
+    from src.utils.resolve_api import get_clip_file_path
+
+    total = max(len(zoom_points), 1)
+    for i, zp in enumerate(zoom_points):
+        set_progress(50 + int((i / total) * 45))
+        clip = _clip_for_frame(clips, zp.timeline_frame)
+        if clip is None:
+            continue
+        file_path = get_clip_file_path(clip)
+        if not file_path:
+            continue
+        try:
+            src_frame = clip.GetSourceStartFrame() + (zp.timeline_frame - clip.GetStart())
+            offset = face_offset_at(file_path, int(src_frame), fps=app.fps)
+        except FileNotFoundError:
+            continue
+        if offset is not None:
+            zp.pan, zp.tilt = offset
 
 
 def analyze_thread(
@@ -19,23 +84,17 @@ def analyze_thread(
     set_progress: Callable,
     ui: Callable,
 ) -> None:
-    """Detect zoom points via face detection or RMS audio peaks."""
+    """Detect zoom points at cut points (+ B-roll), optionally centered on the face."""
     try:
-        from src.zooms.analyzer import detect_zoom_points_auto
-        from src.utils.resolve_api import get_clip_file_path
+        from src.zooms.analyzer import (
+            detect_zoom_points_from_cuts, enforce_spacing, _ZOOM_DURATION_MS,
+        )
 
         set_btn("analyze_btn", False)
         set_btn("apply_btn", False)
         set_btn("preview_btn", False)
         set_progress(0, True)
-
-        detect_method = w["detect_method"].get()
-        use_face = detect_method == "Face Detection"
-
-        if use_face:
-            set_status("Analyzing video for faces...")
-        else:
-            set_status("Analyzing audio for high-energy moments...")
+        set_status("Reading cut points from the timeline...")
 
         app.refresh_timeline()
         clips = app.get_video_clips(1)
@@ -44,74 +103,63 @@ def analyze_thread(
             set_progress(0, False)
             return
 
-        mode_name   = w["mode"].get()
-        sigma       = _MODE_SIGMA.get(mode_name, 1.0)
-        max_per_min = int(w["max_per_min"].get())
-        zoom_pct    = w["zoom_slider"].get() / 100.0
+        try:
+            min_take = float(w["min_take"].get())
+        except ValueError:
+            min_take = 2.0
+        try:
+            max_per_min = int(w["max_per_min"].get())
+        except ValueError:
+            max_per_min = 4
+        zoom_pct = w["zoom_slider"].get() / 100.0
+        track_face = bool(w["track_face"].get())
 
-        all_zoom_points = []
         state["clips"] = clips
-        fallback_used = False
+        set_progress(20)
 
-        for i, clip in enumerate(clips):
-            set_progress(int((i / len(clips)) * 90))
-            file_path = get_clip_file_path(clip)
-            if not file_path:
-                continue
+        points = detect_zoom_points_from_cuts(
+            clips, fps=app.fps, min_take_sec=min_take,
+            max_per_minute=max_per_min, zoom_amount=zoom_pct,
+        )
+
+        # Merge B-roll placements (bonus triggers), then re-space the union.
+        zoom_dur_frames = max(1, int((_ZOOM_DURATION_MS / 1000.0) * app.fps))
+        points += _broll_zoom_points(app, zoom_pct, zoom_dur_frames)
+        points = enforce_spacing(points, app.fps, max_per_min)
+
+        if not points:
+            set_status(
+                "No cut points found. Run Smart Cuts first, or lower Min Take Length "
+                "(the timeline has no takes long enough).",
+                "#ff6b6b",
+            )
+            set_progress(0, False)
+            return
+
+        if track_face:
+            set_status("Centering zooms on the speaker...")
             try:
-                common_kwargs = dict(
-                    file_path=file_path,
-                    clip_start_frame=clip.GetStart(),
-                    src_start_frame=clip.GetSourceStartFrame(),
-                    src_end_frame=clip.GetSourceEndFrame(),
-                    fps=app.fps,
-                    max_per_minute=max_per_min,
-                    zoom_amount=zoom_pct,
+                _apply_face_centering(points, clips, app, set_progress)
+            except ImportError:
+                set_status(
+                    "opencv-python not installed — applying plain center zooms. "
+                    "Run: pip install opencv-python",
+                    "#E8903A",
                 )
-                if use_face:
-                    pts = detect_zoom_points_auto(
-                        method="face",
-                        sample_interval_sec=1.0,
-                        **common_kwargs,
-                    )
-                    if not fallback_used and pts == [] and detect_method == "Face Detection":
-                        pass  # empty is valid — face just not found in this clip
-                else:
-                    pts = detect_zoom_points_auto(
-                        method="rms",
-                        sigma_multiplier=sigma,
-                        **common_kwargs,
-                    )
-                all_zoom_points.extend(pts)
-            except Exception as e:
-                log.error("Zoom analysis error clip %d: %s", i, e)
-                if use_face and "opencv" in str(e).lower():
-                    set_status(
-                        "opencv-python not installed. "
-                        "Run: pip install opencv-python",
-                        "#ff6b6b",
-                    )
-                    set_progress(0, False)
-                    return
 
-        state["zoom_points"] = all_zoom_points
-        app.zoom_points = all_zoom_points
-        _n = len(all_zoom_points)
+        state["zoom_points"] = points
+        app.zoom_points = points
+        _n = len(points)
         ui(lambda: w["found_count"]._val.configure(text=str(_n)))
 
         set_progress(100)
-        method_label = "face" if use_face else "audio"
-        if all_zoom_points:
-            set_status(
-                f"Found {_n} zoom point(s) via {method_label} detection. "
-                "Click Apply Zooms to create a new timeline.",
-                "#66bb6a",
-            )
-            set_btn("apply_btn", True)
-            set_btn("preview_btn", True)
-        else:
-            hint = "Check that faces are visible in the clip." if use_face else "Try 'High Energy' mode."
-            set_status(f"No zoom points detected. {hint}", "#E8903A")
+        set_status(
+            f"Found {_n} zoom point(s) at your cut points. "
+            "Click Apply Zooms to create a new timeline.",
+            "#66bb6a",
+        )
+        set_btn("apply_btn", True)
+        set_btn("preview_btn", True)
         set_progress(0, False)
 
     except Exception as e:

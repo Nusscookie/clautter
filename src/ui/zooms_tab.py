@@ -1,4 +1,4 @@
-"""Auto Zooms tab — face-detection or volume-peak-based zoom cuts."""
+"""Auto Zooms tab — zoom cuts at edit cut points, optionally face-centered."""
 
 from __future__ import annotations
 import threading
@@ -79,15 +79,6 @@ def setup(frame: Any, app: Any) -> None:
             daemon=True,
         ).start()
 
-    def _toggle_mode_row(method: str) -> None:
-        if method == "RMS Peaks":
-            w["mode_row"].pack(fill="x", padx=10, pady=2)
-            w["detect_note"].configure(text_color="#555555")
-        else:
-            w["mode_row"].pack_forget()
-            w["detect_note"].configure(text_color="#888888")
-
-    w["detect_method"].configure(command=lambda v: _ui(lambda: _toggle_mode_row(v)))
     w["zoom_slider"].configure(
         command=lambda v: _ui(lambda: w["zoom_lbl"].configure(text=f"{int(v)}%")))
     w["analyze_btn"].configure(command=on_analyze)

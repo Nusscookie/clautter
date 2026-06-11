@@ -33,6 +33,100 @@ log = get_logger(__name__)
 
 _DYNAMIC_ZOOM_EASE_IN_OUT = 3  # Resolve DynamicZoomEase value for ease in & out
 _EASE_SECONDS = 0.4            # ramp-in / ramp-out duration for the Fusion Size keyframes
+_ZOOM_MAX = 1.6                # hard cap so black-edge compensation never over-zooms
+
+
+def _safe_zoom(
+    user_zoom: float, pan: float, tilt: float, fusion: bool = False
+) -> tuple[float, float, float]:
+    """Raise zoom to fully cover the pan/tilt shift, or drop the shift if it can't.
+
+    A center-shifted clip exposes a black edge unless it is zoomed enough to cover
+    the shift. The minimum covering zoom for a normalized offset o (per axis)
+    differs by path:
+
+      * static (clip-property Pan/Tilt in pixels):  zoom_to_cover(o) = 1 + 2*|o|
+      * fusion (normalized Transform Center):        zoom_to_cover(o) = 1 / (1 - 2*|o|)
+        — inverting o_max(Z) = (Z-1)/(2Z), the largest Center offset Z can cover.
+
+    We take the largest of the user's zoom and what each axis needs. If that fits
+    under _ZOOM_MAX, keep the full pan/tilt (a fully-covered face-centered zoom).
+    If it would exceed the cap, we do NOT scale the pan down to a half-follow with a
+    visible border — instead we discard the face follow entirely: plain center zoom
+    at the user's amount. So every zoom is either fully covered + centered, or a
+    clean center zoom. pan/tilt are normalized offsets in [-0.5, 0.5].
+    """
+    def cover(o: float) -> float:
+        a = min(abs(o), 0.499)  # guard the fusion 1/(1-2o) singularity at o→0.5
+        return 1.0 / (1.0 - 2.0 * a) if fusion else 1.0 + 2.0 * a
+
+    need = max(user_zoom, cover(pan), cover(tilt))
+    if need <= _ZOOM_MAX:
+        return need, pan, tilt
+    # Cannot cover the requested offset within the cap → drop the follow.
+    return user_zoom, 0.0, 0.0
+
+
+def _zoom_took(item: Any, expected: float) -> bool:
+    """True if a SetProperty("ZoomX") actually applied (read it back).
+
+    On Resolve free, the static zoom property can silently no-op, leaving ZoomX at
+    ~1.0. Treat a missing/unchanged value as "did not take" so the caller can fall
+    back to Fusion. Conservatively returns True if the value can't be read (don't
+    double-apply when the property API simply doesn't expose a getter).
+    """
+    try:
+        got = item.GetProperty("ZoomX")
+        if got is None:
+            return True
+        return abs(float(got) - float(expected)) < 0.01
+    except Exception:
+        return True
+
+
+def _wire_transform(item: Any) -> tuple[Any, Any]:
+    """Acquire the clip's Fusion comp and return (comp, Transform tool) with the
+    Transform wired into the render graph (MediaIn → Transform → MediaOut).
+
+    Wiring the Transform's Input to MediaIn and routing MediaOut's Input from the
+    Transform is the step that makes a scripted Transform actually render — without
+    it SetInput("Size", …) is a silent no-op. Raises on any failure so the caller
+    can fall back to static SetProperty. Shared by the animated zoom path and the
+    static (free-edition) fallback used by zooms and B-Roll fill-frame.
+    """
+    comp = item.GetFusionCompByIndex(1) or item.AddFusionComp()
+    if comp is None:
+        raise RuntimeError("could not acquire or create a Fusion comp on the clip")
+
+    mediain = comp.FindTool("MediaIn1")
+    mediaout = comp.FindTool("MediaOut1")
+    if mediain is None or mediaout is None:
+        raise RuntimeError("clip comp is missing MediaIn1/MediaOut1")
+
+    xf = comp.FindTool("Transform1") or comp.AddTool("Transform", -32768, -32768)
+    if xf is None:
+        raise RuntimeError("could not add a Transform tool")
+
+    xf.SetInput("Input", mediain)
+    mediaout.SetInput("Input", xf)
+    return comp, xf
+
+
+def apply_fusion_static_zoom(
+    item: Any,
+    zoom_amount: float,
+    center_x: float = 0.5,
+    center_y: float = 0.5,
+) -> None:
+    """Set a static (non-animated) Size + Center on a wired Fusion Transform.
+
+    The free-edition-safe equivalent of SetProperty("ZoomX"/"ZoomY") — used as a
+    fallback when the static clip-property path silently no-ops (it does on Resolve
+    free). center is a point in Resolve's normalized [0,1] space. Raises on failure.
+    """
+    _comp, xf = _wire_transform(item)
+    xf.SetInput("Size", float(zoom_amount))
+    xf.SetInput("Center", {1: center_x, 2: center_y})
 
 
 def _apply_fusion_zoom(
@@ -53,30 +147,19 @@ def _apply_fusion_zoom(
     separate spline op, the same pattern AutoCut's caption comp uses
     (LINE_N_KEYFRAMES). The spline's default bezier handles give the ease for free.
 
-    Center is set statically toward the detected face (Pivot-style anchor, as in
-    docs/autocut_templates/zoom.comp). pan/tilt are normalized subject offsets in
-    [-0.5, 0.5]. Resolve Pan>0 moves the image right, so the face sits at
-    Center.X = 0.5 - pan; Tilt>0 moves it up, so Center.Y = 0.5 + tilt.
+    Center is *animated in lockstep with Size* so it sits at frame-center (0.5,0.5)
+    whenever Size = 1.0 (the ease-in start and ease-out end) and reaches the
+    face-centered target (0.5 - pan, 0.5 + tilt) only at the zoomed plateau. A
+    static off-center Center would expose a black bar at the Size=1.0 endpoints —
+    that was the old bug. pan/tilt are normalized subject offsets in [-0.5, 0.5];
+    Resolve Pan>0 moves the image right (face at Center.X = 0.5 - pan), Tilt>0 up
+    (Center.Y = 0.5 + tilt). _safe_zoom has already guaranteed the plateau Size
+    covers the target offset, so no edge shows at the hold either.
 
     Comp frames are clip-local (0 .. seg_len_frames-1). Raises on any failure so
     the caller can fall back to the static SetProperty path.
     """
-    comp = item.GetFusionCompByIndex(1) or item.AddFusionComp()
-    if comp is None:
-        raise RuntimeError("could not acquire or create a Fusion comp on the clip")
-
-    mediain = comp.FindTool("MediaIn1")
-    mediaout = comp.FindTool("MediaOut1")
-    if mediain is None or mediaout is None:
-        raise RuntimeError("clip comp is missing MediaIn1/MediaOut1")
-
-    xf = comp.FindTool("Transform1") or comp.AddTool("Transform", -32768, -32768)
-    if xf is None:
-        raise RuntimeError("could not add a Transform tool")
-
-    # Wire the Transform into the render graph — the step that makes it render.
-    xf.SetInput("Input", mediain)
-    mediaout.SetInput("Input", xf)
+    comp, xf = _wire_transform(item)
 
     ramp = max(1, round(_EASE_SECONDS * fps))
     last = max(1, seg_len_frames - 1)
@@ -84,9 +167,6 @@ def _apply_fusion_zoom(
     if 2 * ramp >= last:
         ramp = max(1, last // 2)
     hold = last - ramp
-
-    # Static Center toward the face (point input: {1: x, 2: y}).
-    xf.SetInput("Center", {1: 0.5 - pan, 2: 0.5 + tilt})
 
     # Animated Size via a connected BezierSpline. Keyframes are {frame: {1: value}};
     # the spline interpolates with eased bezier handles by default.
@@ -100,6 +180,25 @@ def _apply_fusion_zoom(
         hold: {1: zoom_amount},
         last: {1: 1.0},
     })
+
+    # Animated Center: a point that traces frame-center → face → face → frame-center
+    # in lockstep with Size, via an XYPath modifier (the point-input analogue of the
+    # Size BezierSpline). Only animate when there's an actual shift; a pure center
+    # zoom leaves Center at its (0.5, 0.5) default.
+    if pan or tilt:
+        target_x = 0.5 - pan
+        target_y = 0.5 + tilt
+        path = comp.AddTool("XYPath", -32768, -32768)
+        if path is None:
+            raise RuntimeError("could not add an XYPath for Center animation")
+        xf.SetInput("Center", path)
+        # XYPath keyframes its X and Y displacement splines; {1: x, 2: y} per frame.
+        path.SetKeyFrames({
+            0:    {1: 0.5,      2: 0.5},
+            ramp: {1: target_x, 2: target_y},
+            hold: {1: target_x, 2: target_y},
+            last: {1: 0.5,      2: 0.5},
+        })
 
 
 @dataclass
@@ -235,13 +334,17 @@ def apply_zooms(
         if not meta.get("is_zoom"):
             continue
 
-        seg_zoom = meta.get("zoom_amount", zoom_amount)
-        seg_pan = meta.get("pan", 0.0)
-        seg_tilt = meta.get("tilt", 0.0)
+        raw_zoom = meta.get("zoom_amount", zoom_amount)
+        raw_pan = meta.get("pan", 0.0)
+        raw_tilt = meta.get("tilt", 0.0)
         seg_fade = meta.get("fade", fade)
 
         applied_via: Optional[str] = None
         if seg_fade:  # "Smooth Zoom" → animated Fusion ease (primary path)
+            # Fusion Center model: cover the shift or drop it (see _safe_zoom).
+            seg_zoom, seg_pan, seg_tilt = _safe_zoom(
+                raw_zoom, raw_pan, raw_tilt, fusion=True
+            )
             try:
                 _apply_fusion_zoom(
                     item, seg_zoom, seg_pan, seg_tilt,
@@ -254,11 +357,28 @@ def apply_zooms(
                 )
 
         if applied_via is None:  # hard cut requested, or Fusion failed → static
+            # Static clip-property model uses the pixel cover math.
+            seg_zoom, seg_pan, seg_tilt = _safe_zoom(
+                raw_zoom, raw_pan, raw_tilt, fusion=False
+            )
             try:
                 _apply_segment_zoom(
                     item, seg_zoom, seg_pan, seg_tilt, seg_fade, frame_w, frame_h,
                 )
-                applied_via = "static"
+                # SetProperty("ZoomX") silently no-ops on Resolve free — verify it
+                # took, and fall back to a wired Fusion Transform if it didn't.
+                if not _zoom_took(item, seg_zoom):
+                    log.info(
+                        "Static ZoomX no-op on segment %d (free edition?) — "
+                        "applying Fusion static zoom", i,
+                    )
+                    apply_fusion_static_zoom(
+                        item, seg_zoom,
+                        center_x=0.5 - seg_pan, center_y=0.5 + seg_tilt,
+                    )
+                    applied_via = "fusion-static"
+                else:
+                    applied_via = "static"
             except Exception as e:
                 log.warning("Zoom property failed on segment %d: %s", i, e)
                 continue
