@@ -206,6 +206,31 @@ def _visual_rerank_if_available(
 
 # ── Pacing gate ───────────────────────────────────────────────────────────────
 
+# Face-time gap below which a visible cut back to the speaker looks like a
+# glitch. Clips closer than this get merged: the previous clip's tracked end
+# is extended to cover both, and the new clip is skipped.
+_MIN_FACE_SEC = 1.0
+
+
+def _check_gap(
+    seg_start: float,
+    seg_duration: float,
+    last_placed_end_sec: float,
+) -> tuple[bool, float]:
+    """Return (should_extend, new_end_sec).
+
+    should_extend=True  → gap is too short; extend previous clip's tracked end
+                          to seg_start + seg_duration and skip this clip.
+    should_extend=False → gap is fine, place normally.
+    """
+    if last_placed_end_sec <= 0.0:
+        return False, 0.0
+    gap = seg_start - last_placed_end_sec
+    if gap < _MIN_FACE_SEC:
+        return True, seg_start + seg_duration
+    return False, 0.0
+
+
 def _should_place(
     seg_start: float,
     last_placed_end_sec: float,
@@ -365,6 +390,8 @@ def run_autonomous(
             for variant in _name_variants(c):
                 name_index.setdefault(variant, c)
 
+        llm_last_placed_end_sec: float = 0.0
+
         for d_idx, decision in enumerate(decisions):
             progress = 0.60 + (d_idx / max(len(decisions), 1)) * 0.30
             on_progress(
@@ -408,6 +435,25 @@ def run_autonomous(
                 else raw_dur
             )
             duration = max(duration, 0.0) or match.get("duration_sec", 0.0)
+
+            # ── Gap check: prevent jarring face-flicker between clips ──
+            should_extend, extend_end = _check_gap(
+                decision.timeline_sec, duration, llm_last_placed_end_sec,
+            )
+            if should_extend:
+                log.info(
+                    "[autonomous] LLM clip at %.1fs too close to previous (gap %.2fs < %.1fs) "
+                    "— extending previous to %.3fs, skipping this clip",
+                    decision.timeline_sec,
+                    decision.timeline_sec - llm_last_placed_end_sec,
+                    _MIN_FACE_SEC,
+                    extend_end,
+                )
+                llm_last_placed_end_sec = extend_end
+                result.skipped_count += 1
+                result.segments.append(SegmentResult(decision.clip_name, decision.timeline_sec, None))
+                continue
+
             placer_res = place_clip(
                 app,
                 match["path"],
@@ -424,6 +470,7 @@ def run_autonomous(
             result.segments.append(seg_result)
             if placer_res.placed:
                 result.placed_count += 1
+                llm_last_placed_end_sec = decision.timeline_sec + (duration if duration > 0 else 5.0)
             else:
                 result.skipped_count += 1
                 result.warnings.append(f"Placement {d_idx + 1}: {placer_res.reason}")
@@ -505,6 +552,22 @@ def run_autonomous(
             else raw_duration
         )
         placed_duration = max(placed_duration, 0.0)
+
+        # ── Gap check: prevent jarring face-flicker between clips ─────
+        should_extend, extend_end = _check_gap(
+            seg_start, placed_duration, last_placed_end_sec,
+        )
+        if should_extend:
+            log.info(
+                "[autonomous] seg %d at %.1fs too close to previous (gap %.2fs < %.1fs) "
+                "— extending previous to %.3fs, skipping this clip",
+                seg_idx + 1, seg_start,
+                seg_start - last_placed_end_sec, _MIN_FACE_SEC, extend_end,
+            )
+            last_placed_end_sec = extend_end
+            result.skipped_count += 1
+            result.segments.append(SegmentResult(seg_text, seg_start, None))
+            continue
 
         placer_res = place_clip(
             app,

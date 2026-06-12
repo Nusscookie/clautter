@@ -73,6 +73,10 @@ subprocess. The GUI talks to Resolve through the proxy — no direct scripting a
 
 See [CLAUDE.md](CLAUDE.md) for full design notes and gotchas.
 
+Visual flow maps of every feature — steps, decision points, and the real
+thresholds — live in [docs/whiteboard/](docs/whiteboard/) as editable
+Excalidraw diagrams, so you can see how a feature works without reading the code.
+
 ---
 
 ## Design
