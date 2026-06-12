@@ -102,9 +102,31 @@ def _apply_fill_frame(timeline_item: Any, mpi: Any, project: Any) -> None:
         timeline_item.SetProperty("ZoomX", zoom)
         timeline_item.SetProperty("ZoomY", zoom)
         timeline_item.SetProperty("ZoomGang", True)
+        # SetProperty("ZoomX") silently no-ops on Resolve free — verify it took,
+        # and fall back to a wired Fusion Transform (the proven-rendering path) if
+        # not, so the bars are actually removed on the free edition.
+        if not _zoom_took(timeline_item, zoom):
+            from src.zooms.applier import apply_fusion_static_zoom
+            apply_fusion_static_zoom(timeline_item, zoom)
+            log.info("[placer] fill_frame: ZoomX no-op (free edition?) — used Fusion static zoom")
         log.debug("[placer] fill_frame: %dx%d → %dx%d zoom=%.4f", clip_w, clip_h, tl_w, tl_h, zoom)
     except Exception as e:
         log.warning("[placer] fill_frame failed (non-fatal): %s", e)
+
+
+def _zoom_took(timeline_item: Any, expected: float) -> bool:
+    """True if SetProperty("ZoomX") actually applied (read it back).
+
+    Mirrors src/zooms/applier._zoom_took: the static zoom property can silently
+    no-op on Resolve free. Returns True conservatively if the value can't be read.
+    """
+    try:
+        got = timeline_item.GetProperty("ZoomX")
+        if got is None:
+            return True
+        return abs(float(got) - float(expected)) < 0.01
+    except Exception:
+        return True
 
 
 def place_clip(

@@ -88,17 +88,22 @@ def bootstrap_textplus_template(
     AppendToTimeline. Returns None on any failure.
     """
     try:
-        # Move playhead to end of timeline so InsertFusionTitleIntoTimeline
-        # doesn't split an existing clip at the current cursor position.
+        # Save playhead position so we can restore it after bootstrap.
+        # InsertFusionTitleIntoTimeline inserts at cursor on V1, which splits
+        # existing clips if cursor is mid-timeline.  Move to one frame past the
+        # timeline end so the bootstrap clip lands in empty space on V1.
+        saved_tc = None
         try:
+            saved_tc = timeline.GetCurrentTimecode()
             fps = float(timeline.GetSetting("timelineFrameRate") or 24)
             end_frame = timeline.GetEndFrame()
             start_frame = timeline.GetStartFrame()
-            total_frames = max(0, end_frame - start_frame)
-            h = int(total_frames // (fps * 3600))
-            m = int((total_frames % (fps * 3600)) // (fps * 60))
-            s = int((total_frames % (fps * 60)) // fps)
-            f = int(total_frames % fps)
+            # end_frame is absolute; convert to HH:MM:SS:FF timecode.
+            abs_end = max(start_frame, end_frame)
+            h = int(abs_end // (fps * 3600))
+            m = int((abs_end % (fps * 3600)) // (fps * 60))
+            s = int((abs_end % (fps * 60)) // fps)
+            f = int(abs_end % fps)
             timeline.SetCurrentTimecode(f"{h:02d}:{m:02d}:{s:02d}:{f:02d}")
         except Exception as _e:
             log.debug("Bootstrap: could not move playhead to end: %s", _e)
@@ -217,6 +222,13 @@ def bootstrap_textplus_template(
             log.debug("Bootstrap clip deleted; template MP kept for cloning")
         except Exception as e:
             log.warning("Bootstrap clip delete failed: %s", e)
+
+        # Restore playhead to where user had it before bootstrap.
+        if saved_tc:
+            try:
+                timeline.SetCurrentTimecode(saved_tc)
+            except Exception as _e:
+                log.debug("Bootstrap: could not restore playhead: %s", _e)
 
         return template_mp
 
