@@ -13,6 +13,16 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+# Cap fill-frame zoom. CSS-cover math (zoom = cover/fit) is mathematically correct
+# for a clean aspect mismatch, but B-roll footage is often a wide picture with black
+# bars BAKED INTO the pixels inside a nominal 16:9 file — so the file resolution
+# reports 16:9 while the visible content is wider. Covering on the file aspect then
+# over-crops massively (e.g. 16:9 file → 9:16 timeline computes 3.16x, but the real
+# picture only needs ~1.4x). We can't measure the baked-in bars from metadata, so we
+# clamp the zoom: cover what we can up to the cap, and accept residual bars beyond it
+# rather than crop the subject to oblivion.
+_MAX_FILL_ZOOM = 1.5
+
 
 class PlacerResult:
     """Outcome of a single place_clip() call."""
@@ -78,9 +88,49 @@ def _sec_to_frame(sec: float, fps: float) -> int:
     return max(0, int(round(sec * fps)))
 
 
+def _source_fps(mpi: Any, fallback: float) -> float:
+    """Native frame rate of a media-pool item, or *fallback* if unavailable.
+
+    Source in/out frames passed to AppendToTimeline are counted in the clip's
+    own fps. Reading "FPS" off the clip property keeps the placed duration correct
+    when the B-roll fps differs from the timeline fps.
+    """
+    try:
+        props = mpi.GetClipProperty() or {}
+        raw = props.get("FPS") or props.get("Frame Rate") or ""
+        val = float(str(raw).split()[0])
+        if val > 0:
+            return val
+    except Exception as e:
+        log.debug("[placer] _source_fps failed (non-fatal): %s", e)
+    return fallback
+
+
+def _video_track1_end_sec(timeline: Any, fps: float) -> float | None:
+    """Return the end time (seconds) of the last item on video track 1, or None.
+
+    Used to cap B-roll duration so clips don't overhang the main video clip.
+    """
+    try:
+        tl_start = timeline.GetStartFrame()
+        items = timeline.GetItemListInTrack("video", 1) or []
+        if not items:
+            return None
+        end_frame = max(item.GetEnd() for item in items)
+        return (end_frame - tl_start) / fps
+    except Exception as e:
+        log.debug("[placer] _video_track1_end_sec failed (non-fatal): %s", e)
+        return None
+
+
 def _apply_fill_frame(timeline_item: Any, mpi: Any, project: Any) -> None:
     """Zoom-crop clip to fill the timeline frame with no black bars (CSS cover math).
 
+    Resolve places clips with ZoomX/ZoomY=1.0 meaning "fit" (letterboxed/pillarboxed).
+    To cover, we need zoom = cover_scale / fit_scale, where:
+      fit_scale   = min(tl_w/clip_w, tl_h/clip_h)  (how Resolve fits the clip)
+      cover_scale = max(tl_w/clip_w, tl_h/clip_h)  (what fills the frame)
+    This relative zoom works for any orientation pair (portrait←landscape, etc.).
     Silently skips if resolution data is unavailable.
     """
     try:
@@ -97,8 +147,14 @@ def _apply_fill_frame(timeline_item: Any, mpi: Any, project: Any) -> None:
             return
         if abs((tl_w / tl_h) - (clip_w / clip_h)) < 0.01:
             return
-        # scale so neither dimension falls short of the frame
-        zoom = max(tl_w / clip_w, tl_h / clip_h)
+        scale_x = tl_w / clip_w
+        scale_y = tl_h / clip_h
+        fit_scale = min(scale_x, scale_y)
+        cover_scale = max(scale_x, scale_y)
+        zoom = cover_scale / fit_scale
+        if zoom > _MAX_FILL_ZOOM:
+            log.debug("[placer] fill_frame: capping zoom %.3f → %.3f", zoom, _MAX_FILL_ZOOM)
+            zoom = _MAX_FILL_ZOOM
         timeline_item.SetProperty("ZoomX", zoom)
         timeline_item.SetProperty("ZoomY", zoom)
         timeline_item.SetProperty("ZoomGang", True)
@@ -193,10 +249,31 @@ def place_clip(
                             f"ImportMedia failed: {e}")
 
     fps = _fps_from_timeline(timeline)
+    # startFrame/endFrame in clip_info are SOURCE frames — they must use the clip's
+    # native fps, not the timeline fps. If they differ (e.g. 30fps B-roll on a 25fps
+    # timeline) and we convert seconds→frames with the timeline fps, AppendToTimeline
+    # lays down the wrong number of source frames and the clip overhangs the cap.
+    src_fps = _source_fps(mpi, fps)
     try:
         tl_start = timeline.GetStartFrame()
     except Exception:
         tl_start = 0
+
+    # Cap duration so clip doesn't extend past the end of the main video clip (V1).
+    # Subtract one frame worth of time to absorb float→frame rounding overshoots.
+    video_end = _video_track1_end_sec(timeline, fps)
+    if video_end is not None:
+        one_frame = 1.0 / fps
+        max_allowed = video_end - segment_start_sec - one_frame
+        if max_allowed <= 0:
+            return PlacerResult(clip_path, segment_start_sec, False,
+                                f"segment_start ({segment_start_sec:.1f}s) past video track 1 end ({video_end:.1f}s)")
+        if clip_duration_sec <= 0.0 or clip_duration_sec > max_allowed:
+            log.debug(
+                "[placer] capping clip duration %.1fs → %.1fs (video track 1 ends at %.1fs)",
+                clip_duration_sec, max_allowed, video_end,
+            )
+            clip_duration_sec = max_allowed
 
     record_frame = tl_start + _sec_to_frame(segment_start_sec, fps)
     resolved_track = track_index if track_index is not None else _find_or_create_broll_track(timeline)
@@ -205,8 +282,8 @@ def place_clip(
     clip_info: dict[str, Any] = {
         "mediaPoolItem": mpi,
         "mediaType":     1,
-        "startFrame":    _sec_to_frame(clip_start_sec, fps) if clip_start_sec > 0.0 else 0,
-        "endFrame":      max(1, _sec_to_frame(clip_start_sec + clip_duration_sec, fps))
+        "startFrame":    _sec_to_frame(clip_start_sec, src_fps) if clip_start_sec > 0.0 else 0,
+        "endFrame":      max(1, _sec_to_frame(clip_start_sec + clip_duration_sec, src_fps))
                          if clip_duration_sec > 0.0 else None,
         "recordFrame":   record_frame,
         "trackIndex":    resolved_track,
