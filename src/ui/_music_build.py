@@ -174,6 +174,39 @@ def build(parent: Any) -> None:
         anchor="w",
     ).pack(fill="x", padx=10, pady=(0, 6))
 
+    # SFX source toggle
+    sfx_source_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
+    sfx_source_row.pack(fill="x", padx=10, pady=2)
+    sfx_source_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(sfx_source_row, text="SFX Source").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["sfx_source"] = ctk.CTkSegmentedButton(sfx_source_row, values=["Freesound", "Local", "Both"])
+    w["sfx_source"].set("Freesound")
+    w["sfx_source"].grid(row=0, column=1, sticky="w")
+
+    # SFX term mode toggle
+    sfx_mode_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
+    sfx_mode_row.pack(fill="x", padx=10, pady=2)
+    sfx_mode_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(sfx_mode_row, text="Term Selection").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["sfx_mood_mode"] = ctk.CTkSegmentedButton(sfx_mode_row, values=["Hardcoded", "LLM"])
+    w["sfx_mood_mode"].set("Hardcoded")
+    w["sfx_mood_mode"].grid(row=0, column=1, sticky="w")
+
+    # SFX LLM provider row (hidden until Term Selection = "LLM")
+    w["sfx_llm_row"] = ctk.CTkFrame(sfx_card, fg_color="transparent")
+    sfx_llm_row = w["sfx_llm_row"]
+    sfx_llm_row.grid_columnconfigure(2, weight=1)
+    ctk.CTkLabel(sfx_llm_row, text="LLM Provider").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    w["sfx_llm_provider"] = ctk.CTkOptionMenu(
+        sfx_llm_row, values=["—"], width=160,
+        fg_color=COLORS.BG_MID, button_color=COLORS.BG_MID, button_hover_color=COLORS.BG_HOVER,
+    )
+    w["sfx_llm_provider"].grid(row=0, column=1, sticky="w")
+    w["sfx_llm_hint"] = ctk.CTkLabel(
+        sfx_llm_row, text="", font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_DIM, anchor="w",
+    )
+    w["sfx_llm_hint"].grid(row=0, column=2, sticky="w", padx=(10, 0))
+
     # Trigger checkboxes
     trigger_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
     trigger_row.pack(fill="x", padx=10, pady=2)
@@ -187,14 +220,13 @@ def build(parent: Any) -> None:
     ctk.CTkCheckBox(trigger_row, text="B-Roll Entries",    variable=w["use_broll_var"]).pack(
         side="left")
 
-    # Optional local SFX folder
-    sfx_folder_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
-    sfx_folder_row.pack(fill="x", padx=10, pady=2)
+    # Optional local SFX folder (shown only when source includes Local)
+    w["sfx_folder_row"] = sfx_folder_row = ctk.CTkFrame(sfx_card, fg_color="transparent")
     sfx_folder_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(sfx_folder_row, text="Local SFX Folder\n(optional)").grid(
+    ctk.CTkLabel(sfx_folder_row, text="Local SFX Folder").grid(
         row=0, column=0, sticky="w", padx=(0, 12))
     w["sfx_folder_entry"] = ctk.CTkEntry(sfx_folder_row, state="readonly",
-                                          placeholder_text="Leave blank to use Pixabay SFX")
+                                          placeholder_text="Folder with .mp3 / .wav SFX clips")
     w["sfx_folder_entry"].grid(row=0, column=1, sticky="ew", padx=(0, 6))
     w["sfx_folder_btn"] = ctk.CTkButton(sfx_folder_row, text="Browse", width=70,
                                          fg_color=COLORS.BG_MID, hover_color=COLORS.BG_CARD)

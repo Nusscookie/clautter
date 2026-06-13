@@ -1,12 +1,15 @@
 """Sound effects placement engine.
 
 Collects SFX trigger events from shared app state (SmartCuts segments,
-AutoZoom points, B-Roll placer results), maps each to a Pixabay SFX
-search term, downloads the best hit, and places it on an "SFX" audio track.
+AutoZoom points, B-Roll placer results), maps each to a Freesound SFX
+search term (hardcoded or LLM-selected), downloads the best hit, and
+places it on an "SFX" audio track.
 """
 
 from __future__ import annotations
+import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -15,6 +18,13 @@ from src.constants import TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+_OPENAI_URL  = "https://api.openai.com/v1/chat/completions"
+_GEMINI_URL  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+_MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
+_NVIDIA_URL  = "https://integrate.api.nvidia.com/v1/chat/completions"
+_LLM_TIMEOUT = 60
+_NEARBY_WINDOW_SEC = 3.0
 
 # event_type → Pixabay SFX search term
 SFX_TERM_MAP: dict[str, str] = {
@@ -131,16 +141,20 @@ def run_sfx_pipeline(
     download_folder: str,
     on_progress: Callable[[str, float], None],
     local_sfx_folder: str | None = None,
+    sfx_source: str = "freesound",
+    custom_terms: dict[int, str] | None = None,
 ) -> list[Any]:
     """For each SFX event: find/download an audio clip → place on 'SFX' track.
 
     Args:
         app:              ClutterApp.
         events:           List of SfxEvent from collect_sfx_events().
-        audio_client:     PixabayAudioClient instance.
+        audio_client:     FreesoundClient instance (may be None if sfx_source="local").
         download_folder:  Where to save downloaded MP3s.
         on_progress:      Callback(message, 0.0-1.0).
-        local_sfx_folder: Optional folder of local .mp3/.wav files to prefer.
+        local_sfx_folder: Folder of local .mp3/.wav files.
+        sfx_source:       "freesound" | "local" | "both"
+        custom_terms:     Optional {event_idx: search_term} from LLM override.
 
     Returns:
         List of AudioPlacerResult objects.
@@ -148,24 +162,28 @@ def run_sfx_pipeline(
     from src.music.placer import place_audio_clip, AudioPlacerResult
     import requests as _req
 
+    use_freesound = sfx_source in ("freesound", "both")
+    use_local     = sfx_source in ("local", "both")
+
     dl_path = Path(download_folder)
     dl_path.mkdir(parents=True, exist_ok=True)
     results: list[Any] = []
 
     for idx, event in enumerate(events):
         progress = (idx + 1) / max(len(events), 1)
-        term = SFX_TERM_MAP.get(event.event_type, "whoosh transition")
+        term = (custom_terms or {}).get(idx) or SFX_TERM_MAP.get(event.event_type, "whoosh transition")
         on_progress(f"SFX: {event.label} — searching '{term}'…", progress * 0.5)
 
-        # Try local folder first
         local_path: str | None = None
-        if local_sfx_folder and os.path.isdir(local_sfx_folder):
+
+        # Try local folder first (if source includes local)
+        if use_local and local_sfx_folder and os.path.isdir(local_sfx_folder):
             local_path = _find_local_sfx(local_sfx_folder, term)
             if local_path:
                 log.debug("[sfx_engine] local match: %s", local_path)
 
-        # Fall back to Pixabay SFX
-        if not local_path:
+        # Freesound fallback (or primary if source=freesound)
+        if not local_path and use_freesound and audio_client is not None:
             try:
                 hits = audio_client.search_sfx(term, per_page=5)
                 if not hits:
@@ -193,6 +211,147 @@ def run_sfx_pipeline(
 
     on_progress("SFX pipeline complete.", 1.0)
     return results
+
+
+def build_event_manifest(
+    events: list[SfxEvent],
+    transcript: list[dict],
+) -> list[dict]:
+    """Build a compact event manifest with nearby spoken words per event.
+
+    For each event, extracts transcript words within ±3s of the event's
+    position_sec. Used as context for the LLM SFX term selection.
+    """
+    word_entries = [e for e in transcript if e.get("type") == "word"]
+    manifest: list[dict] = []
+    for idx, event in enumerate(events):
+        lo = event.position_sec - _NEARBY_WINDOW_SEC
+        hi = event.position_sec + _NEARBY_WINDOW_SEC
+        nearby = " ".join(
+            str(e.get("word", ""))
+            for e in word_entries
+            if lo <= float(e.get("start_sec", 0.0)) <= hi
+        ).strip()
+        manifest.append({
+            "idx": idx,
+            "type": event.event_type,
+            "position_sec": round(event.position_sec, 2),
+            "nearby_words": nearby or "(no speech nearby)",
+        })
+    return manifest
+
+
+def get_sfx_terms_llm(
+    manifest: list[dict],
+    settings: Any,
+    provider: str | None = None,
+) -> dict[int, str]:
+    """Ask a cloud LLM to pick context-aware SFX search terms per event.
+
+    Falls back to hardcoded SFX_TERM_MAP entries on any failure.
+    Returns {event_idx: search_term}.
+    """
+    from src.utils.llm_providers import api_key_for, resolve_provider
+
+    chosen = resolve_provider(settings, provider)
+    if chosen is None:
+        log.warning("[sfx_llm] no cloud API key — using hardcoded terms")
+        return {}
+
+    openai_model  = str(settings.get("llm_openai_model",  "gpt-4o-mini") or "gpt-4o-mini")
+    gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
+    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
+    nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
+    max_tokens    = int(settings.get("llm_max_tokens", 500) or 500)
+
+    if chosen == "NVIDIA" and not nvidia_model:
+        log.warning("[sfx_llm] NVIDIA selected but no model id — using hardcoded terms")
+        return {}
+
+    prompt = (
+        "You are a sound designer for video production.\n\n"
+        "For each event below, suggest a Freesound search term (2-4 words) that fits "
+        "the event type and the spoken context nearby.\n\n"
+        f"EVENTS:\n{json.dumps(manifest, indent=2)}\n\n"
+        "Event types: cut=editing transition, zoom_in=push in zoom, zoom_out=pull out zoom, "
+        "broll_in=B-roll clip starts.\n\n"
+        "Respond with ONLY a valid JSON array:\n"
+        "[{\"idx\": 0, \"search_term\": \"whoosh swoosh\"}, ...]\n"
+        "No prose, no markdown."
+    )
+
+    key = api_key_for(settings, chosen)
+    try:
+        import requests as _req
+        if chosen == "OpenAI":
+            resp = _req.post(
+                _OPENAI_URL,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": openai_model,
+                      "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": max_tokens, "temperature": 0.2},
+                timeout=_LLM_TIMEOUT,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["choices"][0]["message"]["content"]
+        elif chosen == "Gemini":
+            url = _GEMINI_URL.replace("gemini-2.0-flash", gemini_model)
+            resp = _req.post(
+                f"{url}?key={key}",
+                headers={"Content-Type": "application/json"},
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.2}},
+                timeout=_LLM_TIMEOUT,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        elif chosen == "NVIDIA":
+            resp = _req.post(
+                _NVIDIA_URL,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": nvidia_model,
+                      "messages": [
+                          {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": max_tokens, "temperature": 0.2,
+                      "chat_template_kwargs": {"thinking": False}},
+                timeout=_LLM_TIMEOUT,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["choices"][0]["message"]["content"]
+        else:  # MiniMax
+            resp = _req.post(
+                _MINIMAX_URL,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": minimax_model,
+                      "messages": [
+                          {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": max_tokens, "temperature": 0.2},
+                timeout=_LLM_TIMEOUT,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["choices"][0]["message"]["content"]
+
+        # Parse response
+        reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
+        reply = re.sub(r"```(?:json)?", "", reply).strip()
+        start = reply.find("[")
+        if start == -1:
+            raise ValueError("no JSON array in LLM response")
+        raw, _ = json.JSONDecoder().raw_decode(reply, start)
+        terms: dict[int, str] = {}
+        for item in raw:
+            if isinstance(item, dict) and "idx" in item and "search_term" in item:
+                terms[int(item["idx"])] = str(item["search_term"]).strip()
+        log.info("[sfx_llm] LLM terms: %s", terms)
+        return terms
+
+    except Exception as e:
+        log.warning("[sfx_llm] LLM call failed (%s) — using hardcoded terms", e)
+        return {}
 
 
 def _find_local_sfx(folder: str, term: str) -> str | None:

@@ -83,6 +83,7 @@ class MoodSection:
 def analyze_mood_keywords(
     transcript: list[dict],
     n_sections: int = 1,
+    method: str = "spacy",
 ) -> list[MoodSection]:
     """Split transcript into n equal sections, extract keywords, map to mood."""
     if not transcript:
@@ -110,7 +111,7 @@ def analyze_mood_keywords(
         sec_start = float(chunk[0].get("start_sec", total_start))
         sec_end   = float(chunk[-1].get("end_sec", total_end))
 
-        keywords = extract_top_keywords(chunk, top_n=5, method="frequency")
+        keywords = extract_top_keywords(chunk, top_n=5, method=method)
         mood = _DEFAULT_MOOD
         for kw in keywords:
             kw_lower = kw.lower()
@@ -141,6 +142,7 @@ def analyze_mood_llm(
     settings: Any,
     n_sections: int = 1,
     provider: str | None = None,
+    method: str = "spacy",
 ) -> list[MoodSection]:
     """Ask a cloud LLM for mood sections. Falls back to keyword mode on failure."""
     from src.utils.llm_providers import api_key_for, resolve_provider
@@ -148,11 +150,11 @@ def analyze_mood_llm(
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         log.warning("[mood_llm] no cloud API key — falling back to keyword mode")
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
     word_entries = [e for e in transcript if e.get("type") == "word"]
     if not word_entries:
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
     text = " ".join(str(e.get("word", "")) for e in word_entries)[:3000]
     total_end = float(word_entries[-1].get("end_sec", 0.0))
@@ -178,7 +180,7 @@ def analyze_mood_llm(
 
     if chosen == "NVIDIA" and not nvidia_model:
         log.warning("[mood_llm] NVIDIA selected but no model id set — falling back to keywords")
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
     key = api_key_for(settings, chosen)
     try:
@@ -200,7 +202,7 @@ def analyze_mood_llm(
     except Exception as e:
         log.warning("[mood_llm] LLM call failed (%s) — falling back to keywords", e)
 
-    return analyze_mood_keywords(transcript, n_sections)
+    return analyze_mood_keywords(transcript, n_sections, method=method)
 
 
 # ── LLM call helpers (mirror llm_director.py) ─────────────────────────────────

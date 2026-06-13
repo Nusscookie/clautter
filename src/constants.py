@@ -117,3 +117,8 @@ class SETTINGS_KEYS:
     # LLM
     LLM_MAX_TOKENS = "llm_max_tokens"
     LLM_TEMPERATURE = "llm_temperature"
+
+    # SFX
+    SFX_SOURCE = "sfx_source"
+    SFX_MOOD_MODE = "sfx_mood_mode"
+    SFX_LLM_PROVIDER = "sfx_llm_provider"

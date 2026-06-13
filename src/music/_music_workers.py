@@ -42,6 +42,7 @@ def music_thread(
     music_volume_pct: int = 35,
     fade_in_ms: int = 2000,
     fade_out_ms: int = 2000,
+    keyword_method: str = "spacy",
 ) -> None:
     """Analyze mood, find music (local / Jamendo / both), place on 'Music' audio track."""
     try:
@@ -55,9 +56,9 @@ def music_thread(
 
         if mood_mode == "llm":
             sections = analyze_mood_llm(app.transcript, app.settings, sections_count,
-                                        provider=mood_provider)
+                                        provider=mood_provider, method=keyword_method)
         else:
-            sections = analyze_mood_keywords(app.transcript, sections_count)
+            sections = analyze_mood_keywords(app.transcript, sections_count, method=keyword_method)
 
         if not sections:
             set_status("Could not determine mood from transcript.", COLORS.WARNING)
@@ -187,11 +188,18 @@ def sfx_thread(
     set_sfx_progress: Callable,
     _ui: Callable,
     w: dict,
+    sfx_source: str = "freesound",
+    sfx_mood_mode: str = "hardcoded",
+    sfx_llm_provider: str | None = None,
 ) -> None:
     """Collect trigger events and place SFX clips on 'SFX' audio track."""
     try:
-        from src.music.audio_provider import FreesoundClient
-        from src.music.sfx_engine import collect_sfx_events, run_sfx_pipeline
+        from src.music.sfx_engine import (
+            collect_sfx_events, run_sfx_pipeline,
+            build_event_manifest, get_sfx_terms_llm,
+        )
+
+        use_freesound = sfx_source in ("freesound", "both")
 
         set_sfx_status("Collecting SFX trigger events…")
         set_sfx_progress(10, True)
@@ -212,7 +220,18 @@ def sfx_thread(
         set_sfx_status(f"Found {len(events)} event(s). Downloading SFX…")
         set_sfx_progress(20)
 
-        client = FreesoundClient(freesound_api_key)
+        # LLM term selection (optional)
+        custom_terms: dict[int, str] | None = None
+        if sfx_mood_mode == "llm" and app.transcript:
+            set_sfx_status("Asking LLM for context-aware SFX terms…")
+            manifest = build_event_manifest(events, app.transcript)
+            custom_terms = get_sfx_terms_llm(manifest, app.settings, provider=sfx_llm_provider) or None
+
+        client = None
+        if use_freesound and freesound_api_key:
+            from src.music.audio_provider import FreesoundClient
+            client = FreesoundClient(freesound_api_key)
+
         dl_path = Path(download_folder)
 
         def on_progress(msg: str, frac: float) -> None:
@@ -227,6 +246,8 @@ def sfx_thread(
             download_folder=str(dl_path),
             on_progress=on_progress,
             local_sfx_folder=local_sfx_folder or None,
+            sfx_source=sfx_source,
+            custom_terms=custom_terms,
         )
 
         placed = sum(1 for r in results if r.placed)

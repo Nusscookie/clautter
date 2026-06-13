@@ -189,6 +189,63 @@ def setup(frame: Any, app: Any) -> None:
         w["use_broll_var"].set(1 if saved_broll else 0),
     ))
 
+    # ── SFX source toggle ──────────────────────────────────────────────
+    def _update_sfx_folder_row_visibility(source: str) -> None:
+        if source in ("Local", "Both"):
+            w["sfx_folder_row"].pack(fill="x", padx=10, pady=2, before=w["run_sfx_btn"])
+        else:
+            w["sfx_folder_row"].pack_forget()
+
+    def on_sfx_source(value: str) -> None:
+        app.settings.set("sfx_source", value.lower())
+        _update_sfx_folder_row_visibility(value)
+
+    w["sfx_source"].configure(command=on_sfx_source)
+
+    saved_sfx_source = str(app.settings.get("sfx_source", "freesound") or "freesound")
+    _sfx_source_label = {"freesound": "Freesound", "local": "Local", "both": "Both"}.get(saved_sfx_source, "Freesound")
+    _ui(lambda: w["sfx_source"].set(_sfx_source_label))
+    _update_sfx_folder_row_visibility(_sfx_source_label)
+
+    # ── SFX LLM mode toggle ────────────────────────────────────────────
+    def _refresh_sfx_llm_picker() -> None:
+        from src.utils.llm_providers import available_providers
+        is_llm = w["sfx_mood_mode"].get() == "LLM"
+        if not is_llm:
+            w["sfx_llm_row"].pack_forget()
+            return
+        w["sfx_llm_row"].pack(fill="x", padx=10, pady=2, before=w["run_sfx_btn"])
+
+        provs = available_providers(app.settings)
+        if provs:
+            saved_p = str(app.settings.get("sfx_llm_provider", "") or "")
+            current = saved_p if saved_p in provs else provs[0]
+            w["sfx_llm_provider"].configure(values=provs, state="normal")
+            w["sfx_llm_provider"].set(current)
+            w["sfx_llm_hint"].configure(text="")
+        else:
+            w["sfx_llm_provider"].configure(values=["—"], state="disabled")
+            w["sfx_llm_provider"].set("—")
+            w["sfx_llm_hint"].configure(
+                text="No LLM key — add one in Settings (⚙).", text_color=COLORS.WARNING,
+            )
+
+    def on_sfx_mood_mode(value: str) -> None:
+        app.settings.set("sfx_mood_mode", "llm" if value == "LLM" else "hardcoded")
+        _refresh_sfx_llm_picker()
+
+    def on_sfx_llm_provider(value: str) -> None:
+        if value and value != "—":
+            app.settings.set("sfx_llm_provider", value)
+
+    w["sfx_mood_mode"].configure(command=on_sfx_mood_mode)
+    w["sfx_llm_provider"].configure(command=on_sfx_llm_provider)
+    app.on_settings_changed(_refresh_sfx_llm_picker)
+
+    saved_sfx_mood_mode = str(app.settings.get("sfx_mood_mode", "hardcoded") or "hardcoded")
+    _ui(lambda: w["sfx_mood_mode"].set("LLM" if saved_sfx_mood_mode == "llm" else "Hardcoded"))
+    _ui(_refresh_sfx_llm_picker)
+
     # If segments mode was saved, show sections row
     if saved_music_mode == "segments":
         _ui(lambda: w["n_sections_frame"].pack(fill="x", padx=10, pady=2, before=w["dl_row"]))
@@ -263,6 +320,8 @@ def setup(frame: Any, app: Any) -> None:
         app.settings.set("music_fade_enabled",      fade_enabled)
         app.settings.set("music_fade_duration_sec", str(fade_dur_sec))
 
+        keyword_method = str(app.settings.get("broll_keyword_method", "spacy") or "spacy")
+
         threading.Thread(
             target=music_thread,
             kwargs=dict(
@@ -272,6 +331,7 @@ def setup(frame: Any, app: Any) -> None:
                 n_sections=n_sections,
                 music_source=music_source, local_music_folder=local_music,
                 music_volume_pct=music_volume_pct, fade_in_ms=fade_in_ms, fade_out_ms=fade_out_ms,
+                keyword_method=keyword_method,
                 set_status=set_status, set_progress=set_progress, _ui=_ui, w=w,
             ),
             daemon=True,
@@ -279,9 +339,21 @@ def setup(frame: Any, app: Any) -> None:
 
     # ── Run SFX ──────────────────────────────────────────────────────
     def on_run_sfx() -> None:
-        freesound_key = (app.settings.get("freesound_api_key", "") or "").strip()
-        if not freesound_key:
+        sfx_source_now  = w["sfx_source"].get().lower()
+        sfx_mood_now    = "llm" if w["sfx_mood_mode"].get() == "LLM" else "hardcoded"
+        _sel_sfx_prov   = w["sfx_llm_provider"].get()
+        sfx_llm_prov    = _sel_sfx_prov if (sfx_mood_now == "llm" and _sel_sfx_prov not in ("", "—")) else None
+        freesound_key   = (app.settings.get("freesound_api_key", "") or "").strip()
+        sfx_local       = w["sfx_folder_entry"].get().strip() or None
+
+        needs_freesound = sfx_source_now in ("freesound", "both")
+        needs_local     = sfx_source_now in ("local", "both")
+
+        if needs_freesound and not freesound_key:
             set_sfx_status("Freesound API key required — add it in Settings (⚙).", COLORS.ERROR)
+            return
+        if needs_local and not sfx_local:
+            set_sfx_status("Local SFX Folder not set — browse to select one.", COLORS.ERROR)
             return
         if _state["sfx_running"]:
             return
@@ -292,7 +364,6 @@ def setup(frame: Any, app: Any) -> None:
         use_cuts  = bool(w["use_cuts_var"].get())
         use_zooms = bool(w["use_zooms_var"].get())
         use_broll = bool(w["use_broll_var"].get())
-        sfx_local = w["sfx_folder_entry"].get().strip() or None
         dl_folder = _state["dl_folder"] or str(Path.home() / "audio_downloads")
 
         app.settings.set("sfx_use_cuts",  use_cuts)
@@ -306,6 +377,9 @@ def setup(frame: Any, app: Any) -> None:
                 freesound_api_key=freesound_key, download_folder=dl_folder,
                 use_cuts=use_cuts, use_zooms=use_zooms, use_broll=use_broll,
                 local_sfx_folder=sfx_local,
+                sfx_source=sfx_source_now,
+                sfx_mood_mode=sfx_mood_now,
+                sfx_llm_provider=sfx_llm_prov,
                 set_sfx_status=set_sfx_status, set_sfx_progress=set_sfx_progress,
                 _ui=_ui, w=w,
             ),
