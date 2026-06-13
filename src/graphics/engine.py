@@ -63,22 +63,42 @@ def run(
     # ── 3. Catalog ────────────────────────────────────────────────────
     status("Loading Hyperframes catalog…")
     from src.graphics.catalog_client import list_blocks
-    blocks = list_blocks()
+    blocks = list_blocks(force_refresh=False)
     if not blocks:
         return 0, (
             "Could not load Hyperframes catalog. "
             "Check your internet connection and Node.js installation."
         )
-    status(f"Catalog loaded: {len(blocks)} blocks available.")
+    # Only renderable standalone blocks (not components/transitions/code showcases)
+    _BAD_TAGS = {
+        "transition", "shader", "showcase", "code", "developer",
+        "terminal", "vscode", "apple-terminal", "html-in-canvas",
+        "gltf", "webgl", "webgpu", "liquid-glass-html-in-canvas",
+        "geography", "choropleth", "sfx",
+    }
+    # Blocks that require brand-specific assets the LLM cannot fill in
+    _EXCLUDED_NAMES = {"logo-outro", "flowchart-vertical"}
+
+    def _is_suitable(b: dict) -> bool:
+        if b.get("type") != "block":
+            return False
+        if b.get("name") in _EXCLUDED_NAMES:
+            return False
+        tags = set(b.get("tags") or [])
+        return not (tags & _BAD_TAGS)
+
+    renderable_blocks = [b for b in blocks if _is_suitable(b)]
+    status(f"Catalog loaded: {len(renderable_blocks)} suitable blocks available.")
+    block_by_name = {b["name"]: b for b in renderable_blocks}
 
     # ── 4. LLM analysis ───────────────────────────────────────────────
     status("Analyzing transcript with LLM…")
     from src.graphics.llm_director import analyze
-    placements, err = analyze(app.transcript, blocks, app.settings, provider=provider)
+    placements, err = analyze(app.transcript, renderable_blocks, app.settings, provider=provider)
     if err:
         return 0, err
     if not placements:
-        return 0, "LLM found no suitable motion graphics for this transcript."
+        return 0, "LLM returned no placements. Try a different provider or check the transcript."
 
     status(f"LLM selected {len(placements)} graphic(s). Rendering…")
     total = len(placements)
@@ -97,7 +117,7 @@ def run(
     placed_count = 0
     for i, p in enumerate(placements):
         status(f"Rendering {p.block} ({i + 1}/{total})…")
-        mp4 = render_placement(p, project_name)
+        mp4 = render_placement(p, project_name, block_meta=block_by_name.get(p.block), settings=app.settings)
         if mp4 is None:
             log.warning("[gfx_engine] render failed for %r — skipping", p.block)
             progress(i + 1, total)

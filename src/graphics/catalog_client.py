@@ -8,6 +8,7 @@ the lifetime of the process to avoid repeated npx cold-start overhead.
 from __future__ import annotations
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,10 @@ log = get_logger(__name__)
 
 _TIMEOUT = 60
 _catalog_cache: list[dict] | None = None
+
+# On Windows, npx ships as npx.cmd (a batch file), not an .exe.
+# subprocess without shell=True cannot find .cmd files — use explicit name.
+_NPX = "npx.cmd" if sys.platform == "win32" else "npx"
 
 
 def list_blocks(force_refresh: bool = False) -> list[dict]:
@@ -31,7 +36,7 @@ def list_blocks(force_refresh: bool = False) -> list[dict]:
 
     try:
         result = subprocess.run(
-            ["npx", "--yes", "hyperframes", "catalog", "--json"],
+            [_NPX, "--yes", "hyperframes", "catalog", "--json"],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT,
@@ -72,7 +77,7 @@ def add_block(name: str, workspace_dir: Path) -> bool:
     try:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
-            ["npx", "--yes", "hyperframes", "add", name, "--dir", str(workspace_dir)],
+            [_NPX, "--yes", "hyperframes", "add", name, "--dir", str(workspace_dir)],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT,

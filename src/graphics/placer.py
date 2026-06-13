@@ -84,24 +84,35 @@ def place(
 
         track_idx = _find_or_create_motion_graphics_track(timeline)
         fps = _fps_from_timeline(timeline)
-        start_frame = int(placement.start_sec * fps)
 
-        # AppendToTimeline with explicit track index and record_frame
-        clip_info = {
+        try:
+            tl_start = timeline.GetStartFrame()
+        except Exception:
+            tl_start = 0
+
+        record_frame = tl_start + int(placement.start_sec * fps)
+        end_frame = max(1, int(placement.duration_sec * fps))
+
+        clip_info: dict[str, Any] = {
             "mediaPoolItem": media_item,
-            "startFrame": 0,
-            "endFrame": int(placement.duration_sec * fps),
-            "recordFrame": start_frame,
-            "trackIndex": track_idx,
+            "mediaType":     1,
+            "startFrame":    0,
+            "endFrame":      end_frame,
+            "recordFrame":   record_frame,
+            "trackIndex":    track_idx,
         }
         result = media_pool.AppendToTimeline([clip_info])
         if result:
             log.info(
-                "[gfx_placer] placed %s on track %d at %.1fs",
-                mp4_path.name, track_idx, placement.start_sec,
+                "[gfx_placer] placed %s on track %d at %.1fs (recordFrame %d)",
+                mp4_path.name, track_idx, placement.start_sec, record_frame,
             )
             return True
-        log.warning("[gfx_placer] AppendToTimeline returned falsy for %s", mp4_path.name)
+        log.warning(
+            "[gfx_placer] AppendToTimeline returned empty for %s "
+            "(track %d, recordFrame %d) — may be free edition restriction",
+            mp4_path.name, track_idx, record_frame,
+        )
         return False
 
     except Exception as e:
