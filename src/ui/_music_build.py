@@ -110,14 +110,17 @@ def build(parent: Any) -> None:
 
     # Volume slider
     vol_row = ctk.CTkFrame(music_card, fg_color="transparent")
-    vol_row.pack(fill="x", padx=10, pady=2)
+    vol_row.pack(fill="x", padx=10, pady=(2, 0))
     vol_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(vol_row, text="Music Volume").grid(row=0, column=0, sticky="w", padx=(0, 12))
+    ctk.CTkLabel(vol_row, text="Music Level").grid(row=0, column=0, sticky="w", padx=(0, 12))
     w["music_vol_slider"] = ctk.CTkSlider(vol_row, from_=10, to=100, number_of_steps=90)
     w["music_vol_slider"].set(35)
     w["music_vol_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
     w["music_vol_lbl"] = ctk.CTkLabel(vol_row, text="35%", text_color=COLORS.LEGACY_CYAN, width=44)
     w["music_vol_lbl"].grid(row=0, column=2)
+    ctk.CTkLabel(music_card, text="% of main track level — music is matched to dialogue then offset",
+                 font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_MUTED, anchor="w").pack(
+        fill="x", padx=10, pady=(0, 2))
 
     # Fade in & out
     fade_row = ctk.CTkFrame(music_card, fg_color="transparent")

@@ -23,6 +23,58 @@ def _download_audio(url: str, dest: Path) -> None:
                     f.write(chunk)
 
 
+def _get_timeline_duration_sec(app: Any) -> float | None:
+    """Return timeline total duration in seconds, or None if unavailable."""
+    try:
+        resolve  = getattr(app, "resolve", None)
+        if resolve is None:
+            return None
+        project  = resolve.GetProjectManager().GetCurrentProject()
+        timeline = project.GetCurrentTimeline() if project else None
+        if timeline is None:
+            return None
+        raw_fps = timeline.GetSetting("timelineFrameRate") or "25"
+        fps = float(str(raw_fps).split()[0])
+        duration_frames = timeline.GetEndFrame() - timeline.GetStartFrame()
+        return max(0.0, duration_frames / fps)
+    except Exception as e:
+        log.warning("[music_worker] could not read timeline duration: %s", e)
+        return None
+
+
+def _get_main_track_rms(app: Any) -> float | None:
+    """Return dBFS of the loudest clip on video track 1, or None if unavailable."""
+    try:
+        from src.music.audio_processor import measure_rms_db
+        resolve  = getattr(app, "resolve", None)
+        if resolve is None:
+            return None
+        project  = resolve.GetProjectManager().GetCurrentProject()
+        timeline = project.GetCurrentTimeline() if project else None
+        if timeline is None:
+            return None
+        items = timeline.GetItemListInTrack("video", 1) or []
+        best_rms: float | None = None
+        for item in items:
+            try:
+                mpi   = item.GetMediaPoolItem()
+                props = mpi.GetClipProperty() if mpi else {}
+                fpath = props.get("File Path") or props.get("Clip Path") or ""
+                if not fpath:
+                    continue
+                rms = measure_rms_db(fpath)
+                if rms is not None and (best_rms is None or rms > best_rms):
+                    best_rms = rms
+            except Exception:
+                continue
+        if best_rms is not None:
+            log.info("[music_worker] main track RMS: %.1f dBFS", best_rms)
+        return best_rms
+    except Exception as e:
+        log.warning("[music_worker] could not measure main track RMS: %s", e)
+        return None
+
+
 def music_thread(
     frame: Any,
     app: Any,
@@ -51,6 +103,15 @@ def music_thread(
 
         set_status("Analyzing transcript mood…")
         set_progress(10, True)
+
+        timeline_duration_sec = _get_timeline_duration_sec(app)
+        if timeline_duration_sec is not None:
+            log.info("[music_worker] timeline duration: %.1fs", timeline_duration_sec)
+        else:
+            log.warning("[music_worker] timeline duration unavailable — music will not be trimmed")
+
+        set_status("Measuring main track level…")
+        main_track_rms = _get_main_track_rms(app)
 
         sections_count = n_sections if music_mode == "segments" else 1
 
@@ -122,11 +183,23 @@ def music_thread(
             processed_dir = Path(download_folder) / "processed"
             audio_path = get_or_process_music(
                 audio_path, processed_dir, music_volume_pct, fade_in_ms, fade_out_ms,
+                target_db=main_track_rms,
             )
 
             fname = Path(audio_path).name
             set_status(f"Placing '{fname}' at {section.start_sec:.1f}s…")
-            duration = section.end_sec - section.start_sec if music_mode == "segments" else 0.0
+
+            if music_mode == "segments":
+                duration = section.end_sec - section.start_sec
+                if timeline_duration_sec is not None:
+                    duration = min(duration, max(0.0, timeline_duration_sec - section.start_sec))
+            else:
+                # Single track: fill from start to timeline end
+                if timeline_duration_sec is not None:
+                    duration = max(0.0, timeline_duration_sec - section.start_sec)
+                else:
+                    duration = 0.0  # full clip (no trim possible)
+
             result = place_audio_clip(app, audio_path, section.start_sec, duration, TRACKS.MUSIC)
 
             if result.placed:
