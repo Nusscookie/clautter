@@ -18,6 +18,7 @@ from typing import Any
 import requests
 
 from src.broll.providers.base import AuthError, NetworkError, RateLimitError
+from src.constants import PATHS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -53,7 +54,7 @@ class _AudioCache:
     """24h JSON cache for audio search results."""
 
     def __init__(self, root: Path | None = None, ttl_sec: int = _DEFAULT_TTL) -> None:
-        self._root = root or (Path.home() / ".clutter" / "audio_cache")
+        self._root = root or PATHS.AUDIO_CACHE
         self._ttl  = ttl_sec
         self._root.mkdir(parents=True, exist_ok=True)
 

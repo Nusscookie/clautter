@@ -3,8 +3,9 @@
 from __future__ import annotations
 import logging
 import logging.handlers
-from pathlib import Path
 from typing import Callable
+
+from src.constants import PATHS
 
 
 class UILogHandler(logging.Handler):
@@ -33,7 +34,7 @@ def get_logger(name: str) -> logging.Logger:
 
     logger.setLevel(logging.DEBUG)
 
-    log_dir = Path.home() / ".clutter" / "logs"
+    log_dir = PATHS.LOGS_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
 
     fh = logging.handlers.RotatingFileHandler(

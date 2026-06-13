@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -99,7 +100,7 @@ def analyze_thread(
         app.refresh_timeline()
         clips = app.get_video_clips(1)
         if not clips:
-            set_status("No clips found on Video Track 1.", "#ff6b6b")
+            set_status("No clips found on Video Track 1.", COLORS.ERROR)
             set_progress(0, False)
             return
 
@@ -131,7 +132,7 @@ def analyze_thread(
             set_status(
                 "No cut points found. Run Smart Cuts first, or lower Min Take Length "
                 "(the timeline has no takes long enough).",
-                "#ff6b6b",
+                COLORS.ERROR,
             )
             set_progress(0, False)
             return
@@ -144,7 +145,7 @@ def analyze_thread(
                 set_status(
                     "opencv-python not installed — applying plain center zooms. "
                     "Run: pip install opencv-python",
-                    "#E8903A",
+                    COLORS.WARNING,
                 )
 
         state["zoom_points"] = points
@@ -156,7 +157,7 @@ def analyze_thread(
         set_status(
             f"Found {_n} zoom point(s) at your cut points. "
             "Click Apply Zooms to create a new timeline.",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
         set_btn("apply_btn", True)
         set_btn("preview_btn", True)
@@ -164,7 +165,7 @@ def analyze_thread(
 
     except Exception as e:
         log.error("Zoom analyze error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("analyze_btn", True)
@@ -220,7 +221,7 @@ def apply_thread(
             set_status(
                 f"Timeline '{result.new_timeline_name}' built but no zooms applied. "
                 "Check that zoom points were detected.",
-                "#E8903A",
+                COLORS.WARNING,
             )
             set_progress(0, False)
             return
@@ -229,7 +230,7 @@ def apply_thread(
         set_status(
             f"Done! {result.zooms_applied} zoom(s) applied. "
             f"New timeline: '{result.new_timeline_name}'",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
         ui(lambda: w["new_timeline_lbl"].configure(
             text=f"Created: \"{result.new_timeline_name}\""))
@@ -237,7 +238,7 @@ def apply_thread(
 
     except Exception as e:
         log.error("Zoom apply error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("apply_btn", True)
@@ -256,7 +257,7 @@ def preview_thread(
         set_status("Adding zoom markers to timeline...")
 
         if not state["zoom_points"] or not app.timeline:
-            set_status("Analyze first.", "#ff6b6b")
+            set_status("Analyze first.", COLORS.ERROR)
             return
 
         for zp in state["zoom_points"]:
@@ -271,10 +272,10 @@ def preview_thread(
 
         set_status(
             f"Added {len(state['zoom_points'])} purple markers for zoom points.",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
     except Exception as e:
         log.error("Preview error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         set_btn("preview_btn", True)

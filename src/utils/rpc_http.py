@@ -6,16 +6,17 @@ so existing callers are unaffected.
 
 from __future__ import annotations
 import json
-from pathlib import Path
 from typing import Any, Optional
 
 import requests
+
+from src.constants import PATHS
 
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_BRIDGE_FILE = Path.home() / ".clutter" / "bridge.json"
+_BRIDGE_FILE = PATHS.BRIDGE_FILE
 _REF_KEY = "__clutter_ref__"
 
 # Long operations (CreateEmptyTimeline, AppendToTimeline on a long

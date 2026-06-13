@@ -85,7 +85,8 @@ talks to it through a localhost proxy that looks identical to a real
 | `src/app.py` | `AIEditorApp` — framework-agnostic, no tkinter import. Holds `resolve`, `project`, `timeline`, `transcript`, `settings`. |
 | `src/<feature>/*` | Pure logic. No widgets. Only uses `app.resolve`, `app.project`, etc. Works unchanged through the proxy. |
 | `src/ui/<tab>.py` | Each tab has two functions: `build(parent)` (layout) and `setup(parent, app)` (callbacks). Widget refs live in `parent._w = {}`. |
-| `src/settings/manager.py` | JSON at `~/.clutter/config.json` (API keys, prefs, stats). |
+| `src/settings/manager.py` | JSON at `~/.clutter/config.json` (API keys, prefs, stats). Tunable defaults (thresholds, zoom, timeouts) live here — **not** in `constants.py`. |
+| `src/constants.py` | **Single source of truth** for non-tunable shared values: `COLORS` (palette, mirrors `design/palette.md`), `PATHS` (`~/.clutter` subpaths), `TRACKS` (Resolve track names), `SETTINGS_KEYS` (settings dict keys). Import + reference these — don't inline hex / track names / paths / key strings. |
 | `src/utils/logger.py` | stderr + rotating file at `~/.clutter/logs/ai_editor.log`. Use `log.info/warn/error` — not `print()`. |
 
 ### Tab → module map
@@ -95,8 +96,8 @@ talks to it through a localhost proxy that looks identical to a real
 | Smart Cuts | `ui/smartcuts_tab.py` | `smartcuts/analyzer.py` + `cutter.py` |
 | Pace Control | `ui/pace_tab.py` | `pace/controller.py` |
 | Subtitles | `ui/subtitles_tab.py` | `subtitles/elevenlabs.py` + `generator.py` + `exporter.py` |
-| Auto Zooms | `ui/zooms_tab.py` | `zooms/analyzer.py` + `applier.py` |
-| B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` |
+| Auto Zooms | `ui/zooms_tab.py` | `zooms/analyzer.py` + `applier.py` (+ `applier_fusion.py` Fusion keyframing) |
+| B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` + `placement_rules.py` (shared pacing predicates) + `autonomous.py` (+ `autonomous_collect.py`) + `llm_director.py` (+ `llm_director_api.py`) + `placer.py` (+ `placer_zoom.py`) |
 | Music & SFX | `ui/music_tab.py` | `music/audio_provider.py` + `mood_analyzer.py` + `sfx_engine.py` + `placer.py` |
 | Motion Graphics | `ui/graphics_tab.py` | `graphics/suggester.py` |
 
@@ -106,13 +107,19 @@ talks to it through a localhost proxy that looks identical to a real
 main.py  gui.py  install.py  requirements.txt  config.example.json
 src/
   app.py        AIEditorApp — framework-agnostic state holder
-  ui/           Tabs (build/setup) + main_window + settings_window.
+  constants.py  Shared COLORS / PATHS / TRACKS / SETTINGS_KEYS (single source of truth)
+  ui/           Tabs (build/setup) + main_window + settings_window
+                (+ settings_window_widgets.py row builders).
                 Big tabs split into _<tab>_build.py / _<tab>_workers.py helpers.
   smartcuts/    Silence detection (VAD/RMS) + cutter + retake detection
   pace/         Pace slider → smartcuts param mapping
   subtitles/    ElevenLabs + faster-whisper STT → ASS/Fusion titles
-  zooms/        Face/RMS zoom detection + Fusion keyframe applier
-  broll/        Scan + match + online providers/ + autonomous agent
+  zooms/        Face/RMS zoom detection + applier (+ applier_fusion keyframing)
+  broll/        Scan + match + online providers/ + autonomous agent.
+                placement_rules.py holds the pacing predicates shared by the
+                manual tab and the autonomous agent (intro-skip, min-gap,
+                duration-cap, face-gap). Big modules split: autonomous(_collect),
+                llm_director(_api), placer(_zoom).
   music/        Mood-matched music + auto SFX (providers, ducking, placer)
   graphics/     Motion-graphics suggester (BETA stub)
   settings/     JSON config manager (~/.clutter/config.json)
@@ -151,11 +158,19 @@ def _work_thread():
 
 ### Color palette (reuse, don't invent)
 
-`#141414` bg · `#1e1e1e`/`#2a2a2a` card · `#444444` divider · `#aaaaaa` text · `#4fc3f7` accent · `#66bb6a` success · `#ffa726`/`#ff8f00` warn · `#ff6b6b` error · `#555555` disabled · `#888888` section labels.
+**Don't inline hex.** Import the palette: `from src.constants import COLORS` →
+`COLORS.BG_DARKEST`, `COLORS.BG_CARD`, `COLORS.SEPARATOR`, `COLORS.TEXT_MUTED`,
+`COLORS.BRAND_PRIMARY` (terracotta accent), `COLORS.SUCCESS`, `COLORS.WARNING`,
+`COLORS.ERROR`, `COLORS.TEXT_SUBTLE` (disabled), `COLORS.TEXT_DIM` (section labels).
+Token names mirror `design/palette.md`. Exception: subtitle *render* colors
+(`#FFFFFF`/`#000000`/`#FFFF00` that flow into ASS/Fusion output) are data, not
+theme — leave those as literals.
 
 ### Imports
 
 Top-of-file: stdlib + third-party. **Lazy**-import heavy/Resolve-touching modules inside the worker function (e.g. `from src.subtitles.elevenlabs import ...`) to keep tab startup snappy.
+
+Reference shared constants instead of literals: `from src.constants import COLORS, PATHS, TRACKS, SETTINGS_KEYS`. Use `SETTINGS_KEYS.*` for `app.settings.get(...)` keys, `TRACKS.*` for Resolve track names (`"Music"`/`"SFX"`/`"B-Roll"`), `PATHS.*` for `~/.clutter` subpaths.
 
 ### Code style
 

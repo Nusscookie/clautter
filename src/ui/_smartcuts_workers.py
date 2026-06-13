@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -32,7 +33,7 @@ def analyze_thread(
         app.refresh_timeline()
         clips = app.get_video_clips(1)
         if not clips:
-            set_status("No clips found on Video Track 1.", "#ff6b6b")
+            set_status("No clips found on Video Track 1.", COLORS.ERROR)
             set_progress(0, False)
             set_btn("analyze_btn", True)
             return
@@ -71,7 +72,7 @@ def analyze_thread(
             except RuntimeError as e:
                 if silence_method == "vad" and not _vad_fallback_warned:
                     _vad_fallback_warned = True
-                    set_status("Silero VAD unavailable — falling back to pydub RMS", "#E8903A")
+                    set_status("Silero VAD unavailable — falling back to pydub RMS", COLORS.WARNING)
                     silence_method = "rms"
                     state["silence_method"] = "rms"
                 try:
@@ -105,17 +106,17 @@ def analyze_thread(
             set_status(
                 f"Found {total_silences} silence(s) totaling "
                 f"{state['total_time_saved']:.1f}s. Click Apply Cuts.",
-                "#66bb6a",
+                COLORS.SUCCESS,
             )
             set_btn("apply_btn", True)
             set_btn("preview_btn", True)
         else:
-            set_status("No significant silences found. Try lowering the threshold.", "#E8903A")
+            set_status("No significant silences found. Try lowering the threshold.", COLORS.WARNING)
         set_progress(0, False)
 
     except Exception as e:
         log.error("Analyze thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("analyze_btn", True)
@@ -184,7 +185,7 @@ def apply_thread(
         set_status(
             f"Done! New timeline: '{result.new_timeline_name}' "
             f"({result.time_saved_sec:.1f}s removed{retake_note})",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
         ui(lambda: w["new_timeline_lbl"].configure(
             text=f"Created: \"{result.new_timeline_name}\""))
@@ -192,7 +193,7 @@ def apply_thread(
 
     except Exception as e:
         log.error("Apply thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("apply_btn", True)
@@ -211,7 +212,7 @@ def preview_thread(
         set_status("Adding markers at silence locations...")
 
         if not app.timeline:
-            set_status("No active timeline.", "#ff6b6b")
+            set_status("No active timeline.", COLORS.ERROR)
             return
 
         marker_count = 0
@@ -228,9 +229,9 @@ def preview_thread(
                 except Exception as me:
                     log.debug("Marker add error: %s", me)
 
-        set_status(f"Added {marker_count} marker(s). Red markers = silences.", "#66bb6a")
+        set_status(f"Added {marker_count} marker(s). Red markers = silences.", COLORS.SUCCESS)
     except Exception as e:
         log.error("Preview thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         set_btn("preview_btn", True)

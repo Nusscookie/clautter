@@ -7,11 +7,11 @@ Automatically selects V2 when sentence-transformers is installed, else V1.
 
 from __future__ import annotations
 import re
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -27,7 +27,7 @@ _STOP_WORDS = {
     "which", "who", "how", "why", "where",
 }
 
-_CACHE_DIR = Path.home() / ".clutter" / "broll_embed_cache"
+_CACHE_DIR = PATHS.BROLL_EMBED_CACHE
 _SIM_THRESHOLD = 0.35
 _SEGMENT_SEC = 5.0
 

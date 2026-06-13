@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.ui._subtitles_data import (
     LANG_CODES, PRESET_DEFAULTS, STYLE_PRESETS, WHISPER_MODEL_MAP, WHISPER_MODELS,
 )
@@ -38,7 +39,7 @@ def make_callbacks(
 
     def on_generate() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         threading.Thread(
             target=generate_thread,
@@ -49,7 +50,7 @@ def make_callbacks(
 
     def on_create_track() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         try:
             from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog
@@ -68,7 +69,7 @@ def make_callbacks(
             )
         except Exception as e:
             log.error("Timeline dialog error: %s", e)
-            set_status(f"Dialog error: {e}", "#ff6b6b")
+            set_status(f"Dialog error: {e}", COLORS.ERROR)
             return
         if choice is None:
             return
@@ -93,27 +94,27 @@ def make_callbacks(
             from src.subtitles.exporter import export_srt
             import os
             if not _state["srt_content"]:
-                set_status("Generate transcript first.", "#ff6b6b")
+                set_status("Generate transcript first.", COLORS.ERROR)
                 return
             path = os.path.join(os.path.expanduser("~"), "Desktop", "subtitles.srt")
             export_srt(_state["srt_content"], path)
-            set_status(f"SRT exported to: {path}", "#66bb6a")
+            set_status(f"SRT exported to: {path}", COLORS.SUCCESS)
         except Exception as e:
-            set_status(f"Export error: {e}", "#ff6b6b")
+            set_status(f"Export error: {e}", COLORS.ERROR)
 
     def on_export_txt() -> None:
         try:
             from src.subtitles.exporter import export_txt
             import os
             if not _state["words"]:
-                set_status("Generate transcript first.", "#ff6b6b")
+                set_status("Generate transcript first.", COLORS.ERROR)
                 return
             text = " ".join(w2["word"] for w2 in _state["words"] if w2.get("type") == "word")
             path = os.path.join(os.path.expanduser("~"), "Desktop", "transcript.txt")
             export_txt(text, path)
-            set_status(f"TXT exported to: {path}", "#66bb6a")
+            set_status(f"TXT exported to: {path}", COLORS.SUCCESS)
         except Exception as e:
-            set_status(f"Export error: {e}", "#ff6b6b")
+            set_status(f"Export error: {e}", COLORS.ERROR)
 
     def on_preset_changed(value: str) -> None:
         app.settings.set("subtitle_preset", value)
@@ -180,7 +181,7 @@ def make_callbacks(
 
     def on_import_style() -> None:
         if not app.connected:
-            w["status"].configure(text="Not connected to DaVinci Resolve.", text_color="#ff6b6b")
+            w["status"].configure(text="Not connected to DaVinci Resolve.", text_color=COLORS.ERROR)
             return
 
         def _apply_style(style: dict) -> None:

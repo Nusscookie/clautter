@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from src.constants import COLORS, TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -59,7 +60,7 @@ def music_thread(
             sections = analyze_mood_keywords(app.transcript, sections_count)
 
         if not sections:
-            set_status("Could not determine mood from transcript.", "#E8903A")
+            set_status("Could not determine mood from transcript.", COLORS.WARNING)
             set_progress(0, False)
             return
 
@@ -107,7 +108,7 @@ def music_thread(
                         _download_audio(hit.download_url, dest)
                     except Exception as e:
                         log.error("[music_worker] download failed: %s", e)
-                        set_status(f"Download failed: {e}", "#ff6b6b")
+                        set_status(f"Download failed: {e}", COLORS.ERROR)
                         continue
                 audio_path = str(dest)
 
@@ -125,7 +126,7 @@ def music_thread(
             fname = Path(audio_path).name
             set_status(f"Placing '{fname}' at {section.start_sec:.1f}s…")
             duration = section.end_sec - section.start_sec if music_mode == "segments" else 0.0
-            result = place_audio_clip(app, audio_path, section.start_sec, duration, "Music")
+            result = place_audio_clip(app, audio_path, section.start_sec, duration, TRACKS.MUSIC)
 
             if result.placed:
                 placed_count += 1
@@ -135,17 +136,17 @@ def music_thread(
 
         set_progress(100)
         if placed_count == total:
-            set_status(f"Done! {placed_count} music track(s) placed on 'Music' audio track.", "#66bb6a")
+            set_status(f"Done! {placed_count} music track(s) placed on 'Music' audio track.", COLORS.SUCCESS)
         elif placed_count > 0:
-            set_status(f"Placed {placed_count}/{total} track(s). Check logs for details.", "#ffa726")
+            set_status(f"Placed {placed_count}/{total} track(s). Check logs for details.", COLORS.WARN_PARTIAL)
         else:
-            set_status("No tracks placed — check Resolve connection and audio source settings.", "#ff6b6b")
+            set_status("No tracks placed — check Resolve connection and audio source settings.", COLORS.ERROR)
 
         set_progress(0, False)
 
     except Exception as e:
         log.error("[music_worker] error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         _ui(lambda: w["run_music_btn"].configure(state="normal"))
@@ -204,7 +205,7 @@ def sfx_thread(
                 hint.append("No analysis data found — run SmartCuts, Auto Zooms, or B-Roll first.")
             else:
                 hint.append("No events found for selected triggers.")
-            set_sfx_status(" ".join(hint), "#E8903A")
+            set_sfx_status(" ".join(hint), COLORS.WARNING)
             set_sfx_progress(0, False)
             return
 
@@ -233,17 +234,17 @@ def sfx_thread(
         set_sfx_progress(100)
 
         if placed == total and total > 0:
-            set_sfx_status(f"Done! {placed}/{total} SFX clip(s) placed on 'SFX' track.", "#66bb6a")
+            set_sfx_status(f"Done! {placed}/{total} SFX clip(s) placed on 'SFX' track.", COLORS.SUCCESS)
         elif placed > 0:
-            set_sfx_status(f"Placed {placed}/{total} SFX clip(s). Check logs.", "#ffa726")
+            set_sfx_status(f"Placed {placed}/{total} SFX clip(s). Check logs.", COLORS.WARN_PARTIAL)
         else:
-            set_sfx_status("No SFX placed — check Resolve connection.", "#ff6b6b")
+            set_sfx_status("No SFX placed — check Resolve connection.", COLORS.ERROR)
 
         set_sfx_progress(0, False)
 
     except Exception as e:
         log.error("[sfx_worker] error: %s", e)
-        set_sfx_status(f"Error: {e}", "#ff6b6b")
+        set_sfx_status(f"Error: {e}", COLORS.ERROR)
         set_sfx_progress(0, False)
     finally:
         _ui(lambda: w["run_sfx_btn"].configure(state="normal"))

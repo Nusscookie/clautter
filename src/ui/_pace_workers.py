@@ -6,6 +6,7 @@ Extracted from pace_tab.py so the tab file stays under 200 lines.
 from __future__ import annotations
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -31,7 +32,7 @@ def apply_thread(
         app.refresh_timeline()
         clips = app.get_video_clips(1)
         if not clips:
-            set_status("No clips found on Video Track 1.", "#ff6b6b")
+            set_status("No clips found on Video Track 1.", COLORS.ERROR)
             return
 
         def progress_cb(cur: int, total: int, msg: str) -> None:
@@ -57,10 +58,10 @@ def apply_thread(
         app.settings.add_stat("total_edits", 1)
         set_status(
             f"Done! Timeline '{result.new_timeline_name}' — {result.time_saved_sec:.1f}s removed.",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
     except Exception as e:
         log.error("Pace apply error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         _ui(lambda: w["apply_btn"].configure(state="normal"))

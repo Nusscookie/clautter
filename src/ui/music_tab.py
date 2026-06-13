@@ -6,6 +6,7 @@ import tkinter.filedialog
 from pathlib import Path
 from typing import Any
 
+from src.constants import COLORS
 from src.ui._music_build import build
 from src.music._music_workers import music_thread, sfx_thread
 from src.utils.logger import get_logger
@@ -27,10 +28,10 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
-    def set_sfx_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_sfx_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["sfx_status"].configure(text=msg, text_color=color))
 
     def set_progress(pct: int, visible: bool = True) -> None:
@@ -115,7 +116,7 @@ def setup(frame: Any, app: Any) -> None:
             w["mood_llm_provider"].configure(values=["—"], state="disabled")
             w["mood_llm_provider"].set("—")
             w["mood_llm_hint"].configure(
-                text="No LLM key — add one in Settings (⚙).", text_color="#E8903A",
+                text="No LLM key — add one in Settings (⚙).", text_color=COLORS.WARNING,
             )
 
     def on_mood_mode(value: str) -> None:
@@ -226,13 +227,13 @@ def setup(frame: Any, app: Any) -> None:
         music_source_now = w["music_source"].get().lower()
         jamendo_id = (app.settings.get("jamendo_client_id", "") or "").strip()
         if music_source_now != "local" and not jamendo_id:
-            set_status("Jamendo Client ID required — add it in Settings (⚙).", "#ff6b6b")
+            set_status("Jamendo Client ID required — add it in Settings (⚙).", COLORS.ERROR)
             return
         if music_source_now in ("local", "both") and not _state["local_music_folder"]:
-            set_status("Local Music Folder not set — browse to select one.", "#ff6b6b")
+            set_status("Local Music Folder not set — browse to select one.", COLORS.ERROR)
             return
         if not app.transcript:
-            set_status("No transcript — generate one in the Subtitles tab first.", "#ff6b6b")
+            set_status("No transcript — generate one in the Subtitles tab first.", COLORS.ERROR)
             return
         if _state["running"]:
             return
@@ -280,7 +281,7 @@ def setup(frame: Any, app: Any) -> None:
     def on_run_sfx() -> None:
         freesound_key = (app.settings.get("freesound_api_key", "") or "").strip()
         if not freesound_key:
-            set_sfx_status("Freesound API key required — add it in Settings (⚙).", "#ff6b6b")
+            set_sfx_status("Freesound API key required — add it in Settings (⚙).", COLORS.ERROR)
             return
         if _state["sfx_running"]:
             return

@@ -7,6 +7,7 @@ from __future__ import annotations
 import tempfile
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -42,7 +43,7 @@ def generate_thread(
         app.refresh_timeline()
         clips = app.get_video_clips(1)
         if not clips:
-            set_status("No clips found on Video Track 1.", "#ff6b6b")
+            set_status("No clips found on Video Track 1.", COLORS.ERROR)
             set_progress(0, False)
             return
 
@@ -58,7 +59,7 @@ def generate_thread(
                 audio_for_stt = get_clip_file_path(clips[0])
                 state["words_are_remapped"] = False
                 if not audio_for_stt:
-                    set_status("Could not get media file path.", "#ff6b6b")
+                    set_status("Could not get media file path.", COLORS.ERROR)
                     set_progress(0, False)
                     return
                 log.info("Using full source file (cut extraction unavailable)")
@@ -78,7 +79,7 @@ def generate_thread(
                 from src.subtitles.elevenlabs import ElevenLabsClient
                 api_key = (app.settings.api_key or "").strip()
                 if not api_key:
-                    set_status("ElevenLabs API key not set. Open Settings (⚙) to add it.", "#ff6b6b")
+                    set_status("ElevenLabs API key not set. Open Settings (⚙) to add it.", COLORS.ERROR)
                     set_progress(0, False)
                     return
                 _name = audio_for_stt.replace("\\", "/").split("/")[-1]
@@ -122,7 +123,7 @@ def generate_thread(
         set_status(
             f"Transcript ready: {word_count} words. "
             "Click 'Create Subtitle Track' to add to timeline.",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
         set_btn("create_track_btn", True)
         set_btn("export_srt_btn", True)
@@ -132,7 +133,7 @@ def generate_thread(
 
     except Exception as e:
         log.error("Generate thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("generate_btn", True)

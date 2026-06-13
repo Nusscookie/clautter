@@ -1,6 +1,8 @@
 """Floating console log window — shows live Clutter log output."""
 
 from __future__ import annotations
+
+from src.constants import COLORS
 from typing import Any
 
 import customtkinter as ctk
@@ -11,13 +13,13 @@ class ConsoleWindow:
         self._win = ctk.CTkToplevel(root)
         self._win.title("Clutter — Console")
         self._win.geometry("720x380")
-        self._win.configure(fg_color="#141414")
+        self._win.configure(fg_color=COLORS.BG_DARKEST)
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._textbox = ctk.CTkTextbox(
             self._win,
-            fg_color="#0d0d0d",
-            text_color="#cccccc",
+            fg_color=COLORS.BG_CONSOLE,
+            text_color=COLORS.TEXT_SECONDARY,
             font=ctk.CTkFont(family="Consolas", size=11),
             state="disabled",
             wrap="none",

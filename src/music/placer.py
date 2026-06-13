@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.constants import TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -102,7 +103,7 @@ def place_audio_clip(
     clip_path: str,
     position_sec: float,
     duration_sec: float = 0.0,
-    track_name: str = "Music",
+    track_name: str = TRACKS.MUSIC,
 ) -> AudioPlacerResult:
     """Place an MP3/WAV on the named audio track at position_sec.
 

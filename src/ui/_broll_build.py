@@ -5,6 +5,8 @@ Two modes: Manual (existing flow) and Autonomous (agent runs end-to-end).
 """
 
 from __future__ import annotations
+
+from src.constants import COLORS
 from typing import Any
 
 import customtkinter as ctk
@@ -17,7 +19,7 @@ def build(parent: Any) -> None:
         parent,
         text="B-ROLL ASSISTANT  —  Smart B-roll suggestions from transcript",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
@@ -26,10 +28,10 @@ def build(parent: Any) -> None:
         parent,
         values=["Manual", "Autonomous"],
         font=ctk.CTkFont(size=12),
-        selected_color="#1b5e20",
-        selected_hover_color="#2e7d32",
-        unselected_color="#2a2a2a",
-        unselected_hover_color="#3a3a3a",
+        selected_color=COLORS.GREEN_ACTION_BG,
+        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        unselected_color=COLORS.BG_CARD,
+        unselected_hover_color=COLORS.BG_HOVER,
     )
     w["mode_toggle"].set("Manual")
     w["mode_toggle"].pack(fill="x", padx=10, pady=(0, 8))
@@ -51,12 +53,12 @@ def build(parent: Any) -> None:
 
 def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     """Build all manual-mode widgets inside *container*."""
-    folder_card = ctk.CTkFrame(container, fg_color="#2a2a2a", corner_radius=6)
+    folder_card = ctk.CTkFrame(container, fg_color=COLORS.BG_CARD, corner_radius=6)
     folder_card.pack(fill="x", padx=10, pady=4)
 
     ctk.CTkLabel(folder_card, text="LOCAL B-ROLL FOLDER",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     folder_row = ctk.CTkFrame(folder_card, fg_color="transparent")
     folder_row.pack(fill="x", padx=10, pady=(0, 8))
@@ -71,14 +73,14 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
 
     w["suggest_local_btn"] = ctk.CTkButton(
         container, text="Suggest Local B-Roll",
-        fg_color="#1b5e20", hover_color="#2e7d32",
+        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
         state="disabled",
     )
     w["suggest_local_btn"].pack(fill="x", padx=10, pady=(4, 2))
 
     w["status"] = ctk.CTkLabel(
         container, text="Browse a folder of local B-roll clips to start.",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=800)
     w["status"].pack(fill="x", padx=12, pady=(4, 4))
 
     _divider(container)
@@ -93,13 +95,13 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     clips_header_row.pack(fill="x", padx=12, pady=(8, 0))
     ctk.CTkLabel(clips_header_row, text="CLIPS TO PLACE",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(side="left")
+                 text_color=COLORS.TEXT_DIM).pack(side="left")
     ctk.CTkLabel(clips_header_row,
                  text="— check clips to include. Accepted local + downloaded clips appear here.",
-                 font=ctk.CTkFont(size=10), text_color="#555555").pack(side="left", padx=(6, 0))
+                 font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE).pack(side="left", padx=(6, 0))
 
     w["suggestions_frame"] = ctk.CTkScrollableFrame(
-        container, height=200, fg_color="#1e1e1e", corner_radius=6,
+        container, height=200, fg_color=COLORS.BG_MID, corner_radius=6,
     )
     w["suggestions_frame"].pack(fill="x", padx=10, pady=(4, 4))
     w["suggestions_frame"].grid_columnconfigure(0, weight=1)
@@ -108,7 +110,7 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     w["suggestions_placeholder"] = ctk.CTkLabel(
         w["suggestions_frame"],
         text="Browse a folder and click Suggest Local B-Roll, or download clips from Online Search.",
-        font=ctk.CTkFont(size=11), text_color="#555555", wraplength=700, anchor="w",
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_SUBTLE, wraplength=700, anchor="w",
     )
     w["suggestions_placeholder"].pack(fill="x", padx=8, pady=12)
 
@@ -133,7 +135,7 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
         place_opts_row,
         text="Fill Frame: zoom-crops portrait/vertical footage.  "
              "Natural Placement: skips first 4s intro, enforces 5s gaps between clips.",
-        font=ctk.CTkFont(size=10), text_color="#555555",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
     ).pack(side="left", padx=(10, 0))
 
     # Max B-roll duration slider
@@ -141,37 +143,37 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     max_dur_row.pack(fill="x", padx=10, pady=(2, 2))
     max_dur_row.grid_columnconfigure(1, weight=1)
     ctk.CTkLabel(max_dur_row, text="Max clip duration:",
-                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED,
                  width=130, anchor="w").grid(row=0, column=0, sticky="w")
     w["place_max_dur_value"] = ctk.CTkLabel(
         max_dur_row, text="5s",
-        font=ctk.CTkFont(size=11), text_color="#D97757", width=28, anchor="e")
+        font=ctk.CTkFont(size=11), text_color=COLORS.BRAND_PRIMARY, width=28, anchor="e")
     w["place_max_dur_value"].grid(row=0, column=2, padx=(6, 0))
     w["place_max_dur"] = ctk.CTkSlider(
         max_dur_row, from_=1, to=15, number_of_steps=14,
-        progress_color="#D97757",
+        progress_color=COLORS.BRAND_PRIMARY,
     )
     w["place_max_dur"].set(5)
     w["place_max_dur"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
     ctk.CTkLabel(
         container,
         text="Clips longer than this are trimmed to the max duration before placing.",
-        font=ctk.CTkFont(size=10), text_color="#555555", anchor="w",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE, anchor="w",
     ).pack(fill="x", padx=12, pady=(0, 2))
 
     # LLM mode for placement (same as autonomous mode)
     place_llm_row = ctk.CTkFrame(container, fg_color="transparent")
     place_llm_row.pack(fill="x", padx=10, pady=(4, 2))
     ctk.CTkLabel(place_llm_row, text="LLM mode:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
+                 text_color=COLORS.TEXT_MUTED, width=80, anchor="w").pack(side="left")
     w["place_llm_mode"] = ctk.CTkSegmentedButton(
         place_llm_row,
         values=["Off"],
         font=ctk.CTkFont(size=11),
-        selected_color="#1b5e20",
-        selected_hover_color="#2e7d32",
-        unselected_color="#2a2a2a",
-        unselected_hover_color="#3a3a3a",
+        selected_color=COLORS.GREEN_ACTION_BG,
+        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        unselected_color=COLORS.BG_CARD,
+        unselected_hover_color=COLORS.BG_HOVER,
         width=180,
     )
     w["place_llm_mode"].set("Off")
@@ -179,26 +181,26 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     ctk.CTkLabel(
         place_llm_row,
         text="Use LLM to pick best clips + positions. Only providers with an API key shown.",
-        font=ctk.CTkFont(size=10), text_color="#555555",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
     ).pack(side="left", padx=(10, 0))
 
     w["place_btn"] = ctk.CTkButton(
         container, text="Auto Place on Timeline",
-        fg_color="#1b5e20", hover_color="#2e7d32",
+        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
         state="disabled",
     )
     w["place_btn"].pack(fill="x", padx=10, pady=(4, 4))
 
     w["place_status"] = ctk.CTkLabel(
         container, text="",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=800)
     w["place_status"].pack(fill="x", padx=12, pady=(0, 4))
 
     ctk.CTkLabel(
         container,
         text="Note: Requires transcript from the Subtitles tab. Suggest Local B-Roll first to generate suggestions.",
         font=ctk.CTkFont(size=10),
-        text_color="#555555",
+        text_color=COLORS.TEXT_SUBTLE,
         wraplength=800,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(0, 8))
@@ -206,18 +208,18 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
 
 def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     """Build all autonomous-mode widgets inside *container*."""
-    card = ctk.CTkFrame(container, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(container, fg_color=COLORS.BG_CARD, corner_radius=6)
     card.pack(fill="x", padx=10, pady=(4, 8))
 
     ctk.CTkLabel(card, text="AUTONOMOUS B-ROLL AGENT",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     ctk.CTkLabel(
         card,
         text="One click: extract keywords → search/match → rank → place on B-Roll track.",
         font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         wraplength=760,
         anchor="w",
     ).pack(fill="x", padx=10, pady=(0, 8))
@@ -228,7 +230,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     src_row = ctk.CTkFrame(card, fg_color="transparent")
     src_row.pack(fill="x", padx=10, pady=(8, 4))
     ctk.CTkLabel(src_row, text="Sources:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
+                 text_color=COLORS.TEXT_MUTED, width=80, anchor="w").pack(side="left")
     w["auto_use_local"] = ctk.CTkCheckBox(src_row, text="Local folder",
                                            font=ctk.CTkFont(size=11),
                                            checkbox_width=16, checkbox_height=16)
@@ -254,14 +256,14 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     online_row.grid_columnconfigure(1, weight=1)
 
     ctk.CTkLabel(online_row, text="Provider:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=80, anchor="w").grid(row=0, column=0, sticky="w")
+                 text_color=COLORS.TEXT_MUTED, width=80, anchor="w").grid(row=0, column=0, sticky="w")
     w["auto_provider"] = ctk.CTkOptionMenu(
         online_row,
         values=["Pixabay", "Pexels", "Both"],
         width=120,
-        fg_color="#1e1e1e",
-        button_color="#1e1e1e",
-        button_hover_color="#3a3a3a",
+        fg_color=COLORS.BG_MID,
+        button_color=COLORS.BG_MID,
+        button_hover_color=COLORS.BG_HOVER,
     )
     w["auto_provider"].grid(row=0, column=1, sticky="w", pady=2)
 
@@ -278,15 +280,15 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     llm_row = ctk.CTkFrame(card, fg_color="transparent")
     llm_row.pack(fill="x", padx=10, pady=(4, 4))
     ctk.CTkLabel(llm_row, text="LLM mode:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
+                 text_color=COLORS.TEXT_MUTED, width=80, anchor="w").pack(side="left")
     w["auto_llm_mode"] = ctk.CTkSegmentedButton(
         llm_row,
         values=["Off"],  # real provider segments are set at setup() from configured keys
         font=ctk.CTkFont(size=11),
-        selected_color="#1b5e20",
-        selected_hover_color="#2e7d32",
-        unselected_color="#2a2a2a",
-        unselected_hover_color="#3a3a3a",
+        selected_color=COLORS.GREEN_ACTION_BG,
+        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        unselected_color=COLORS.BG_CARD,
+        unselected_hover_color=COLORS.BG_HOVER,
         width=180,
     )
     w["auto_llm_mode"].set("Off")
@@ -294,7 +296,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     ctk.CTkLabel(
         llm_row,
         text="Pick a provider to let the LLM choose clips + positions. Only providers with an API key are shown.",
-        font=ctk.CTkFont(size=10), text_color="#555555",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
     ).pack(side="left", padx=(10, 0))
 
     # Max total clips slider
@@ -302,16 +304,16 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     max_clips_row.pack(fill="x", padx=10, pady=(0, 4))
     max_clips_row.grid_columnconfigure(1, weight=1)
     ctk.CTkLabel(max_clips_row, text="Max total clips:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=110, anchor="w").grid(row=0, column=0, sticky="w")
+                 text_color=COLORS.TEXT_MUTED, width=110, anchor="w").grid(row=0, column=0, sticky="w")
 
     w["auto_max_clips_value"] = ctk.CTkLabel(
         max_clips_row, text="10",
-        font=ctk.CTkFont(size=11), text_color="#D97757", width=28, anchor="e")
+        font=ctk.CTkFont(size=11), text_color=COLORS.BRAND_PRIMARY, width=28, anchor="e")
     w["auto_max_clips_value"].grid(row=0, column=2, padx=(6, 0))
 
     w["auto_max_clips"] = ctk.CTkSlider(
         max_clips_row, from_=1, to=30, number_of_steps=29,
-        progress_color="#D97757",
+        progress_color=COLORS.BRAND_PRIMARY,
     )
     w["auto_max_clips"].set(10)
     w["auto_max_clips"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
@@ -319,26 +321,26 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     ctk.CTkLabel(
         card,
         text="Caps online downloads. Local folder clips always included.",
-        font=ctk.CTkFont(size=10), text_color="#555555", anchor="w",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE, anchor="w",
     ).pack(fill="x", padx=10, pady=(0, 4))
 
     # Clips per segment
     cps_row = ctk.CTkFrame(card, fg_color="transparent")
     cps_row.pack(fill="x", padx=10, pady=(0, 8))
     ctk.CTkLabel(cps_row, text="Clips/segment:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=110, anchor="w").pack(side="left")
+                 text_color=COLORS.TEXT_MUTED, width=110, anchor="w").pack(side="left")
     w["auto_clips_per_seg"] = ctk.CTkOptionMenu(
         cps_row,
         values=["1", "2", "3"],
         width=70,
-        fg_color="#1e1e1e",
-        button_color="#1e1e1e",
-        button_hover_color="#3a3a3a",
+        fg_color=COLORS.BG_MID,
+        button_color=COLORS.BG_MID,
+        button_hover_color=COLORS.BG_HOVER,
     )
     w["auto_clips_per_seg"].set("1")
     w["auto_clips_per_seg"].pack(side="left")
     ctk.CTkLabel(cps_row, text="clips placed per transcript segment",
-                 font=ctk.CTkFont(size=10), text_color="#555555").pack(side="left", padx=(8, 0))
+                 font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE).pack(side="left", padx=(8, 0))
 
     _divider(card)
 
@@ -366,14 +368,14 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
         card,
         text="Fill Frame: zoom-crops clips to fill frame.  "
              "Natural Placement: skips first 4s, enforces 5s gaps between clips, caps each clip at 5s.",
-        font=ctk.CTkFont(size=10), text_color="#555555", anchor="w", wraplength=760,
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE, anchor="w", wraplength=760,
     ).pack(fill="x", padx=10, pady=(0, 6))
 
     # Run button
     w["auto_run_btn"] = ctk.CTkButton(
         card,
         text="▶  Run Autonomous B-Roll",
-        fg_color="#1b5e20", hover_color="#2e7d32",
+        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
         font=ctk.CTkFont(size=13, weight="bold"),
         height=38,
         state="disabled",
@@ -384,12 +386,12 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_progress_frame"] = ctk.CTkFrame(card, fg_color="transparent")
     w["auto_progress_frame"].pack(fill="x", padx=10, pady=(0, 2))
     w["auto_progress"] = ctk.CTkProgressBar(w["auto_progress_frame"], height=6,
-                                              progress_color="#D97757")
+                                              progress_color=COLORS.BRAND_PRIMARY)
     w["auto_progress"].set(0)
 
     w["auto_status"] = ctk.CTkLabel(
         card, text="Configure sources above, then click Run.",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=760)
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=760)
     w["auto_status"].pack(fill="x", padx=10, pady=(0, 10))
 
 
@@ -401,19 +403,19 @@ def _set_textbox(tb: ctk.CTkTextbox, text: str) -> None:
 
 
 def _divider(parent: Any) -> None:
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+    ctk.CTkFrame(parent, height=1, fg_color=COLORS.SEPARATOR, corner_radius=0).pack(
         fill="x", padx=10, pady=4)
 
 
 def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     """Construct the 'Search Online' card: provider + API keys + dl folder
     + top-N slider + primary search button + status label."""
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     card.pack(fill="x", padx=10, pady=(8, 4))
 
     ctk.CTkLabel(card, text="ONLINE B-ROLL SEARCH",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     # Provider + keys row
     prov_row = ctk.CTkFrame(card, fg_color="transparent")
@@ -422,22 +424,22 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
 
     ctk.CTkLabel(prov_row, text="Provider:",
                  font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa").grid(row=0, column=0, padx=(0, 6), sticky="w")
+                 text_color=COLORS.TEXT_MUTED).grid(row=0, column=0, padx=(0, 6), sticky="w")
 
     w["provider"] = ctk.CTkOptionMenu(
         prov_row,
         values=["Pixabay", "Pexels", "Both"],
         width=120,
-        fg_color="#1e1e1e",
-        button_color="#1e1e1e",
-        button_hover_color="#3a3a3a",
+        fg_color=COLORS.BG_MID,
+        button_color=COLORS.BG_MID,
+        button_hover_color=COLORS.BG_HOVER,
     )
     w["provider"].grid(row=0, column=1, sticky="w")
 
     ctk.CTkLabel(
         card,
         text="Pixabay / Pexels API keys → Settings  ( ⚙ top-right )",
-        font=ctk.CTkFont(size=11), text_color="#888888", anchor="w",
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_DIM, anchor="w",
     ).pack(fill="x", padx=10, pady=(0, 8))
 
     # Download target folder
@@ -446,7 +448,7 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     dl_row.grid_columnconfigure(0, weight=1)
     ctk.CTkLabel(dl_row, text="Download folder:",
                  font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+                 text_color=COLORS.TEXT_MUTED).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
     w["dl_folder"] = ctk.CTkEntry(dl_row, state="readonly",
                                    placeholder_text="No download folder selected.")
@@ -461,29 +463,29 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     topn_row.grid_columnconfigure(1, weight=1)
     ctk.CTkLabel(topn_row, text="Top-N keywords:",
                  font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=140, anchor="w").grid(row=0, column=0, sticky="w")
+                 text_color=COLORS.TEXT_MUTED, width=140, anchor="w").grid(row=0, column=0, sticky="w")
 
     w["top_n_value"] = ctk.CTkLabel(topn_row, text="10",
                                      font=ctk.CTkFont(size=11),
-                                     text_color="#D97757", width=24, anchor="e")
+                                     text_color=COLORS.BRAND_PRIMARY, width=24, anchor="e")
     w["top_n_value"].grid(row=0, column=2, padx=(6, 0))
 
     w["top_n_slider"] = ctk.CTkSlider(
         topn_row, from_=5, to=15, number_of_steps=10,
-        progress_color="#D97757",
+        progress_color=COLORS.BRAND_PRIMARY,
     )
     w["top_n_slider"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
     # Primary search button
     w["search_online_btn"] = ctk.CTkButton(
         card, text="Search Online for B-Roll",
-        fg_color="#1b5e20", hover_color="#2e7d32",
+        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
     )
     w["search_online_btn"].pack(fill="x", padx=10, pady=(8, 4))
 
     w["search_status"] = ctk.CTkLabel(
         card, text="",
         font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa", anchor="w", wraplength=800,
+        text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=800,
     )
     w["search_status"].pack(fill="x", padx=10, pady=(0, 8))

@@ -13,6 +13,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from src.broll.autonomous_collect import (
+    _clean_in_point,
+    _collect_local,
+    _collect_online,
+    _visual_rerank_if_available,
+)
+from src.broll.placement_rules import (
+    MIN_FACE_SEC,
+    cap_duration,
+    check_gap,
+    should_place,
+)
 from src.broll.placer import PlacerResult, place_clip
 from src.broll.reranker import rerank
 from src.utils.logger import get_logger
@@ -40,213 +52,13 @@ class AutonomousResult:
     warnings: list[str] = field(default_factory=list)
 
 
-# ── Scene boundary validation (optional scenedetect) ─────────────────────────
-
-def _clean_in_point(clip_path: str, desired_sec: float) -> float:
-    """Return a scene-boundary-aligned in-point near *desired_sec*.
-
-    Uses scenedetect if available; otherwise returns *desired_sec* unchanged.
-    Only searches for boundaries within the clip itself (local files only).
-    For online clips that were just downloaded we use 0.0 as the in-point.
-    """
-    try:
-        from scenedetect import open_video, SceneManager  # type: ignore[import]
-        from scenedetect.detectors import ContentDetector  # type: ignore[import]
-    except ImportError:
-        return desired_sec
-
-    try:
-        video = open_video(clip_path)
-        sm = SceneManager()
-        sm.add_detector(ContentDetector())
-        sm.detect_scenes(video, show_progress=False)
-        scenes = sm.get_scene_list()
-        if not scenes:
-            return desired_sec
-
-        # Pick the scene boundary closest to desired_sec
-        boundaries = [s[0].get_seconds() for s in scenes]
-        closest = min(boundaries, key=lambda b: abs(b - desired_sec))
-        log.debug("[autonomous] scene boundary %.2fs → %.2fs for %s",
-                  desired_sec, closest, Path(clip_path).name)
-        return closest
-    except Exception as e:
-        log.warning("[autonomous] scenedetect failed for %s: %s", clip_path, e)
-        return desired_sec
-
-
-# ── Candidate collection ──────────────────────────────────────────────────────
-
-def _collect_local(local_folder: str) -> list[dict]:
-    from src.broll.scanner import scan_folder
-    clips = scan_folder(local_folder)
-    log.info("[autonomous] local scan: %d clip(s) in %s", len(clips), local_folder)
-    return clips
-
-
-def _collect_online(
-    keywords: list[str],
-    providers: list[tuple[str, str]],
-    download_folder: str,
-    app: Any,
-    on_progress: Callable[[str, float], None],
-    max_clips: int = 10,
-) -> list[dict]:
-    """Search providers for each keyword, download top hit, return clip dicts."""
-    from src.broll.cache import BrollCache
-    from src.broll.downloader import BrollDownloader
-    from src.broll.providers.base import AuthError, EmptyResultsError, NetworkError, RateLimitError
-    from src.broll.providers.pexels import PexelsClient
-    from src.broll.providers.pixabay import PixabayClient
-
-    cache = BrollCache()
-    slots: list[tuple[str, Any]] = []
-    for name, key in providers:
-        if name == "Pixabay":
-            slots.append(("Pixabay", PixabayClient(key, cache=cache)))
-        elif name == "Pexels":
-            slots.append(("Pexels", PexelsClient(key, cache=cache)))
-
-    downloader = BrollDownloader(Path(download_folder), app)
-    collected: list[dict] = []
-    total = len(keywords) * len(slots)
-    done = 0
-
-    for kw in keywords:
-        for slot_name, client in slots:
-            done += 1
-            on_progress(f"Searching {slot_name} for '{kw}'…", done / max(total, 1) * 0.4)
-            try:
-                hits = client.search(kw, per_page=3)
-            except (AuthError, RateLimitError, NetworkError, EmptyResultsError) as e:
-                log.warning("[autonomous] %s/%s: %s", slot_name, kw, e)
-                continue
-            except Exception as e:
-                log.error("[autonomous] unexpected search error %s/%s: %s", slot_name, kw, e)
-                continue
-
-            for hit in hits[:1]:   # download only top result per keyword per provider
-                if len(collected) >= max_clips:
-                    log.info("[autonomous] online cap reached (%d clips)", max_clips)
-                    break
-                try:
-                    on_progress(f"Downloading {hit.title[:40]}…", done / max(total, 1) * 0.4)
-                    result = downloader.download_and_import(hit)
-                    path = result["path"]
-                    # Build a clip dict compatible with matcher input
-                    collected.append({
-                        "name": hit.title,
-                        "path": path,
-                        "keywords": [kw],
-                        "duration_sec": float(hit.duration_sec),
-                        "source": hit.source,
-                    })
-                except Exception as e:
-                    log.warning("[autonomous] download failed for %s: %s", hit.title, e)
-            if len(collected) >= max_clips:
-                break
-
-    log.info("[autonomous] online: %d clip(s) downloaded", len(collected))
-    return collected
-
-
-# ── Optional visual re-rank (OpenCLIP/Torch) ─────────────────────────────────
-
-def _visual_rerank_if_available(
-    segment_text: str,
-    candidates: list[dict],
-) -> list[dict]:
-    """Re-rank candidates visually using OpenCLIP if torch+open_clip are present."""
-    try:
-        import torch  # type: ignore[import]
-        import open_clip  # type: ignore[import]
-    except ImportError:
-        return candidates
-
-    try:
-        model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
-        tokenizer = open_clip.get_tokenizer("ViT-B-32")
-        model.eval()
-
-        from PIL import Image
-        import cv2  # type: ignore[import]
-
-        text_tokens = tokenizer([segment_text])
-        with torch.no_grad():
-            text_feat = model.encode_text(text_tokens)
-            text_feat /= text_feat.norm(dim=-1, keepdim=True)
-
-        scores: list[float] = []
-        for c in candidates:
-            path = c.get("path", "")
-            try:
-                cap = cv2.VideoCapture(str(path))
-                ok, frame = cap.read()
-                cap.release()
-                if not ok:
-                    scores.append(0.0)
-                    continue
-                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                img_tensor = preprocess(img).unsqueeze(0)
-                with torch.no_grad():
-                    img_feat = model.encode_image(img_tensor)
-                    img_feat /= img_feat.norm(dim=-1, keepdim=True)
-                score = float((img_feat @ text_feat.T).squeeze())
-                scores.append(score)
-            except Exception:
-                scores.append(0.0)
-
-        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
-        log.debug("[autonomous] OpenCLIP visual re-rank applied")
-        return [c for _, c in ranked]
-    except Exception as e:
-        log.warning("[autonomous] OpenCLIP re-rank failed: %s", e)
-        return candidates
+# Candidate collection + ranking helpers (_clean_in_point, _collect_local,
+# _collect_online, _visual_rerank_if_available) live in autonomous_collect.py.
 
 
 # ── Pacing gate ───────────────────────────────────────────────────────────────
-
-# Face-time gap below which a visible cut back to the speaker looks like a
-# glitch. Clips closer than this get merged: the previous clip's tracked end
-# is extended to cover both, and the new clip is skipped.
-_MIN_FACE_SEC = 1.0
-
-
-def _check_gap(
-    seg_start: float,
-    seg_duration: float,
-    last_placed_end_sec: float,
-) -> tuple[bool, float]:
-    """Return (should_extend, new_end_sec).
-
-    should_extend=True  → gap is too short; extend previous clip's tracked end
-                          to seg_start + seg_duration and skip this clip.
-    should_extend=False → gap is fine, place normally.
-    """
-    if last_placed_end_sec <= 0.0:
-        return False, 0.0
-    gap = seg_start - last_placed_end_sec
-    if gap < _MIN_FACE_SEC:
-        return True, seg_start + seg_duration
-    return False, 0.0
-
-
-def _should_place(
-    seg_start: float,
-    last_placed_end_sec: float,
-    natural_placement: bool,
-    no_start_broll: bool,
-    intro_skip_sec: float,
-    min_gap_sec: float,
-) -> tuple[bool, str]:
-    """Return (True, '') if segment is eligible for B-roll, else (False, reason)."""
-    if not natural_placement:
-        return True, ""
-    if no_start_broll and seg_start < intro_skip_sec:
-        return False, f"intro skip ({seg_start:.1f}s < {intro_skip_sec:.1f}s)"
-    if last_placed_end_sec > 0.0 and (seg_start - last_placed_end_sec) < min_gap_sec:
-        return False, f"gap too small ({seg_start - last_placed_end_sec:.1f}s < {min_gap_sec:.1f}s)"
-    return True, ""
+# Predicates live in src.broll.placement_rules (shared with the manual tab):
+# MIN_FACE_SEC, check_gap(), should_place(), cap_duration().
 
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
@@ -429,15 +241,10 @@ def run_autonomous(
                 continue
 
             raw_dur = decision.clip_end_sec - decision.clip_start_sec
-            duration = (
-                min(raw_dur, max_broll_duration)
-                if max_broll_duration > 0 and raw_dur > 0
-                else raw_dur
-            )
-            duration = max(duration, 0.0) or match.get("duration_sec", 0.0)
+            duration = cap_duration(raw_dur, max_broll_duration) or match.get("duration_sec", 0.0)
 
             # ── Gap check: prevent jarring face-flicker between clips ──
-            should_extend, extend_end = _check_gap(
+            should_extend, extend_end = check_gap(
                 decision.timeline_sec, duration, llm_last_placed_end_sec,
             )
             if should_extend:
@@ -446,7 +253,7 @@ def run_autonomous(
                     "— extending previous to %.3fs, skipping this clip",
                     decision.timeline_sec,
                     decision.timeline_sec - llm_last_placed_end_sec,
-                    _MIN_FACE_SEC,
+                    MIN_FACE_SEC,
                     extend_end,
                 )
                 llm_last_placed_end_sec = extend_end
@@ -528,9 +335,10 @@ def run_autonomous(
             continue
 
         # ── Pacing gate ───────────────────────────────────────────────
-        ok, skip_reason = _should_place(
+        ok, skip_reason = should_place(
             seg_start, last_placed_end_sec,
-            natural_placement, no_start_broll, intro_skip_sec, min_gap_sec,
+            natural_placement=natural_placement, no_start_broll=no_start_broll,
+            intro_skip_sec=intro_skip_sec, min_gap_sec=min_gap_sec,
         )
         if not ok:
             log.debug("[autonomous] pacing skip seg %d (%.1fs): %s",
@@ -546,15 +354,10 @@ def run_autonomous(
 
         # ── 7. Place on B-Roll track ──────────────────────────────────
         raw_duration = chosen.get("duration_sec", 0.0)
-        placed_duration = (
-            min(raw_duration - in_point, max_broll_duration)
-            if raw_duration > 0 and max_broll_duration > 0
-            else raw_duration
-        )
-        placed_duration = max(placed_duration, 0.0)
+        placed_duration = cap_duration(raw_duration, max_broll_duration, in_point=in_point)
 
         # ── Gap check: prevent jarring face-flicker between clips ─────
-        should_extend, extend_end = _check_gap(
+        should_extend, extend_end = check_gap(
             seg_start, placed_duration, last_placed_end_sec,
         )
         if should_extend:
@@ -562,7 +365,7 @@ def run_autonomous(
                 "[autonomous] seg %d at %.1fs too close to previous (gap %.2fs < %.1fs) "
                 "— extending previous to %.3fs, skipping this clip",
                 seg_idx + 1, seg_start,
-                seg_start - last_placed_end_sec, _MIN_FACE_SEC, extend_end,
+                seg_start - last_placed_end_sec, MIN_FACE_SEC, extend_end,
             )
             last_placed_end_sec = extend_end
             result.skipped_count += 1

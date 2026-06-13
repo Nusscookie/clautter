@@ -23,15 +23,15 @@ import json
 import os
 import socketserver
 import threading
-from pathlib import Path
 from typing import Any
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 from src.utils.rpc_handler import _Handler, _State
 
 log = get_logger(__name__)
 
-_BRIDGE_FILE = Path.home() / ".clutter" / "bridge.json"
+_BRIDGE_FILE = PATHS.BRIDGE_FILE
 
 
 class _ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):

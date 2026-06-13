@@ -8,12 +8,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_CONFIG_DIR = Path.home() / ".clutter"
-_CONFIG_FILE = _CONFIG_DIR / "config.json"
+_CONFIG_DIR = PATHS.CONFIG_DIR
+_CONFIG_FILE = PATHS.CONFIG_FILE
 
 
 # ---------------------------------------------------------------------------

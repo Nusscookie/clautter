@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from src.constants import TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -185,7 +186,7 @@ def run_sfx_pipeline(
         local_path = get_or_process_sfx(local_path, dl_path / "processed", SFX_GAIN_DB)
 
         on_progress(f"SFX: placing at {event.position_sec:.1f}s…", progress * 0.9)
-        result = place_audio_clip(app, local_path, event.position_sec, track_name="SFX")
+        result = place_audio_clip(app, local_path, event.position_sec, track_name=TRACKS.SFX)
         results.append(result)
         if not result.placed:
             log.warning("[sfx_engine] placement failed: %s", result.reason)

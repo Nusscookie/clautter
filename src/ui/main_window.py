@@ -6,6 +6,7 @@ import logging
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 from src.ui import (
@@ -52,39 +53,39 @@ class MainWindow:
         root.title("Clutter")
         root.geometry(f"{_WIN_W}x{_WIN_H}")
         root.resizable(True, True)
-        root.configure(fg_color="#141414")
+        root.configure(fg_color=COLORS.BG_DARKEST)
 
         apply_clutter_icon(root)
 
         # ── Top bar ──
-        top = ctk.CTkFrame(root, height=38, fg_color="#1a1a1a", corner_radius=0)
+        top = ctk.CTkFrame(root, height=38, fg_color=COLORS.BG_DARK, corner_radius=0)
         top.pack(fill="x", side="top")
         top.pack_propagate(False)
 
         ctk.CTkLabel(
             top, text="Clutter",
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#D97757",
+            text_color=COLORS.BRAND_PRIMARY,
         ).pack(side="left", padx=(14, 6), pady=6)
 
         ctk.CTkLabel(
             top, text="│",
-            text_color="#333333",
+            text_color=COLORS.SEPARATOR_DARK,
         ).pack(side="left", padx=2, pady=6)
 
         self._status_lbl = ctk.CTkLabel(
             top,
             text=self._app.status_text(),
             font=ctk.CTkFont(size=11),
-            text_color="#888888",
+            text_color=COLORS.TEXT_DIM,
         )
         self._status_lbl.pack(side="left", padx=6, pady=6)
 
         ctk.CTkButton(
             top, text="⚙",
             font=ctk.CTkFont(size=15),
-            fg_color="transparent", hover_color="#2a2a2a",
-            text_color="#aaaaaa", width=32, height=32,
+            fg_color="transparent", hover_color=COLORS.BG_CARD,
+            text_color=COLORS.TEXT_MUTED, width=32, height=32,
             corner_radius=4,
             command=lambda: open_settings(self._app),
         ).pack(side="right", padx=(0, 6), pady=3)
@@ -92,19 +93,19 @@ class MainWindow:
         # ── Project-wide BETA banner ──
         # Single source of truth for "this build is not finished".
         self._beta_banner = ctk.CTkFrame(
-            root, height=26, fg_color="#1A0E00", corner_radius=0)
+            root, height=26, fg_color=COLORS.BG_WARM_BANNER, corner_radius=0)
         self._beta_banner.pack(fill="x", side="top", after=top)
         self._beta_banner.pack_propagate(False)
         ctk.CTkLabel(
             self._beta_banner,
             text="⚠  ALPHA — Clutter is in active development. Expect rough edges.",
             font=ctk.CTkFont(size=11),
-            text_color="#E8903A",
+            text_color=COLORS.WARNING,
             anchor="w",
         ).pack(side="left", padx=12)
 
         # ── Tab view ──
-        tabview = ctk.CTkTabview(root, anchor="nw", fg_color="#1e1e1e")
+        tabview = ctk.CTkTabview(root, anchor="nw", fg_color=COLORS.BG_MID)
         tabview.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
         for name, module in _TABS:
@@ -124,7 +125,7 @@ class MainWindow:
                 ctk.CTkLabel(
                     content,
                     text=f"Tab load error: {e}",
-                    text_color="#ff6b6b",
+                    text_color=COLORS.ERROR,
                 ).pack(padx=12, pady=12)
 
         if self._app.settings.get("show_console_log", True):

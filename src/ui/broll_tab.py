@@ -6,6 +6,8 @@ import tkinter.filedialog
 from pathlib import Path
 from typing import Any
 
+from src.constants import COLORS, SETTINGS_KEYS
+from src.broll.placement_rules import MIN_COLLISION_GAP, cap_duration, should_place
 from src.ui._broll_build import build
 from src.ui._broll_workers import (
     suggest_local_thread, search_online_thread, autonomous_thread,
@@ -32,13 +34,13 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
-    def set_search_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_search_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["search_status"].configure(text=msg, text_color=color))
 
-    def set_auto_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_auto_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["auto_status"].configure(text=msg, text_color=color))
 
     def _set_readonly_entry(entry: Any, value: str) -> None:
@@ -94,8 +96,8 @@ def setup(frame: Any, app: Any) -> None:
     _state["auto_dl_folder"] = auto_dl
     _state["auto_folder"] = auto_folder
 
-    auto_fill_frame = bool(app.settings.get("broll_auto_fill_frame", False))
-    auto_natural = bool(app.settings.get("broll_natural_placement", True))
+    auto_fill_frame = bool(app.settings.get(SETTINGS_KEYS.BROLL_FILL_FRAME, False))
+    auto_natural = bool(app.settings.get(SETTINGS_KEYS.BROLL_NATURAL_PLACEMENT, True))
 
     def _refresh_llm_mode() -> None:
         """Populate the autonomous LLM-mode dropdown from currently-keyed providers."""
@@ -173,7 +175,7 @@ def setup(frame: Any, app: Any) -> None:
         _state["folder"] = path
         _set_readonly_entry(w["folder"], path)
         app.settings.set("last_broll_folder", path)
-        set_status(f"Selected: {path}", "#D97757")
+        set_status(f"Selected: {path}", COLORS.BRAND_PRIMARY)
         _ui(lambda: w["suggest_local_btn"].configure(state="normal"))
 
     def on_pick_dl_folder() -> None:
@@ -188,7 +190,7 @@ def setup(frame: Any, app: Any) -> None:
         _state["dl_folder"] = path
         _set_readonly_entry(w["dl_folder"], path)
         app.settings.set("last_broll_folder", path)
-        set_search_status(f"Download folder: {path}", "#D97757")
+        set_search_status(f"Download folder: {path}", COLORS.BRAND_PRIMARY)
 
     def on_provider_change(value: str) -> None:
         app.settings.set("broll_provider", value)
@@ -203,7 +205,7 @@ def setup(frame: Any, app: Any) -> None:
         # Always enabled — missing keys / transcript handled with inline errors on click
         _ui(lambda: w["search_online_btn"].configure(state="normal"))
 
-    def set_place_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_place_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["place_status"].configure(text=msg, text_color=color))
 
     place_fill_frame_saved = bool(app.settings.get("broll_place_fill_frame", False))
@@ -246,10 +248,10 @@ def setup(frame: Any, app: Any) -> None:
         pinned = _state.get("pinned", [])
         to_place = [p for p in pinned if p["var"].get()]
         if not to_place:
-            set_place_status("No clips checked — tick clips in the list above.", "#ff6b6b")
+            set_place_status("No clips checked — tick clips in the list above.", COLORS.ERROR)
             return
         if not app.transcript:
-            set_place_status("No transcript — generate one in the Subtitles tab first.", "#ff6b6b")
+            set_place_status("No transcript — generate one in the Subtitles tab first.", COLORS.ERROR)
             return
 
         llm_sel = w["place_llm_mode"].get()
@@ -258,11 +260,11 @@ def setup(frame: Any, app: Any) -> None:
         fill_frame = bool(w["place_fill_frame"].get())
         max_dur = float(w["place_max_dur"].get())
         natural_placement = bool(w["place_natural_placement"].get())
-        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 4.0))
-        min_gap_sec = float(app.settings.get("broll_min_gap_sec", 5.0))
+        intro_skip_sec = float(app.settings.get(SETTINGS_KEYS.BROLL_INTRO_SKIP, 4.0))
+        min_gap_sec = float(app.settings.get(SETTINGS_KEYS.BROLL_MIN_GAP, 5.0))
 
         _ui(lambda: w["place_btn"].configure(state="disabled"))
-        set_place_status("Placing clips on B-Roll track…", "#D97757")
+        set_place_status("Placing clips on B-Roll track…", COLORS.BRAND_PRIMARY)
 
         def _place_thread() -> None:
             try:
@@ -296,7 +298,7 @@ def setup(frame: Any, app: Any) -> None:
                         if err:
                             log.warning("[place] LLM director: %s — using original timestamps", err)
                             set_place_status(
-                                f"LLM failed ({err}) — placing at original timestamps.", "#E8903A")
+                                f"LLM failed ({err}) — placing at original timestamps.", COLORS.WARNING)
                             decisions = []
 
                         if decisions:
@@ -341,26 +343,27 @@ def setup(frame: Any, app: Any) -> None:
                     ]
 
                 # Apply max clip duration cap before collision check so the
-                # collision math uses the already-capped durations.
+                # collision math uses the already-capped durations. A clip with
+                # unknown (<=0) duration falls back to the full cap.
                 for p in placements:
-                    d = p.get("duration_sec") or 0.0
-                    if d <= 0.0 or d > max_dur:
-                        p["duration_sec"] = max_dur
+                    p["duration_sec"] = cap_duration(
+                        p.get("duration_sec") or 0.0, max_dur, zero_means_full=True,
+                    )
 
                 # Natural placement: filter out clips in the intro window and
-                # enforce minimum gap between placed clips.
+                # enforce minimum gap between placed clips (shared predicate).
                 if natural_placement:
                     filtered = []
                     last_end = 0.0
                     for p in sorted(placements, key=lambda x: x["start_sec"]):
                         t = p["start_sec"]
-                        if t < intro_skip_sec:
-                            log.debug("[place] natural: skipping %s — in intro (%.1fs < %.1fs)",
-                                      p["path"], t, intro_skip_sec)
-                            continue
-                        if last_end > 0.0 and (t - last_end) < min_gap_sec:
-                            log.debug("[place] natural: skipping %s — gap too small (%.1fs < %.1fs)",
-                                      p["path"], t - last_end, min_gap_sec)
+                        ok, reason = should_place(
+                            t, last_end,
+                            natural_placement=True, no_start_broll=True,
+                            intro_skip_sec=intro_skip_sec, min_gap_sec=min_gap_sec,
+                        )
+                        if not ok:
+                            log.debug("[place] natural: skipping %s — %s", p["path"], reason)
                             continue
                         filtered.append(p)
                         last_end = t + (p.get("duration_sec") or 0.0)
@@ -373,11 +376,10 @@ def setup(frame: Any, app: Any) -> None:
                 # Sort by start time, then bump any clip that overlaps the
                 # previous one so all checked clips are placed.
                 placements.sort(key=lambda p: p["start_sec"])
-                _MIN_GAP = 0.5
                 for i in range(1, len(placements)):
                     prev = placements[i - 1]
                     cur = placements[i]
-                    prev_end = prev["start_sec"] + max(prev.get("duration_sec") or 0.0, _MIN_GAP)
+                    prev_end = prev["start_sec"] + max(prev.get("duration_sec") or 0.0, MIN_COLLISION_GAP)
                     if cur["start_sec"] < prev_end:
                         cur["start_sec"] = prev_end
                         log.debug("[place] collision fix: shifted clip %d to %.1fs", i, cur["start_sec"])
@@ -405,23 +407,23 @@ def setup(frame: Any, app: Any) -> None:
                 )
                 if placed == 0 and total == 0:
                     set_place_status(
-                        "No clips to place." + natural_note, "#E8903A")
+                        "No clips to place." + natural_note, COLORS.WARNING)
                 elif placed == 0:
                     set_place_status(
                         f"No clips placed — check Resolve connection. ({skipped} skipped){natural_note}",
-                        "#ff6b6b",
+                        COLORS.ERROR,
                     )
                 else:
                     set_place_status(
                         f"Done! {placed}/{total} clip(s) placed on B-Roll track."
                         + (f" {skipped} skipped." if skipped else "")
                         + natural_note,
-                        "#66bb6a",
+                        COLORS.SUCCESS,
                     )
                 app.broll_placer_results = []
             except Exception as e:
                 log.error("Manual place error: %s", e)
-                set_place_status(f"Error: {e}", "#ff6b6b")
+                set_place_status(f"Error: {e}", COLORS.ERROR)
             finally:
                 _ui(lambda: w["place_btn"].configure(state="normal"))
 
@@ -429,7 +431,7 @@ def setup(frame: Any, app: Any) -> None:
 
     def on_search_online() -> None:
         if not app.transcript:
-            set_search_status("No transcript. Generate one in the Subtitles tab first.", "#ff6b6b")
+            set_search_status("No transcript. Generate one in the Subtitles tab first.", COLORS.ERROR)
             return
         provider = w["provider"].get()
         pairs: list[tuple[str, str]] = []
@@ -449,14 +451,14 @@ def setup(frame: Any, app: Any) -> None:
         if missing:
             set_search_status(
                 f"Missing key(s): {', '.join(missing)}. Add in Settings (⚙ top-right).",
-                "#ff6b6b",
+                COLORS.ERROR,
             )
             return
         if not pairs:
-            set_search_status("Select a provider first.", "#ff6b6b")
+            set_search_status("Select a provider first.", COLORS.ERROR)
             return
         _ui(lambda: w["search_online_btn"].configure(state="disabled"))
-        set_search_status("Searching…", "#D97757")
+        set_search_status("Searching…", COLORS.BRAND_PRIMARY)
         threading.Thread(
             target=search_online_thread,
             args=(w, frame, app, _state, pairs,
@@ -531,16 +533,16 @@ def setup(frame: Any, app: Any) -> None:
         app.settings.set("broll_auto_max_clips", n)
 
     def on_auto_fill_frame_change() -> None:
-        app.settings.set("broll_auto_fill_frame", bool(w["auto_fill_frame"].get()))
+        app.settings.set(SETTINGS_KEYS.BROLL_FILL_FRAME, bool(w["auto_fill_frame"].get()))
 
     def on_auto_natural_change() -> None:
-        app.settings.set("broll_natural_placement", bool(w["auto_natural_placement"].get()))
+        app.settings.set(SETTINGS_KEYS.BROLL_NATURAL_PLACEMENT, bool(w["auto_natural_placement"].get()))
 
     def on_auto_run() -> None:
         if _state.get("auto_running"):
             return
         if not app.transcript:
-            set_auto_status("No transcript — generate one in the Subtitles tab first.", "#ff6b6b")
+            set_auto_status("No transcript — generate one in the Subtitles tab first.", COLORS.ERROR)
             return
 
         use_local = bool(w["auto_use_local"].get())
@@ -568,10 +570,10 @@ def setup(frame: Any, app: Any) -> None:
         max_clips = int(round(float(w["auto_max_clips"].get())))
         fill_frame = bool(w["auto_fill_frame"].get())
         natural_placement = bool(w["auto_natural_placement"].get())
-        no_start_broll = bool(app.settings.get("broll_no_start_broll", True))
-        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 4.0))
-        min_gap_sec = float(app.settings.get("broll_min_gap_sec", 5.0))
-        max_broll_duration = float(app.settings.get("broll_max_broll_duration", 5.0))
+        no_start_broll = bool(app.settings.get(SETTINGS_KEYS.BROLL_NO_START, True))
+        intro_skip_sec = float(app.settings.get(SETTINGS_KEYS.BROLL_INTRO_SKIP, 4.0))
+        min_gap_sec = float(app.settings.get(SETTINGS_KEYS.BROLL_MIN_GAP, 5.0))
+        max_broll_duration = float(app.settings.get(SETTINGS_KEYS.BROLL_MAX_DUR, 5.0))
 
         _state["auto_running"] = True
         _ui(lambda: w["auto_run_btn"].configure(state="disabled"))

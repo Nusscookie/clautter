@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from src.broll.providers.base import ClipResult
+from src.constants import PATHS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -23,7 +24,7 @@ class BrollCache:
     """24h JSON cache keyed by (provider, query, per_page)."""
 
     def __init__(self, root: Path | None = None, ttl_sec: int = _DEFAULT_TTL_SEC) -> None:
-        self._root = root or (Path.home() / ".clutter" / "broll_cache")
+        self._root = root or PATHS.BROLL_CACHE
         self._ttl = ttl_sec
         self._root.mkdir(parents=True, exist_ok=True)
 

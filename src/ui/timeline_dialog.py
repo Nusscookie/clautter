@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
 
@@ -89,7 +90,7 @@ def show_timeline_dialog(
         dialog,
         text="Where should the result go?",
         font=ctk.CTkFont(size=13, weight="bold"),
-        text_color="#ffffff",
+        text_color=COLORS.TEXT_PRIMARY,
     ).pack(pady=(20, 10))
 
     mode_var = ctk.StringVar(value="new")
@@ -99,7 +100,7 @@ def show_timeline_dialog(
         text="Create new timeline  (safe, non-destructive)",
         variable=mode_var,
         value="new",
-        text_color="#cccccc",
+        text_color=COLORS.TEXT_SECONDARY,
     ).pack(anchor="w", padx=30, pady=(0, 6))
 
     existing_row = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -114,7 +115,7 @@ def show_timeline_dialog(
         variable=mode_var,
         value="existing",
         state="normal" if has_timelines else "disabled",
-        text_color="#cccccc",
+        text_color=COLORS.TEXT_SECONDARY,
     ).pack(side="left")
 
     combo = ctk.CTkComboBox(
@@ -122,7 +123,7 @@ def show_timeline_dialog(
         values=timeline_names if has_timelines else ["(none available)"],
         state="readonly" if has_timelines else "disabled",
         width=190,
-        fg_color="#2a2a2a",
+        fg_color=COLORS.BG_CARD,
     )
     if timeline_names:
         combo.set(timeline_names[0])
@@ -132,14 +133,14 @@ def show_timeline_dialog(
     track_var: ctk.StringVar | None = None
     if show_secondary:
         sec = secondary_section  # type: ignore[assignment]
-        ctk.CTkFrame(dialog, height=1, fg_color="#444444").pack(
+        ctk.CTkFrame(dialog, height=1, fg_color=COLORS.SEPARATOR).pack(
             fill="x", padx=20, pady=(12, 0)
         )
         ctk.CTkLabel(
             dialog,
             text=sec["label"],
             font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#888888",
+            text_color=COLORS.TEXT_DIM,
         ).pack(anchor="w", padx=30, pady=(8, 4))
         track_var = ctk.StringVar(value="new")
         ctk.CTkRadioButton(
@@ -147,14 +148,14 @@ def show_timeline_dialog(
             text=sec["existing_text"],
             variable=track_var,
             value="existing",
-            text_color="#cccccc",
+            text_color=COLORS.TEXT_SECONDARY,
         ).pack(anchor="w", padx=30, pady=(0, 4))
         ctk.CTkRadioButton(
             dialog,
             text=sec["new_text"],
             variable=track_var,
             value="new",
-            text_color="#cccccc",
+            text_color=COLORS.TEXT_SECONDARY,
         ).pack(anchor="w", padx=30, pady=(0, 6))
 
     btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -180,12 +181,12 @@ def show_timeline_dialog(
 
     ctk.CTkButton(
         btn_row, text="Continue", command=on_continue,
-        fg_color="#B85F3A", hover_color="#C96A45", width=100,
+        fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER, width=100,
     ).pack(side="left", padx=8)
 
     ctk.CTkButton(
         btn_row, text="Cancel", command=on_cancel,
-        fg_color="#444444", hover_color="#555555", width=80,
+        fg_color=COLORS.SEPARATOR, hover_color=COLORS.TEXT_SUBTLE, width=80,
     ).pack(side="left", padx=8)
 
     dialog.wait_window()

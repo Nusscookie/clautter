@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.broll.keywords import extract_top_keywords
+from src.constants import SETTINGS_KEYS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -173,7 +174,7 @@ def analyze_mood_llm(
     gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
     minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
     nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
-    max_tokens    = int(settings.get("llm_max_tokens", 500) or 500)
+    max_tokens    = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 500) or 500)
 
     if chosen == "NVIDIA" and not nvidia_model:
         log.warning("[mood_llm] NVIDIA selected but no model id set — falling back to keywords")
