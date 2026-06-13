@@ -17,22 +17,8 @@ Clutter is built around one idea: **the editor shouldn't have to babysit the too
 
 Most Resolve plugins for talking-head cleanup are assistants — they surface candidates,
 mark regions, or highlight pauses, then wait for you to confirm or discard each one.
-That's still a lot of clicking.
-
-Clutter goes the other direction. It analyzes the timeline, makes the call, and applies
-the edit. You set the intent (a pace level, a sensitivity), and Clutter does the rest.
-The human reviews the result, not every individual decision.
-
-**AI is used only where it earns its cost.** Transcription (speech-to-text for subtitles)
-genuinely requires a model. Silence detection, zoom placement, and B-roll matching do not —
-those run locally with zero API calls. This keeps everyday editing free and fast, and leaves
-the API budget for operations that actually need it.
-
-For the operations that *do* use a cloud LLM (autonomous B-roll direction, B-roll re-rank,
-music mood analysis), Clutter supports OpenAI, Gemini, Minimax, and **NVIDIA**. NVIDIA grants
-free access to many open-source models via an OpenAI-compatible API, so you can run the
-cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model
-id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
+That's still a lot of clicking. Clutter goes the other direction: it analyzes the timeline, 
+makes the call, and applies the edit.
 
 ---
 
@@ -46,6 +32,8 @@ id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
 | **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline. The **LLM mode** button is a provider picker — `Off` plus one segment per cloud LLM you have a key for (OpenAI / Gemini / Minimax / NVIDIA); pick one to let the LLM choose clips and positions. |
 | **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
 | **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation planned for V2. |
+
+Clutter supports OpenAI, Gemini, Minimax, and **NVIDIA**. NVIDIA grants free access to many open-source models via an OpenAI-compatible API, so you can run the cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
 
 ---
 
@@ -88,24 +76,9 @@ Primary accent: `#D97757` (terracotta orange, from the app icon).
 
 ## Dependencies
 
-| Package | Purpose |
-|---|---|
-| `customtkinter` | GUI toolkit |
-| `pydantic` | Typed settings models + validation |
-| `faster-whisper` | Local speech-to-text (subtitles) |
-| `silero-vad` + `torchaudio` + `soundfile` + `onnxruntime` | VAD-based silence detection |
-| `spacy` + `en-core-web-sm` | Keyword extraction (B-roll) + retake filler normalization |
-| `yake` + `keybert` + `joblib` | Keyword extraction + embedding cache (B-roll search) |
-| `sentence-transformers` | Semantic B-roll matching + mood analysis |
-| `opencv-python` | Face-based zoom detection |
-| `scenedetect` | B-roll boundary detection (autonomous mode) |
-| `pydub` | Audio loading, RMS detection, music/SFX volume + fades |
-| `requests` | ElevenLabs API + HTTP bridge client + online B-roll/music/SFX search |
-| `numpy` | RMS computation |
-| `Pillow` | App icon loading |
-| `ffmpeg` (system) | Audio decoding (required by pydub) |
+`customtkinter`, `pydantic`, `faster-whisper`, `silero-vad`, `torchaudio`, `soundfile`, `onnxruntime`, `spacy`, `yake`, `keybert`, `joblib`, `sentence-transformers`, `opencv-python`, `scenedetect`, `pydub`, `requests`, `numpy`, `Pillow` — plus `ffmpeg` (system).
 
-Install with `py -3.12 -m pip install -r requirements.txt`.
+Install: `py -3.12 -m pip install -r requirements.txt`
 
 ---
 
@@ -114,6 +87,17 @@ Install with `py -3.12 -m pip install -r requirements.txt`.
 - DaVinci Resolve **free** and **Studio** (v18+)
 - **Python 3.10 / 3.11 / 3.12** (3.13+ segfaults on import)
 - Windows, macOS, Linux
+
+> **Tested on Windows only.** macOS and Linux are untested.
+> API key status: ElevenLabs ✅ · NVIDIA ✅ · OpenAI ⚠ untested · Gemini ⚠ untested · Anthropic ⬜ planned (not yet implemented).
+
+---
+
+## Get It
+
+This is a part-time project. A paid installer is planned — pay once, get a one-click setup that handles Python, ffmpeg, and the plugin. No fiddling required. The installer is a way to support the project; the plugin itself stays free on GitHub.
+
+A website is coming. Discord is not set up yet.
 
 ---
 
