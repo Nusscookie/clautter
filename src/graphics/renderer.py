@@ -3,10 +3,11 @@
 For each GraphicPlacement:
   1. Creates a timestamped workspace subfolder under ~/.clutter/graphics/<project>/
   2. Installs the block via `npx hyperframes add`
-  3. LLM edits block HTML with real transcript-derived values
+  3. LLM edits block HTML with real transcript-derived values + aspect ratio fix
   4. Injects LLM-supplied params as data-param-* attributes
-  5. Renders to output.mp4 via `npx hyperframes render`
-  6. Returns the Path to output.mp4
+  5. Renders to WebM (VP9+alpha) via `npx hyperframes render --format webm`
+     Falls back to MOV (ProRes 4444 alpha) if WebM render fails.
+  6. Returns the Path to the rendered file
 
 Workspace layout:
   ~/.clutter/graphics/
@@ -14,7 +15,7 @@ Workspace layout:
       <timestamp>_<block_name>/
         compositions/
           <block_name>.html
-        <block_name>_<start>s.mp4
+        <block_name>_<start>s.webm  (or .mov fallback)
 """
 
 from __future__ import annotations
@@ -74,11 +75,17 @@ def _inject_params(html_path: Path, params: dict) -> None:
         log.warning("[renderer] param injection failed (non-fatal): %s", e)
 
 
-def _llm_edit_html(html_path: Path, placement: GraphicPlacement, settings: Any) -> None:
+def _llm_edit_html(
+    html_path: Path,
+    placement: GraphicPlacement,
+    settings: Any,
+    timeline_dims: tuple[int, int] | None = None,
+) -> None:
     """Ask LLM to rewrite block HTML with real values from placement.params.
 
     Reads the installed block HTML, asks LLM to replace hardcoded placeholder
-    text/numbers/data with actual transcript-derived values, writes result back.
+    text/numbers/data with actual transcript-derived values, and if timeline_dims
+    is provided and the block's native size differs, rewrite CSS to match aspect ratio.
     On any failure logs a warning and leaves the original HTML intact.
     """
     try:
@@ -91,6 +98,18 @@ def _llm_edit_html(html_path: Path, placement: GraphicPlacement, settings: Any) 
             return
 
         html = html_path.read_text(encoding="utf-8")
+
+        dims_instruction = ""
+        if timeline_dims:
+            tl_w, tl_h = timeline_dims
+            dims_instruction = (
+                f"\n\nTIMELINE DIMENSIONS: {tl_w}x{tl_h} px. "
+                "If the block's native dimensions (width/height in CSS or data attributes) do NOT match "
+                f"this aspect ratio ({tl_w}:{tl_h}), rewrite the relevant CSS width/height/font-size values "
+                "so the block fills the timeline canvas without letterbox bars. "
+                "Preserve all animations and layout proportions — only scale to fit."
+            )
+
         prompt = (
             f"You are editing a motion graphics HTML template for a talking-head video.\n"
             f"Block: {placement.block}\n"
@@ -100,8 +119,10 @@ def _llm_edit_html(html_path: Path, placement: GraphicPlacement, settings: Any) 
             "numbers, data arrays, labels — with real values from the params above. "
             "If params do not cover a field, leave the original value. "
             "Only change content values. Do NOT change HTML structure, CSS layout, "
-            "animation timing, or JavaScript logic. "
-            "Return ONLY the complete modified HTML file. No explanations, no markdown fences, "
+            "animation timing, or JavaScript logic — EXCEPT when resizing for the timeline "
+            "dimensions below."
+            + dims_instruction +
+            "\nReturn ONLY the complete modified HTML file. No explanations, no markdown fences, "
             "no preamble — raw HTML starting with <!doctype or <!-- only."
         )
 
@@ -204,12 +225,14 @@ def render_placement(
     project_name: str,
     block_meta: dict | None = None,
     settings: Any = None,
+    timeline_dims: tuple[int, int] | None = None,
 ) -> Path | None:
-    """Render one GraphicPlacement to an MP4.
+    """Render one GraphicPlacement to WebM (VP9+alpha) with MOV fallback.
 
-    Returns Path to output mp4, or None on failure.
-    block_meta: catalog block dict (for dimensions/duration).
-    settings:   SettingsManager for LLM HTML editing.
+    Returns Path to rendered file, or None on failure.
+    block_meta:    catalog block dict (for dimensions/duration).
+    settings:      SettingsManager for LLM HTML editing.
+    timeline_dims: (width, height) of Resolve timeline for aspect ratio matching.
     """
     workspace = _workspace_for(project_name, placement)
     log.info("[renderer] workspace: %s", workspace)
@@ -229,9 +252,9 @@ def render_placement(
 
     block_html_path = html_candidates[0]
 
-    # LLM edits HTML with real transcript-derived values before render
+    # LLM edits HTML with real transcript-derived values + aspect ratio fix
     if settings is not None:
-        _llm_edit_html(block_html_path, placement, settings)
+        _llm_edit_html(block_html_path, placement, settings, timeline_dims=timeline_dims)
 
     _inject_params(block_html_path, placement.params)
 
@@ -241,31 +264,39 @@ def render_placement(
     log.debug("[renderer] host index.html: %s", index_path)
 
     safe_name = re.sub(r"[^\w\-]", "_", placement.block)
-    output_path = workspace / f"{safe_name}_{int(placement.start_sec)}s.mp4"
-    try:
-        result = subprocess.run(
-            [
-                _NPX, "--yes", "hyperframes", "render",
-                str(workspace),
-                "-o", str(output_path),
-                "--fps", "30",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=_RENDER_TIMEOUT,
-            cwd=str(workspace),
-        )
-        if result.returncode != 0:
-            log.warning("[renderer] render failed for %r: %s", placement.block, result.stderr[:400])
-            return None
-        if not output_path.exists():
-            log.warning("[renderer] render exited 0 but %s not found", output_path.name)
-            return None
-        log.info("[renderer] rendered %r → %s", placement.block, output_path)
-        return output_path
-    except subprocess.TimeoutExpired:
-        log.warning("[renderer] render timed out for block %r", placement.block)
-        return None
-    except Exception as e:
-        log.warning("[renderer] render error for %r: %s", placement.block, e)
-        return None
+    return _render_with_alpha(workspace, placement.block, safe_name, int(placement.start_sec))
+
+
+def _render_with_alpha(workspace: Path, block: str, safe_name: str, start_sec: int) -> Path | None:
+    """Try WebM (VP9+alpha), fall back to MOV (ProRes 4444) on failure."""
+    for fmt, ext in (("webm", "webm"), ("mov", "mov")):
+        output_path = workspace / f"{safe_name}_{start_sec}s.{ext}"
+        try:
+            result = subprocess.run(
+                [
+                    _NPX, "--yes", "hyperframes", "render",
+                    str(workspace),
+                    "-o", str(output_path),
+                    "--fps", "30",
+                    "--format", fmt,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=_RENDER_TIMEOUT,
+                cwd=str(workspace),
+            )
+            if result.returncode != 0:
+                log.warning("[renderer] %s render failed for %r: %s", fmt, block, result.stderr[:300])
+                continue
+            if not output_path.exists():
+                log.warning("[renderer] %s render exited 0 but %s not found", fmt, output_path.name)
+                continue
+            log.info("[renderer] rendered %r → %s (%s+alpha)", block, output_path, fmt)
+            return output_path
+        except subprocess.TimeoutExpired:
+            log.warning("[renderer] %s render timed out for %r", fmt, block)
+            continue
+        except Exception as e:
+            log.warning("[renderer] %s render error for %r: %s", fmt, block, e)
+            continue
+    return None

@@ -4,7 +4,7 @@ Runs the full pipeline:
   1. Node.js check
   2. Fetch Hyperframes catalog
   3. LLM analyzes transcript → placement decisions
-  4. Render each placement to MP4
+  4. Render each placement to WebM/MOV with alpha
   5. Import + place on Resolve timeline
 
 All heavy work runs on a worker thread (caller's responsibility).
@@ -91,10 +91,27 @@ def run(
     status(f"Catalog loaded: {len(renderable_blocks)} suitable blocks available.")
     block_by_name = {b["name"]: b for b in renderable_blocks}
 
+    project_name = ""
+    try:
+        project_name = app.project.GetName() if app.project else ""
+    except Exception:
+        pass
+
+    timeline_dims: tuple[int, int] | None = None
+    try:
+        if app.timeline:
+            tl_w = int(app.timeline.GetSetting("timelineResolutionWidth") or 0)
+            tl_h = int(app.timeline.GetSetting("timelineResolutionHeight") or 0)
+            if tl_w > 0 and tl_h > 0:
+                timeline_dims = (tl_w, tl_h)
+                log.info("[gfx_engine] timeline dims: %dx%d", tl_w, tl_h)
+    except Exception as e:
+        log.debug("[gfx_engine] could not read timeline dims: %s", e)
+
     # ── 4. LLM analysis ───────────────────────────────────────────────
     status("Analyzing transcript with LLM…")
     from src.graphics.llm_director import analyze
-    placements, err = analyze(app.transcript, renderable_blocks, app.settings, provider=provider)
+    placements, err = analyze(app.transcript, renderable_blocks, app.settings, provider=provider, timeline_dims=timeline_dims)
     if err:
         return 0, err
     if not placements:
@@ -108,16 +125,15 @@ def run(
     from src.graphics.renderer import render_placement
     from src.graphics.placer import place
 
-    project_name = ""
-    try:
-        project_name = app.project.GetName() if app.project else ""
-    except Exception:
-        pass
-
     placed_count = 0
     for i, p in enumerate(placements):
         status(f"Rendering {p.block} ({i + 1}/{total})…")
-        mp4 = render_placement(p, project_name, block_meta=block_by_name.get(p.block), settings=app.settings)
+        mp4 = render_placement(
+            p, project_name,
+            block_meta=block_by_name.get(p.block),
+            settings=app.settings,
+            timeline_dims=timeline_dims,
+        )
         if mp4 is None:
             log.warning("[gfx_engine] render failed for %r — skipping", p.block)
             progress(i + 1, total)

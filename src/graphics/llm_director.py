@@ -38,16 +38,32 @@ def _build_prompt(
     segments: list[tuple[str, float]],
     total_duration_sec: float,
     blocks_summary: str,
+    timeline_dims: tuple[int, int] | None = None,
 ) -> str:
     seg_lines = "\n".join(
         f"  [{i+1}] {start:.1f}s — \"{text[:120]}\""
         for i, (text, start) in enumerate(segments)
     )
+
+    if timeline_dims:
+        tl_w, tl_h = timeline_dims
+        is_portrait = tl_h > tl_w
+        orientation = "PORTRAIT" if is_portrait else "LANDSCAPE"
+        dims_rule = (
+            f"\nTIMELINE: {tl_w}x{tl_h} ({orientation}). "
+            "STRONGLY PREFER blocks whose native dimensions match this orientation. "
+            "Only choose a block with a different orientation if no better match exists — "
+            "in that case the HTML will be rewritten to fit, but it may look worse.\n"
+        )
+    else:
+        dims_rule = ""
+
     return (
         "You are an expert motion graphics editor enhancing a talking-head video.\n\n"
         f"TRANSCRIPT (full, first 3000 chars):\n\"{transcript_text[:3000]}\"\n\n"
-        f"TOTAL VIDEO DURATION: {total_duration_sec:.1f}s\n\n"
-        "TRANSCRIPT SEGMENTS (index, start_time_seconds, spoken text):\n"
+        f"TOTAL VIDEO DURATION: {total_duration_sec:.1f}s\n"
+        + dims_rule +
+        "\nTRANSCRIPT SEGMENTS (index, start_time_seconds, spoken text):\n"
         f"{seg_lines}\n\n"
         "AVAILABLE HYPERFRAMES BLOCKS:\n"
         f"{blocks_summary}\n\n"
@@ -230,6 +246,7 @@ def analyze(
     blocks: list[dict],
     settings: Any,
     provider: str | None = None,
+    timeline_dims: tuple[int, int] | None = None,
 ) -> tuple[list[GraphicPlacement], str]:
     """Ask LLM which Hyperframes blocks to place and when.
 
@@ -283,7 +300,7 @@ def analyze(
 
     total_duration_sec = segments[-1][1] + 5.0 if segments else 0.0
     valid_names = {b.get("name", "") for b in blocks}
-    prompt = _build_prompt(transcript_text, segments, total_duration_sec, block_summary(blocks))
+    prompt = _build_prompt(transcript_text, segments, total_duration_sec, block_summary(blocks), timeline_dims=timeline_dims)
 
     openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
     gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
