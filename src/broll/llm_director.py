@@ -48,7 +48,7 @@ def _build_prompt(
     candidates: list[dict],
     max_placements: int,
     total_duration_sec: float = 0.0,
-    intro_skip_sec: float = 8.0,
+    intro_skip_sec: float = 4.0,
     min_gap_sec: float = 5.0,
     max_clip_sec: float = 6.0,
 ) -> str:
@@ -261,7 +261,7 @@ def direct(
     settings: Any,
     provider: str | None = None,
     max_placements: int = 10,
-    intro_skip_sec: float = 8.0,
+    intro_skip_sec: float = 4.0,
     min_gap_sec: float = 5.0,
     max_clip_sec: float = 6.0,
 ) -> tuple[list[PlacementDecision], str]:

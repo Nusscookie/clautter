@@ -34,6 +34,8 @@ class BrollResultsWindow(ctk.CTkToplevel):
         target_dir: str,
         set_status: Callable,
         ui: Callable,
+        w: dict | None = None,
+        broll_state: dict | None = None,
     ) -> None:
         super().__init__(master)
         apply_clutter_icon(self)
@@ -42,6 +44,8 @@ class BrollResultsWindow(ctk.CTkToplevel):
         self._set_status = set_status
         self._ui = ui
         self._target_dir = target_dir
+        self._broll_w = w
+        self._broll_state = broll_state
 
         self.title("B-Roll Search Results")
         self.geometry("780x620")
@@ -246,16 +250,31 @@ class BrollResultsWindow(ctk.CTkToplevel):
             def per_card_status(msg: str, color: str) -> None:
                 self._ui(lambda m=msg, c=color: lbl.configure(text=m, text_color=c))
 
-            def worker() -> None:
+            def worker(clip=clip) -> None:
                 from src.broll.downloader import BrollDownloader
                 from src.broll.providers.base import NetworkError
                 try:
                     per_card_status(f"Downloading {clip.title}…", "#D97757")
                     downloader = BrollDownloader(self._target_dir, self._app)
                     result = downloader.download_and_import(clip)
-                    name = Path(result["path"]).name
+                    clip_path = result["path"]
+                    clip_name = Path(clip_path).name
                     per_card_status(
-                        f"Saved: {name} → media pool.", "#66bb6a")
+                        f"Saved: {clip_name} → media pool. Added to clips list.", "#66bb6a")
+                    # Auto-add to the pinned clips list in the main tab
+                    if self._broll_w and self._broll_state is not None:
+                        from src.ui._broll_workers import add_clip_row
+                        self._ui(lambda p=clip_path, n=clip_name: add_clip_row(
+                            self._broll_w["suggestions_frame"],
+                            self._broll_w["suggestions_placeholder"],
+                            self._broll_state,
+                            self._ui,
+                            clip_path=p,
+                            clip_name=n,
+                            suggested_time=0.0,
+                            duration_sec=float(clip.duration_sec or 0.0),
+                            source="online",
+                        ))
                 except NetworkError as e:
                     log.error("Download failed for %s: %s", clip.external_id, e)
                     per_card_status(f"Download failed: {e}", "#ff6b6b")

@@ -368,8 +368,8 @@ class _SettingsWindow(ctk.CTkToplevel):
 
         self._intro_skip_entry = _numeric_row(
             panel, "Intro skip (s):", 0.0, 60.0,
-            f"{float(app.settings.get('broll_intro_skip_sec', 8.0)):.1f}",
-            hint="No B-roll before this time. Default: 8s.",
+            f"{float(app.settings.get('broll_intro_skip_sec', 4.0)):.1f}",
+            hint="No B-roll before this time. Default: 4s.",
         )
         self._min_gap_entry = _numeric_row(
             panel, "Min gap (s):", 0.0, 30.0,

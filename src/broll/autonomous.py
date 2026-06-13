@@ -265,7 +265,7 @@ def run_autonomous(
     fill_frame: bool = False,
     natural_placement: bool = True,
     no_start_broll: bool = True,
-    intro_skip_sec: float = 8.0,
+    intro_skip_sec: float = 4.0,
     min_gap_sec: float = 5.0,
     max_broll_duration: float = 5.0,
 ) -> AutonomousResult:
