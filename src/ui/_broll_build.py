@@ -89,25 +89,114 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
     # ── Clip library / suggestions (bottom) ───────────────────────
     _divider(container)
 
-    ctk.CTkLabel(container, text="CLIP LIBRARY  /  SUGGESTIONS",
+    clips_header_row = ctk.CTkFrame(container, fg_color="transparent")
+    clips_header_row.pack(fill="x", padx=12, pady=(8, 0))
+    ctk.CTkLabel(clips_header_row, text="CLIPS TO PLACE",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=12, pady=(8, 4))
+                 text_color="#888888").pack(side="left")
+    ctk.CTkLabel(clips_header_row,
+                 text="— check clips to include. Accepted local + downloaded clips appear here.",
+                 font=ctk.CTkFont(size=10), text_color="#555555").pack(side="left", padx=(6, 0))
 
-    w["suggestions"] = ctk.CTkTextbox(container, height=200, state="disabled",
-                                       font=ctk.CTkFont(size=12))
-    w["suggestions"].pack(fill="x", padx=10, pady=(0, 4))
-    _set_textbox(w["suggestions"], "Browse a folder and click Suggest Local B-Roll...")
+    w["suggestions_frame"] = ctk.CTkScrollableFrame(
+        container, height=200, fg_color="#1e1e1e", corner_radius=6,
+    )
+    w["suggestions_frame"].pack(fill="x", padx=10, pady=(4, 4))
+    w["suggestions_frame"].grid_columnconfigure(0, weight=1)
+
+    # Placeholder label shown when list is empty
+    w["suggestions_placeholder"] = ctk.CTkLabel(
+        w["suggestions_frame"],
+        text="Browse a folder and click Suggest Local B-Roll, or download clips from Online Search.",
+        font=ctk.CTkFont(size=11), text_color="#555555", wraplength=700, anchor="w",
+    )
+    w["suggestions_placeholder"].pack(fill="x", padx=8, pady=12)
+
+    # Fill frame checkbox (same as autonomous mode)
+    place_opts_row = ctk.CTkFrame(container, fg_color="transparent")
+    place_opts_row.pack(fill="x", padx=10, pady=(4, 2))
+    w["place_fill_frame"] = ctk.CTkCheckBox(
+        place_opts_row,
+        text="Fill Frame (no black bars)",
+        font=ctk.CTkFont(size=11),
+        checkbox_width=16, checkbox_height=16,
+    )
+    w["place_fill_frame"].pack(side="left", padx=(0, 16))
+    w["place_natural_placement"] = ctk.CTkCheckBox(
+        place_opts_row,
+        text="Natural Placement",
+        font=ctk.CTkFont(size=11),
+        checkbox_width=16, checkbox_height=16,
+    )
+    w["place_natural_placement"].pack(side="left")
+    ctk.CTkLabel(
+        place_opts_row,
+        text="Fill Frame: zoom-crops portrait/vertical footage.  "
+             "Natural Placement: skips first 4s intro, enforces 5s gaps between clips.",
+        font=ctk.CTkFont(size=10), text_color="#555555",
+    ).pack(side="left", padx=(10, 0))
+
+    # Max B-roll duration slider
+    max_dur_row = ctk.CTkFrame(container, fg_color="transparent")
+    max_dur_row.pack(fill="x", padx=10, pady=(2, 2))
+    max_dur_row.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(max_dur_row, text="Max clip duration:",
+                 font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+                 width=130, anchor="w").grid(row=0, column=0, sticky="w")
+    w["place_max_dur_value"] = ctk.CTkLabel(
+        max_dur_row, text="5s",
+        font=ctk.CTkFont(size=11), text_color="#D97757", width=28, anchor="e")
+    w["place_max_dur_value"].grid(row=0, column=2, padx=(6, 0))
+    w["place_max_dur"] = ctk.CTkSlider(
+        max_dur_row, from_=1, to=15, number_of_steps=14,
+        progress_color="#D97757",
+    )
+    w["place_max_dur"].set(5)
+    w["place_max_dur"].grid(row=0, column=1, sticky="ew", padx=(6, 0))
+    ctk.CTkLabel(
+        container,
+        text="Clips longer than this are trimmed to the max duration before placing.",
+        font=ctk.CTkFont(size=10), text_color="#555555", anchor="w",
+    ).pack(fill="x", padx=12, pady=(0, 2))
+
+    # LLM mode for placement (same as autonomous mode)
+    place_llm_row = ctk.CTkFrame(container, fg_color="transparent")
+    place_llm_row.pack(fill="x", padx=10, pady=(4, 2))
+    ctk.CTkLabel(place_llm_row, text="LLM mode:", font=ctk.CTkFont(size=11),
+                 text_color="#aaaaaa", width=80, anchor="w").pack(side="left")
+    w["place_llm_mode"] = ctk.CTkSegmentedButton(
+        place_llm_row,
+        values=["Off"],
+        font=ctk.CTkFont(size=11),
+        selected_color="#1b5e20",
+        selected_hover_color="#2e7d32",
+        unselected_color="#2a2a2a",
+        unselected_hover_color="#3a3a3a",
+        width=180,
+    )
+    w["place_llm_mode"].set("Off")
+    w["place_llm_mode"].pack(side="left", padx=(6, 0))
+    ctk.CTkLabel(
+        place_llm_row,
+        text="Use LLM to pick best clips + positions. Only providers with an API key shown.",
+        font=ctk.CTkFont(size=10), text_color="#555555",
+    ).pack(side="left", padx=(10, 0))
 
     w["place_btn"] = ctk.CTkButton(
         container, text="Auto Place on Timeline",
-        fg_color="#2a2a2a", hover_color="#3a3a3a",
+        fg_color="#1b5e20", hover_color="#2e7d32",
         state="disabled",
     )
-    w["place_btn"].pack(fill="x", padx=10, pady=(2, 4))
+    w["place_btn"].pack(fill="x", padx=10, pady=(4, 4))
+
+    w["place_status"] = ctk.CTkLabel(
+        container, text="",
+        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+    w["place_status"].pack(fill="x", padx=12, pady=(0, 4))
 
     ctk.CTkLabel(
         container,
-        text="Note: Requires transcript from the Subtitles tab.",
+        text="Note: Requires transcript from the Subtitles tab. Suggest Local B-Roll first to generate suggestions.",
         font=ctk.CTkFont(size=10),
         text_color="#555555",
         wraplength=800,
@@ -276,7 +365,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     ctk.CTkLabel(
         card,
         text="Fill Frame: zoom-crops clips to fill frame.  "
-             "Natural Placement: skips first 8s, enforces 5s gaps between clips, caps each clip at 5s.",
+             "Natural Placement: skips first 4s, enforces 5s gaps between clips, caps each clip at 5s.",
         font=ctk.CTkFont(size=10), text_color="#555555", anchor="w", wraplength=760,
     ).pack(fill="x", padx=10, pady=(0, 6))
 
@@ -389,7 +478,6 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     w["search_online_btn"] = ctk.CTkButton(
         card, text="Search Online for B-Roll",
         fg_color="#1b5e20", hover_color="#2e7d32",
-        state="disabled",
     )
     w["search_online_btn"].pack(fill="x", padx=10, pady=(8, 4))
 

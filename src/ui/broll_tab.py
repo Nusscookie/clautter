@@ -6,7 +6,7 @@ import tkinter.filedialog
 from pathlib import Path
 from typing import Any
 
-from src.ui._broll_build import build, _set_textbox
+from src.ui._broll_build import build
 from src.ui._broll_workers import (
     suggest_local_thread, search_online_thread, autonomous_thread,
 )
@@ -25,6 +25,7 @@ def setup(frame: Any, app: Any) -> None:
         "auto_dl_folder": "",
         "clips": [],
         "suggestions": [],
+        "pinned": [],
         "auto_running": False,
     }
 
@@ -36,9 +37,6 @@ def setup(frame: Any, app: Any) -> None:
 
     def set_search_status(msg: str, color: str = "#aaaaaa") -> None:
         _ui(lambda: w["search_status"].configure(text=msg, text_color=color))
-
-    def set_suggestions(text: str) -> None:
-        _ui(lambda: _set_textbox(w["suggestions"], text))
 
     def set_auto_status(msg: str, color: str = "#aaaaaa") -> None:
         _ui(lambda: w["auto_status"].configure(text=msg, text_color=color))
@@ -100,10 +98,7 @@ def setup(frame: Any, app: Any) -> None:
     auto_natural = bool(app.settings.get("broll_natural_placement", True))
 
     def _refresh_llm_mode() -> None:
-        """Populate the autonomous LLM-mode dropdown from currently-keyed providers.
-
-        Preserves the live selection if still valid, else the saved value, else "Off".
-        """
+        """Populate the autonomous LLM-mode dropdown from currently-keyed providers."""
         vals = ["Off"] + available_providers(app.settings)
         try:
             current = w["auto_llm_mode"].get()
@@ -114,6 +109,20 @@ def setup(frame: Any, app: Any) -> None:
         _ui(lambda: (
             w["auto_llm_mode"].configure(values=vals),
             w["auto_llm_mode"].set(chosen),
+        ))
+
+    def _refresh_place_llm_mode() -> None:
+        """Populate the manual place LLM-mode dropdown from currently-keyed providers."""
+        vals = ["Off"] + available_providers(app.settings)
+        try:
+            current = w["place_llm_mode"].get()
+        except Exception:
+            current = ""
+        saved = str(app.settings.get("broll_place_llm_mode", "Off"))
+        chosen = current if current in vals else (saved if saved in vals else "Off")
+        _ui(lambda: (
+            w["place_llm_mode"].configure(values=vals),
+            w["place_llm_mode"].set(chosen),
         ))
 
     def _hydrate_auto() -> None:
@@ -191,28 +200,232 @@ def setup(frame: Any, app: Any) -> None:
         app.settings.set("broll_top_n", n)
 
     def _refresh_search_button() -> None:
-        if not app.transcript:
-            _ui(lambda: w["search_online_btn"].configure(state="disabled"))
-            return
-        provider = w["provider"].get()
+        # Always enabled — missing keys / transcript handled with inline errors on click
+        _ui(lambda: w["search_online_btn"].configure(state="normal"))
 
-        def _have(name: str) -> bool:
-            return bool((app.settings.get(name, "") or "").strip())
+    def set_place_status(msg: str, color: str = "#aaaaaa") -> None:
+        _ui(lambda: w["place_status"].configure(text=msg, text_color=color))
 
-        if provider == "Pixabay":
-            ok = _have("pixabay_api_key")
-        elif provider == "Pexels":
-            ok = _have("pexels_api_key")
-        else:
-            ok = _have("pixabay_api_key") and _have("pexels_api_key")
-        state = "normal" if ok else "disabled"
-        _ui(lambda s=state: w["search_online_btn"].configure(state=s))
+    place_fill_frame_saved = bool(app.settings.get("broll_place_fill_frame", False))
+    if place_fill_frame_saved:
+        _ui(lambda: w["place_fill_frame"].select())
+
+    place_natural_saved = bool(app.settings.get("broll_place_natural_placement", True))
+    if place_natural_saved:
+        _ui(lambda: w["place_natural_placement"].select())
+
+    place_max_dur_saved = float(app.settings.get("broll_place_max_dur", 5.0) or 5.0)
+    place_max_dur_saved = max(1.0, min(15.0, place_max_dur_saved))
+    _ui(lambda v=place_max_dur_saved: (
+        w["place_max_dur"].set(v),
+        w["place_max_dur_value"].configure(text=f"{int(v)}s"),
+    ))
+
+    def on_place_fill_frame_change() -> None:
+        app.settings.set("broll_place_fill_frame", bool(w["place_fill_frame"].get()))
+
+    def on_place_natural_change() -> None:
+        app.settings.set("broll_place_natural_placement", bool(w["place_natural_placement"].get()))
+
+    def on_place_max_dur_change(value: Any) -> None:
+        n = int(round(float(value)))
+        w["place_max_dur_value"].configure(text=f"{n}s")
+        app.settings.set("broll_place_max_dur", n)
+
+    def on_place_llm_mode_change(value: str) -> None:
+        app.settings.set("broll_place_llm_mode", value)
+
+    def _refresh_place_btn() -> None:
+        # Enable when at least one clip is pinned (checked). Runs on UI thread.
+        pinned = _state.get("pinned", [])
+        has_checked = any(p["var"].get() for p in pinned)
+        w["place_btn"].configure(state="normal" if has_checked else "disabled")
 
     def on_place() -> None:
-        set_status(
-            "Auto Place coming in a future update — will work for both local and online B-roll.",
-            "#E8903A",
-        )
+        # Only place clips the user explicitly checked
+        pinned = _state.get("pinned", [])
+        to_place = [p for p in pinned if p["var"].get()]
+        if not to_place:
+            set_place_status("No clips checked — tick clips in the list above.", "#ff6b6b")
+            return
+        if not app.transcript:
+            set_place_status("No transcript — generate one in the Subtitles tab first.", "#ff6b6b")
+            return
+
+        llm_sel = w["place_llm_mode"].get()
+        llm_director = llm_sel != "Off"
+        llm_provider = llm_sel if llm_director else None
+        fill_frame = bool(w["place_fill_frame"].get())
+        max_dur = float(w["place_max_dur"].get())
+        natural_placement = bool(w["place_natural_placement"].get())
+        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 4.0))
+        min_gap_sec = float(app.settings.get("broll_min_gap_sec", 5.0))
+
+        _ui(lambda: w["place_btn"].configure(state="disabled"))
+        set_place_status("Placing clips on B-Roll track…", "#D97757")
+
+        def _place_thread() -> None:
+            try:
+                from src.broll.placer import place_clip
+
+                # Build placements list. All checked clips are placed — no omissions.
+                # LLM mode only re-assigns timestamps; it cannot drop clips.
+                if llm_director and llm_provider:
+                    try:
+                        from src.broll.keywords import extract_top_keywords
+                        from src.broll.llm_director import direct
+                        from src.broll.matcher import _build_segments
+
+                        keywords = extract_top_keywords(app.transcript, top_n=10)
+                        segments = _build_segments(app.transcript)
+                        candidates = [
+                            {"name": p["clip_name"], "path": p["path"],
+                             "keywords": [],
+                             "duration_sec": p.get("duration_sec", 0.0)}
+                            for p in to_place
+                        ]
+                        decisions, err = direct(
+                            transcript_words=app.transcript,
+                            segments=segments,
+                            keywords=keywords,
+                            candidates=candidates,
+                            settings=app.settings,
+                            provider=llm_provider,
+                            max_placements=len(to_place),
+                        )
+                        if err:
+                            log.warning("[place] LLM director: %s — using original timestamps", err)
+                            set_place_status(
+                                f"LLM failed ({err}) — placing at original timestamps.", "#E8903A")
+                            decisions = []
+
+                        if decisions:
+                            # Build a name→LLM-timestamp lookup; keep user-order for any clip
+                            # the LLM didn't return (ensures ALL checked clips are placed).
+                            llm_times: dict[str, tuple[float, float]] = {
+                                d.clip_name: (d.timeline_sec,
+                                              max(0.0, d.clip_end_sec - d.clip_start_sec))
+                                for d in decisions
+                            }
+                            placements = []
+                            for p in to_place:
+                                if p["clip_name"] in llm_times:
+                                    t, dur = llm_times[p["clip_name"]]
+                                else:
+                                    t = p.get("suggested_time", 0.0)
+                                    dur = p.get("duration_sec", 0.0)
+                                placements.append({
+                                    "path": p["path"], "start_sec": t, "duration_sec": dur,
+                                })
+                        else:
+                            placements = [
+                                {"path": p["path"],
+                                 "start_sec": p.get("suggested_time", 0.0),
+                                 "duration_sec": p.get("duration_sec", 0.0)}
+                                for p in to_place
+                            ]
+                    except Exception as e:
+                        log.warning("[place] LLM director failed (%s) — using original timestamps", e)
+                        placements = [
+                            {"path": p["path"],
+                             "start_sec": p.get("suggested_time", 0.0),
+                             "duration_sec": p.get("duration_sec", 0.0)}
+                            for p in to_place
+                        ]
+                else:
+                    placements = [
+                        {"path": p["path"],
+                         "start_sec": p.get("suggested_time", 0.0),
+                         "duration_sec": p.get("duration_sec", 0.0)}
+                        for p in to_place
+                    ]
+
+                # Apply max clip duration cap before collision check so the
+                # collision math uses the already-capped durations.
+                for p in placements:
+                    d = p.get("duration_sec") or 0.0
+                    if d <= 0.0 or d > max_dur:
+                        p["duration_sec"] = max_dur
+
+                # Natural placement: filter out clips in the intro window and
+                # enforce minimum gap between placed clips.
+                if natural_placement:
+                    filtered = []
+                    last_end = 0.0
+                    for p in sorted(placements, key=lambda x: x["start_sec"]):
+                        t = p["start_sec"]
+                        if t < intro_skip_sec:
+                            log.debug("[place] natural: skipping %s — in intro (%.1fs < %.1fs)",
+                                      p["path"], t, intro_skip_sec)
+                            continue
+                        if last_end > 0.0 and (t - last_end) < min_gap_sec:
+                            log.debug("[place] natural: skipping %s — gap too small (%.1fs < %.1fs)",
+                                      p["path"], t - last_end, min_gap_sec)
+                            continue
+                        filtered.append(p)
+                        last_end = t + (p.get("duration_sec") or 0.0)
+                    dropped = len(placements) - len(filtered)
+                    placements = filtered
+                else:
+                    dropped = 0
+
+                # Resolve won't place two clips at the same record frame.
+                # Sort by start time, then bump any clip that overlaps the
+                # previous one so all checked clips are placed.
+                placements.sort(key=lambda p: p["start_sec"])
+                _MIN_GAP = 0.5
+                for i in range(1, len(placements)):
+                    prev = placements[i - 1]
+                    cur = placements[i]
+                    prev_end = prev["start_sec"] + max(prev.get("duration_sec") or 0.0, _MIN_GAP)
+                    if cur["start_sec"] < prev_end:
+                        cur["start_sec"] = prev_end
+                        log.debug("[place] collision fix: shifted clip %d to %.1fs", i, cur["start_sec"])
+
+                placed = 0
+                skipped = 0
+                total = len(placements)
+                for p in placements:
+                    result = place_clip(
+                        app=app,
+                        clip_path=p["path"],
+                        segment_start_sec=p["start_sec"],
+                        clip_duration_sec=p.get("duration_sec", 0.0),
+                        fill_frame=fill_frame,
+                    )
+                    if result.placed:
+                        placed += 1
+                    else:
+                        skipped += 1
+                        log.warning("[place] skipped %s: %s", p["path"], result.reason)
+
+                natural_note = (
+                    f" {dropped} skipped by Natural Placement (intro/gap rules)."
+                    if dropped else ""
+                )
+                if placed == 0 and total == 0:
+                    set_place_status(
+                        "No clips to place." + natural_note, "#E8903A")
+                elif placed == 0:
+                    set_place_status(
+                        f"No clips placed — check Resolve connection. ({skipped} skipped){natural_note}",
+                        "#ff6b6b",
+                    )
+                else:
+                    set_place_status(
+                        f"Done! {placed}/{total} clip(s) placed on B-Roll track."
+                        + (f" {skipped} skipped." if skipped else "")
+                        + natural_note,
+                        "#66bb6a",
+                    )
+                app.broll_placer_results = []
+            except Exception as e:
+                log.error("Manual place error: %s", e)
+                set_place_status(f"Error: {e}", "#ff6b6b")
+            finally:
+                _ui(lambda: w["place_btn"].configure(state="normal"))
+
+        threading.Thread(target=_place_thread, daemon=True).start()
 
     def on_search_online() -> None:
         if not app.transcript:
@@ -248,6 +461,7 @@ def setup(frame: Any, app: Any) -> None:
             target=search_online_thread,
             args=(w, frame, app, _state, pairs,
                   set_search_status, set_status, _ui),
+            kwargs={"broll_state": _state},
             daemon=True,
         ).start()
 
@@ -355,7 +569,7 @@ def setup(frame: Any, app: Any) -> None:
         fill_frame = bool(w["auto_fill_frame"].get())
         natural_placement = bool(w["auto_natural_placement"].get())
         no_start_broll = bool(app.settings.get("broll_no_start_broll", True))
-        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 8.0))
+        intro_skip_sec = float(app.settings.get("broll_intro_skip_sec", 4.0))
         min_gap_sec = float(app.settings.get("broll_min_gap_sec", 5.0))
         max_broll_duration = float(app.settings.get("broll_max_broll_duration", 5.0))
 
@@ -383,11 +597,18 @@ def setup(frame: Any, app: Any) -> None:
     w["dl_folder_btn"].configure(command=on_pick_dl_folder)
     w["provider"].configure(command=on_provider_change)
     w["top_n_slider"].configure(command=on_top_n_change)
-    w["suggest_local_btn"].configure(command=lambda: threading.Thread(
-        target=suggest_local_thread,
-        args=(w, app, _state, set_status, set_suggestions, _ui),
-        daemon=True).start())
+    def _suggest_and_refresh() -> None:
+        def _after() -> None:
+            suggest_local_thread(w, app, _state, set_status, None, _ui)
+            _ui(_refresh_place_btn)
+        threading.Thread(target=_after, daemon=True).start()
+
+    w["suggest_local_btn"].configure(command=_suggest_and_refresh)
+    w["place_fill_frame"].configure(command=on_place_fill_frame_change)
+    w["place_natural_placement"].configure(command=on_place_natural_change)
+    w["place_max_dur"].configure(command=on_place_max_dur_change)
     w["place_btn"].configure(command=on_place)
+    w["place_llm_mode"].configure(command=on_place_llm_mode_change)
     w["search_online_btn"].configure(command=on_search_online)
 
     # Autonomous
@@ -406,8 +627,10 @@ def setup(frame: Any, app: Any) -> None:
     # Initial state
     _refresh_search_button()
     _refresh_auto_run_btn()
+    _refresh_place_llm_mode()
 
     # Live refresh when Settings → Apply adds/changes a key (no restart needed)
     app.on_settings_changed(_refresh_llm_mode)
+    app.on_settings_changed(_refresh_place_llm_mode)
     app.on_settings_changed(_refresh_search_button)
     app.on_settings_changed(_refresh_auto_run_btn)

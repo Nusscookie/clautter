@@ -215,12 +215,3 @@ def build_text_style_card(parent: Any, w: dict) -> None:
         width=20, anchor="w")
     w["outline_width_lbl"].pack(side="left")
 
-    ctk.CTkLabel(color_row, text="Highlight",
-                 font=ctk.CTkFont(size=11), text_color="#aaaaaa").pack(side="left", padx=(16, 4))
-    w["highlight_color_btn"] = ctk.CTkButton(
-        color_row, text="", width=36, height=26, corner_radius=4,
-        fg_color="#FFFF00", hover_color="#FFFF00",
-        border_width=2, border_color="#555555",
-        state="disabled",
-    )
-    w["highlight_color_btn"].pack(side="left")

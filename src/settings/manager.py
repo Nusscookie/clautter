@@ -112,7 +112,7 @@ class ClutterSettings(BaseModel):
     # Natural placement
     broll_natural_placement: bool = True
     broll_no_start_broll: bool = True
-    broll_intro_skip_sec: float = 8.0
+    broll_intro_skip_sec: float = 4.0
     broll_min_gap_sec: float = 5.0
     broll_max_broll_duration: float = 5.0
     # Fill frame

@@ -26,7 +26,6 @@ def make_callbacks(
     _state: dict,
     _text_color: list[str],
     _outline_color: list[str],
-    _highlight_color: list[str],
     set_status: Callable,
     set_progress: Callable,
     set_btn: Callable,
@@ -81,7 +80,7 @@ def make_callbacks(
         _transcript_text = w["transcript"].get("0.0", "end").strip()
         _style      = get_style_overrides(w)
         _preset     = w["preset"].get()
-        _text_style = get_text_style(w, _text_color, _outline_color, _highlight_color)
+        _text_style = get_text_style(w, _text_color, _outline_color)
         threading.Thread(
             target=create_track_thread,
             args=(w, app, _state, _transcript_text, _style, _preset, _text_style,
@@ -118,7 +117,7 @@ def make_callbacks(
 
     def on_preset_changed(value: str) -> None:
         app.settings.set("subtitle_preset", value)
-        wpl, lpb, caps, hcol = PRESET_DEFAULTS.get(value, (7, 2, False, "#FFFF00"))
+        wpl, lpb, caps, _hcol = PRESET_DEFAULTS.get(value, (7, 2, False, "#FFFF00"))
         w["wpl_slider"].set(wpl)
         w["wpl_label"].configure(text=str(wpl))
         w["lpb_slider"].set(lpb)
@@ -127,8 +126,6 @@ def make_callbacks(
             w["caps_check"].select()
         else:
             w["caps_check"].deselect()
-        _highlight_color[0] = hcol
-        w["highlight_color_btn"].configure(fg_color=hcol, hover_color=hcol)
 
     def on_font_size(val: float) -> None:
         w["font_size_lbl"].configure(text=str(int(val)))
@@ -169,7 +166,7 @@ def make_callbacks(
         presets = app.settings.get_style_presets()
         style = presets.get(name)
         if style:
-            apply_text_style(w, style, _text_color, _outline_color, _highlight_color)
+            apply_text_style(w, style, _text_color, _outline_color)
             app.settings.set("active_subtitle_style", name)
 
     def _refresh_style_preset_list(select: str | None = None) -> None:
@@ -187,7 +184,7 @@ def make_callbacks(
             return
 
         def _apply_style(style: dict) -> None:
-            apply_text_style(w, style, _text_color, _outline_color, _highlight_color)
+            apply_text_style(w, style, _text_color, _outline_color)
 
         from src.ui._subtitles_import import import_style_thread
         threading.Thread(

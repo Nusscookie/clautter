@@ -8,9 +8,98 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+import customtkinter as ctk
+
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+
+def add_clip_row(
+    suggestions_frame: Any,
+    placeholder: Any,
+    _state: dict,
+    _ui: Callable,
+    *,
+    clip_path: str,
+    clip_name: str,
+    label: str = "",
+    suggested_time: float = 0.0,
+    duration_sec: float = 0.0,
+    source: str = "local",
+) -> None:
+    """Add a single checkable clip row to the suggestions scrollable frame.
+
+    Hides the placeholder on first row. Appends entry to _state["pinned"].
+    Deduplicates by path — no-ops if clip already present.
+    Must be called on the UI thread (frame.after(0, ...)).
+    """
+    # Deduplicate
+    if any(p["path"] == clip_path for p in _state.get("pinned", [])):
+        return
+
+    if placeholder and placeholder.winfo_ismapped():
+        placeholder.pack_forget()
+
+    var = ctk.BooleanVar(value=True)
+
+    entry: dict[str, Any] = {
+        "path": clip_path,
+        "clip_name": clip_name,
+        "suggested_time": suggested_time,
+        "duration_sec": duration_sec,
+        "var": var,
+        "source": source,
+    }
+    _state.setdefault("pinned", []).append(entry)
+
+    row = ctk.CTkFrame(suggestions_frame, fg_color="#2a2a2a", corner_radius=4)
+    row.pack(fill="x", padx=4, pady=(0, 3))
+    row.grid_columnconfigure(1, weight=1)
+
+    cb = ctk.CTkCheckBox(
+        row, text="", variable=var,
+        width=20, checkbox_width=16, checkbox_height=16,
+    )
+    cb.grid(row=0, column=0, padx=(6, 4), pady=6)
+
+    source_color = "#D97757" if source == "local" else "#4fc3f7"
+    source_tag = ctk.CTkLabel(
+        row, text=source.upper(),
+        font=ctk.CTkFont(size=9, weight="bold"),
+        text_color="#141414", fg_color=source_color,
+        corner_radius=3, width=50,
+    )
+    source_tag.grid(row=0, column=1, sticky="w", padx=(0, 6), pady=6)
+
+    ctk.CTkLabel(
+        row, text=clip_name,
+        font=ctk.CTkFont(size=11), text_color="#ffffff", anchor="w",
+    ).grid(row=0, column=2, sticky="ew", padx=(0, 6))
+
+    time_str = f"@ {suggested_time:.1f}s"
+    if duration_sec > 0:
+        time_str += f"  ({duration_sec:.1f}s)"
+    ctk.CTkLabel(
+        row, text=time_str,
+        font=ctk.CTkFont(size=10), text_color="#888888", anchor="e",
+    ).grid(row=0, column=3, padx=(0, 8))
+
+    row.grid_columnconfigure(2, weight=1)
+
+    def _remove() -> None:
+        _state["pinned"] = [p for p in _state["pinned"] if p["path"] != clip_path]
+        row.pack_forget()
+        row.destroy()
+        if not _state.get("pinned"):
+            placeholder.pack(fill="x", padx=8, pady=12)
+
+    ctk.CTkButton(
+        row, text="✕", width=24, height=24,
+        fg_color="transparent", hover_color="#3a3a3a",
+        text_color="#888888", font=ctk.CTkFont(size=10),
+        command=_remove,
+    ).grid(row=0, column=4, padx=(0, 4))
 
 
 def suggest_local_thread(
@@ -21,11 +110,10 @@ def suggest_local_thread(
     set_suggestions: Callable,
     _ui: Callable,
 ) -> None:
-    """Scan folder, check transcript, then generate B-roll suggestions in one pass."""
+    """Scan folder, check transcript, then add B-roll suggestion rows to the pinned list."""
     try:
         from src.broll.matcher import suggest_broll
         from src.broll.scanner import scan_folder
-        from src.ui._broll_build import _set_textbox
 
         _ui(lambda: w["suggest_local_btn"].configure(state="disabled"))
 
@@ -44,7 +132,6 @@ def suggest_local_thread(
 
         if not clips:
             set_status("No video clips found in folder.", "#E8903A")
-            _ui(lambda: _set_textbox(w["suggestions"], "No clips found in the selected folder."))
             return
 
         set_status(f"Found {len(clips)} clip(s). Analyzing transcript…")
@@ -56,21 +143,23 @@ def suggest_local_thread(
         _state["suggestions"] = suggestions
 
         if not suggestions:
-            _ui(lambda: _set_textbox(w["suggestions"],
-                "No strong keyword matches found. "
-                "Try clips with more descriptive filenames."))
-            set_status("No matches. Rename clips with descriptive keywords.", "#E8903A")
+            set_status("No strong keyword matches. Try clips with more descriptive filenames.", "#E8903A")
             return
 
-        lines = ["B-ROLL SUGGESTIONS:\n"]
+        frame = w["suggestions_frame"]
+        placeholder = w["suggestions_placeholder"]
         for s in suggestions:
-            lines.append(
-                f"  [{s['confidence']:.0%} match] {s['clip_name']}\n"
-                f"    Keywords: {', '.join(s['matched_keywords'])}\n"
-                f"    Suggested at: {s['suggested_time']:.1f}s\n"
-            )
-        set_suggestions("\n".join(lines))
-        set_status(f"{len(suggestions)} suggestion(s) generated.", "#66bb6a")
+            _ui(lambda s=s: add_clip_row(
+                frame, placeholder, _state, _ui,
+                clip_path=s["path"],
+                clip_name=s["clip_name"],
+                label=f"{s['confidence']:.0%} · {', '.join(s['matched_keywords'][:3])}",
+                suggested_time=s["suggested_time"],
+                duration_sec=s.get("duration_sec", 0.0),
+                source="local",
+            ))
+
+        set_status(f"{len(suggestions)} suggestion(s) added — check clips to include.", "#66bb6a")
     except Exception as e:
         log.error("B-roll suggest error: %s", e)
         set_status(f"Error: {e}", "#ff6b6b")
@@ -91,6 +180,7 @@ def search_online_thread(
     set_search_status: Callable,
     set_status: Callable,
     _ui: Callable,
+    broll_state: dict | None = None,
 ) -> None:
     """Extract keywords from the transcript, query the chosen provider(s),
     merge results, and open a modal results window on the UI thread when done.
@@ -232,9 +322,6 @@ def search_online_thread(
 
         def _open() -> None:
             try:
-                # master=None: frame._w is overwritten with the widget dict
-                # (CLAUDE.md convention), so winfo_toplevel() breaks. None
-                # uses the Tk root; grab_set() still makes the window modal.
                 BrollResultsWindow(
                     master=None,
                     app=app,
@@ -242,6 +329,8 @@ def search_online_thread(
                     target_dir=target_dir,
                     set_status=set_status,
                     ui=_ui,
+                    w=w,
+                    broll_state=broll_state,
                 )
             except Exception as e:
                 log.exception("Results window open failed")
@@ -288,7 +377,7 @@ def autonomous_thread(
     fill_frame: bool = False,
     natural_placement: bool = True,
     no_start_broll: bool = True,
-    intro_skip_sec: float = 8.0,
+    intro_skip_sec: float = 4.0,
     min_gap_sec: float = 5.0,
     max_broll_duration: float = 5.0,
     llm_provider: str | None = None,
