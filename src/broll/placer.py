@@ -12,6 +12,7 @@ from typing import Any
 from src.broll.placer_zoom import _apply_fill_frame, _video_track1_end_sec
 from src.constants import TRACKS
 from src.utils.logger import get_logger
+from src.utils.resolve_utils import ensure_video_track_order
 
 log = get_logger(__name__)
 
@@ -39,32 +40,18 @@ class PlacerResult:
 def _find_or_create_broll_track(timeline: Any) -> int:
     """Return the 1-based video track index for the 'B-Roll' named track.
 
-    Searches existing tracks by name. If not found, creates a new video track,
-    names it 'B-Roll', and returns its index. Tolerates SetTrackName failures
-    (common on free edition) — track is still usable even if not named.
+    Delegates to ensure_video_track_order so tracks are always created in
+    canonical order: B-Roll below Subtitle (lower index = lower in stack).
     """
     try:
-        count = timeline.GetTrackCount("video")
-        for i in range(1, count + 1):
-            try:
-                name = timeline.GetTrackName("video", i) or ""
-                if name.strip().lower() == TRACKS.BROLL.lower():
-                    log.debug("[placer] found existing B-Roll track at index %d", i)
-                    return i
-            except Exception:
-                continue
-
-        timeline.AddTrack("video")
-        new_index = count + 1
-        try:
-            timeline.SetTrackName("video", new_index, TRACKS.BROLL)
-            log.info("[placer] created and named B-Roll track at video index %d", new_index)
-        except Exception as e:
-            log.debug("[placer] SetTrackName failed (non-fatal, track %d still usable): %s", new_index, e)
-        return new_index
+        ordered = ensure_video_track_order(timeline)
+        idx = ordered.get("B-Roll", -1)
+        if idx > 0:
+            log.debug("[placer] B-Roll track at index %d", idx)
+            return idx
     except Exception as e:
-        log.warning("[placer] _find_or_create_broll_track failed (%s) — using track 2", e)
-        return 2
+        log.warning("[placer] ensure_video_track_order failed (%s) — using track 2", e)
+    return 2
 
 
 def _fps_from_timeline(timeline: Any) -> float:

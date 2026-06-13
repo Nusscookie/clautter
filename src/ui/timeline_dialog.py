@@ -8,20 +8,9 @@ import customtkinter as ctk
 from src.constants import COLORS
 from src.ui.icon_helper import apply_clutter_icon
 from src.utils.logger import get_logger
+from src.utils.resolve_utils import find_named_video_track  # noqa: F401 — re-exported for callers
 
 log = get_logger(__name__)
-
-
-def find_named_video_track(timeline: Any, name: str) -> int | None:
-    """Return 1-based index of first video track whose name matches (case-insensitive), or None."""
-    try:
-        count = timeline.GetTrackCount("video")
-        for i in range(1, count + 1):
-            if timeline.GetTrackName("video", i).lower() == name.lower():
-                return i
-    except Exception:
-        pass
-    return None
 
 
 def show_timeline_dialog(
