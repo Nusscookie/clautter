@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import Any
+import logging
 
 import customtkinter as ctk
 
@@ -12,6 +13,8 @@ from src.ui import (
     subtitles_tab, zooms_tab, broll_tab, graphics_tab, music_tab,
 )
 from src.ui.settings_window import open_settings
+from src.ui.console_window import ConsoleWindow
+from src.utils.logger import UILogHandler
 
 log = get_logger(__name__)
 
@@ -123,3 +126,16 @@ class MainWindow:
                     text=f"Tab load error: {e}",
                     text_color="#ff6b6b",
                 ).pack(padx=12, pady=12)
+
+        if self._app.settings.get("show_console_log", True):
+            self._console: ConsoleWindow | None = None
+
+            def _attach_console() -> None:
+                self._console = ConsoleWindow(root)
+                handler = UILogHandler(
+                    lambda msg: root.after(0, self._console.append, msg)
+                )
+                handler.setLevel(logging.DEBUG)
+                logging.getLogger().addHandler(handler)
+
+            root.after(200, _attach_console)

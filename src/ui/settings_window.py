@@ -33,7 +33,7 @@ _KEYWORD_METHOD_LABELS: dict[str, str] = {
     "frequency": "Frequency (no deps)",
 }
 
-_TABS = ["API Keys", "LLM Keys", "LLM Models", "Smart Cuts", "B-Roll"]
+_TABS = ["General", "API Keys", "LLM Keys", "LLM Models", "Smart Cuts", "B-Roll"]
 
 _open_window: ctk.CTkToplevel | None = None
 
@@ -112,6 +112,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._scroll = scroll
 
         # Build all panels (hidden except first)
+        self._build_general(scroll)
         self._build_api_keys(scroll)
         self._build_llm_keys(scroll)
         self._build_llm_models(scroll)
@@ -154,6 +155,43 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._active_tab = tab
 
     # ── Panel builders ────────────────────────────────────────────────────────
+
+    def _build_general(self, scroll: ctk.CTkScrollableFrame) -> None:
+        app = self._app
+        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+
+        ctk.CTkLabel(panel, text="GENERAL",
+                     font=ctk.CTkFont(size=10, weight="bold"),
+                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+
+        row = ctk.CTkFrame(panel, fg_color="transparent")
+        row.pack(fill="x", padx=12, pady=(0, 4))
+
+        self._console_log_var = ctk.BooleanVar(
+            value=bool(app.settings.get("show_console_log", True))
+        )
+        ctk.CTkCheckBox(
+            row,
+            text="Show console log window on launch",
+            variable=self._console_log_var,
+            font=ctk.CTkFont(size=11),
+            text_color="#aaaaaa",
+            command=self._on_console_log_toggle,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            panel,
+            text="Opens a floating window showing live log output. "
+                 "Takes effect on next launch.",
+            font=ctk.CTkFont(size=10), text_color="#555555",
+            anchor="w", wraplength=640,
+        ).pack(fill="x", padx=12, pady=(0, 12))
+
+        ctk.CTkFrame(panel, fg_color="transparent", height=4).pack()
+        self._panels["General"] = panel
+
+    def _on_console_log_toggle(self) -> None:
+        self._app.settings.set("show_console_log", self._console_log_var.get())
 
     def _build_api_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app

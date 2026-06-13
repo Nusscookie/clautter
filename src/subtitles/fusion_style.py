@@ -29,7 +29,6 @@ def apply_fusion_text_style(
         if not tool:
             log.debug("apply_fusion_text_style: no TextPlus tool found in comp")
             return
-
         for input_name in ("StyledText", "Text"):
             try:
                 tool.SetInput(input_name, text)
@@ -70,16 +69,15 @@ def apply_fusion_text_style(
                 pass
 
         ow = style.get("outline_width", 0)
-        try:
-            tool.SetInput("BorderWidth", ow / 100.0)
-        except Exception:
-            pass
-
         _outline_on = style.get("outline_enabled", True) and ow > 0
         try:
+            tool.SetInput("Thickness2", ow / 100.0)
+        except Exception as e:
+            log.warning("apply_fusion_text_style: Thickness2 failed: %s", e)
+        try:
             tool.SetInput("Enabled2", 1 if _outline_on else 0)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("apply_fusion_text_style: Enabled2 failed: %s", e)
         oc_hex = style.get("outline_color", "#000000").lstrip("#")
         for attr, val in (
             ("Red2",   int(oc_hex[0:2], 16) / 255.0 or 1e-7),
@@ -88,8 +86,8 @@ def apply_fusion_text_style(
         ):
             try:
                 tool.SetInput(attr, val)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("apply_fusion_text_style: %s failed: %s", attr, e)
 
         try:
             tool.SetInput("Enabled3", 1 if style.get("shadow", 0) else 0)

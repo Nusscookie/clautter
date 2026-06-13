@@ -4,6 +4,25 @@ from __future__ import annotations
 import logging
 import logging.handlers
 from pathlib import Path
+from typing import Callable
+
+
+class UILogHandler(logging.Handler):
+    """Forwards formatted log records to a UI callback (e.g. ConsoleWindow.append)."""
+
+    def __init__(self, callback: Callable[[str], None]) -> None:
+        super().__init__()
+        self._callback = callback
+        self.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._callback(self.format(record))
+        except Exception:
+            self.handleError(record)
 
 
 def get_logger(name: str) -> logging.Logger:

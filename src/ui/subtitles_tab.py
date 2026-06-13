@@ -49,9 +49,8 @@ def setup(frame: Any, app: Any) -> None:
         "words_are_remapped": False,
     }
 
-    _text_color:      list[str] = ["#FFFFFF"]
-    _outline_color:   list[str] = ["#000000"]
-    _highlight_color: list[str] = ["#FFFF00"]
+    _text_color:    list[str] = ["#FFFFFF"]
+    _outline_color: list[str] = ["#000000"]
 
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
@@ -102,7 +101,7 @@ def setup(frame: Any, app: Any) -> None:
     # ── Build callbacks ──
     cbs = make_callbacks(
         w, frame, app, _state,
-        _text_color, _outline_color, _highlight_color,
+        _text_color, _outline_color,
         set_status, set_progress, set_btn, _ui,
     )
 
@@ -123,8 +122,6 @@ def setup(frame: Any, app: Any) -> None:
         command=lambda: cbs["pick_color"](_text_color, "text_color_btn", "Choose Text Color"))
     w["outline_color_btn"].configure(
         command=lambda: cbs["pick_color"](_outline_color, "outline_color_btn", "Choose Outline Color"))
-    w["highlight_color_btn"].configure(
-        command=lambda: cbs["pick_color"](_highlight_color, "highlight_color_btn", "Choose Highlight Color"))
     w["style_preset"].configure(command=cbs["on_style_preset_changed"])
     w["style_import_btn"].configure(command=cbs["on_import_style"])
     w["font_family"].configure(command=cbs["on_font_changed"])
@@ -145,3 +142,10 @@ def setup(frame: Any, app: Any) -> None:
     cbs["on_style_preset_changed"](w["style_preset"].get())
     cbs["on_font_changed"](w["font_family"].get())
     cbs["on_outline_toggle"]()
+
+    # Override preset WPL/LPB back to the desired defaults after all preset
+    # loading is done — presets clobber these on startup otherwise.
+    w["wpl_slider"].set(2)
+    w["wpl_label"].configure(text="2")
+    w["lpb_slider"].set(1)
+    w["lpb_label"].configure(text="1")
