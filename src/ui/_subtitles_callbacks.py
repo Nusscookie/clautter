@@ -59,6 +59,7 @@ def make_callbacks(
                 _subtitle_track_idx = find_named_video_track(app.timeline, "Subtitle")
             choice = show_timeline_dialog(
                 frame, app.project,
+                current_timeline=app.timeline,
                 secondary_section={
                     "detect": _subtitle_track_idx is not None,
                     "label": "Subtitle layer",

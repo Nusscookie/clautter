@@ -78,6 +78,13 @@ def setup(frame: Any, app: Any) -> None:
                 text_color=COLORS.WARNING,
             )
 
+    def _on_retake_cb_toggle() -> None:
+        if w["retake_cb"].get():
+            w["delete_retakes_cb"].configure(state="normal")
+        else:
+            w["delete_retakes_cb"].deselect()
+            w["delete_retakes_cb"].configure(state="disabled")
+
     def on_analyze() -> None:
         if not app.connected:
             set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
@@ -93,12 +100,32 @@ def setup(frame: Any, app: Any) -> None:
             set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         try:
-            from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog
+            from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog, show_warning_dialog
             _retake_track_idx: int | None = None
+            _has_other_tracks = False
             if app.timeline:
                 _retake_track_idx = find_named_video_track(app.timeline, "Retakes")
+                try:
+                    _vcount = app.timeline.GetTrackCount("video")
+                    _has_other_tracks = any(
+                        bool(app.timeline.GetItemListInTrack("video", _ti))
+                        for _ti in range(2, _vcount + 1)
+                    )
+                except Exception:
+                    pass
+            if _has_other_tracks:
+                if not show_warning_dialog(
+                    frame,
+                    "This timeline has B-Roll or Subtitle tracks above Video 1.\n\n"
+                    "After cuts are applied, those tracks will be out of sync "
+                    "and need to be re-synced manually.",
+                    title="Tracks will be out of sync",
+                ):
+                    set_status("Apply cancelled.", COLORS.TEXT_MUTED)
+                    return
             choice = show_timeline_dialog(
                 frame, app.project,
+                current_timeline=app.timeline,
                 secondary_section={
                     "detect": _retake_track_idx is not None,
                     "label": "Retake layer",
@@ -142,6 +169,7 @@ def setup(frame: Any, app: Any) -> None:
     w["apply_btn"].configure(command=on_apply)
     w["preview_btn"].configure(command=on_preview)
     w["pace_slider"].configure(command=on_pace_slider)
+    w["retake_cb"].configure(command=_on_retake_cb_toggle)
 
     default_pace = app.settings.get("default_pace", 5)
     w["pace_slider"].set(default_pace)

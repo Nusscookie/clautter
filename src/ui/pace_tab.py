@@ -42,7 +42,7 @@ def setup(frame: Any, app: Any) -> None:
             return
         try:
             from src.ui.timeline_dialog import show_timeline_dialog
-            choice = show_timeline_dialog(frame, app.project)
+            choice = show_timeline_dialog(frame, app.project, current_timeline=app.timeline)
         except Exception as e:
             log.error("Timeline dialog error: %s", e)
             set_status(f"Dialog error: {e}", COLORS.ERROR)
