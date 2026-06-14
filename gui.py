@@ -1,4 +1,4 @@
-"""Clutter — standalone GUI entry point.
+"""Clautter — standalone GUI entry point.
 
 Run this directly with system Python (requires customtkinter):
     python gui.py
@@ -17,7 +17,7 @@ if sys.platform == "win32":
     import ctypes
     # Must be called before any window is created. Separates this process from
     # python.exe in the Windows taskbar so iconbitmap() applies to the correct app.
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Clutter.Plugin.1")
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Clautter.Plugin.1")
 
 try:
     _PLUGIN_DIR = Path(__file__).resolve().parent
@@ -27,8 +27,11 @@ except NameError:
 if str(_PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_DIR))
 
+from src.utils.migration import migrate_data_dir
+migrate_data_dir()
+
 from src.utils.logger import get_logger
-from src.app import ClutterApp
+from src.app import ClautterApp
 
 log = get_logger("gui")
 
@@ -66,9 +69,9 @@ def _connect_with_timeout(app: Any, timeout: float = 5.0) -> None:
 
 
 def main() -> None:
-    log.info("Clutter GUI starting")
+    log.info("Clautter GUI starting")
 
-    app = ClutterApp()
+    app = ClautterApp()
     _connect_with_timeout(app, timeout=5.0)
 
     try:
@@ -92,7 +95,7 @@ def main() -> None:
         traceback.print_exc()
         return
 
-    log.info("Clutter closed")
+    log.info("Clautter closed")
 
 
 if __name__ == "__main__":

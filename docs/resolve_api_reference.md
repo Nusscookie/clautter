@@ -1,4 +1,4 @@
-# DaVinci Resolve Scripting API — Clutter Reference
+﻿# DaVinci Resolve Scripting API — Clautter Reference
 
 Practical reference for the Resolve Python scripting API as used in this project.
 Covers free-edition behavior, known failures, and correct usage patterns derived
@@ -42,14 +42,14 @@ import builtins
 resolve = getattr(builtins, "resolve", None)
 ```
 
-### Clutter's connection strategy (4-step fallback)
+### Clautter's connection strategy (4-step fallback)
 
 Implemented in `src/utils/resolve_api.py:54`.
 
 | Step | Method | Edition |
 |------|--------|---------|
 | 0 | Caller-supplied `resolve_obj` | Both |
-| 1 | HTTP bridge (`~/.clutter/bridge.json`) | Free (primary path) |
+| 1 | HTTP bridge (`~/.clautter/bridge.json`) | Free (primary path) |
 | 2 | `DaVinciResolveScript.scriptapp("Resolve")` | Studio only |
 | 3 | `builtins.resolve` | In-Resolve console only |
 
@@ -452,7 +452,7 @@ if an input exists — some inputs report `None` even when defined.
 
 | Feature | Free behavior | Workaround |
 |---------|--------------|-----------|
-| External scripting | Disabled. `scriptapp("Resolve")` = `None` | HTTP bridge (Clutter's approach) |
+| External scripting | Disabled. `scriptapp("Resolve")` = `None` | HTTP bridge (Clautter's approach) |
 | `SetTrackName()` | May fail silently | wrap try/except, treat as non-fatal |
 | `AppendToTimeline()` | May return `[]` even on valid clips | log warning, inform user |
 | `GetCurrentVideoItem()` | May return `None` | fallback: scan track for playhead position |

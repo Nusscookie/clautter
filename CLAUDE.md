@@ -1,4 +1,4 @@
-# CLAUDE.md — Clutter
+﻿# CLAUDE.md — Clautter
 
 > DaVinci Resolve plugin for talking-head video editing (silence cutting,
 > subtitles, auto-zooms, B-roll, music/SFX, motion graphics). Read this
@@ -59,7 +59,7 @@ subprocess's Python (already in `requirements.txt`).
 DaVinci Resolve → main.py (Resolve-side launcher, no UI)
                      ├─ acquires _G.resolve (or scriptapp fallback)
                      ├─ starts src/utils/rpc_server.py in a daemon thread
-                     │     └─ http://127.0.0.1:<random>  +  writes ~/.clutter/bridge.json
+                     │     └─ http://127.0.0.1:<random>  +  writes ~/.clautter/bridge.json
                      └─ subprocess.Popen(system_python, gui.py)  [then .wait()s]
                           └─ gui.py (standalone CTk window)
                                └─ src/utils/rpc_client.py reads bridge.json
@@ -81,14 +81,14 @@ talks to it through a localhost proxy that looks identical to a real
 | `main.py` | Resolve-side launcher. Acquires `_G.resolve`, starts `rpc_server`, spawns `gui.py`, then **blocks** on `proc.wait()` so the daemon thread stays alive. |
 | `gui.py` | CTk window. Connects to the bridge on startup. **Connect runs on a daemon thread with a 5s timeout** so the UI opens even without Resolve. |
 | `src/utils/rpc_server.py` | Local HTTP server in Resolve's process. POST `/call` proxies method calls; `/ping` for liveness. Tracks object refs by uuid. |
-| `src/utils/rpc_client.py` | `ResolveProxy` (duck-typed Resolve object) + `ResolveHTTP` (requests.Session). `read_bridge_file()` reads `~/.clutter/bridge.json`. |
+| `src/utils/rpc_client.py` | `ResolveProxy` (duck-typed Resolve object) + `ResolveHTTP` (requests.Session). `read_bridge_file()` reads `~/.clautter/bridge.json`. |
 | `src/utils/resolve_api.py` | `connect()` tries strategies in order: injected obj → bridge → scriptapp → builtins. Returns either a real `resolve` or a `ResolveProxy` — same shape to callers. |
 | `src/app.py` | `AIEditorApp` — framework-agnostic, no tkinter import. Holds `resolve`, `project`, `timeline`, `transcript`, `settings`. |
 | `src/<feature>/*` | Pure logic. No widgets. Only uses `app.resolve`, `app.project`, etc. Works unchanged through the proxy. |
 | `src/ui/<tab>.py` | Each tab has two functions: `build(parent)` (layout) and `setup(parent, app)` (callbacks). Widget refs live in `parent._w = {}`. |
-| `src/settings/manager.py` | JSON at `~/.clutter/config.json` (API keys, prefs, stats). Tunable defaults (thresholds, zoom, timeouts) live here — **not** in `constants.py`. |
-| `src/constants.py` | **Single source of truth** for non-tunable shared values: `COLORS` (palette, mirrors `design/palette.md`), `PATHS` (`~/.clutter` subpaths), `TRACKS` (Resolve track names), `SETTINGS_KEYS` (settings dict keys). Import + reference these — don't inline hex / track names / paths / key strings. |
-| `src/utils/logger.py` | stderr + rotating file at `~/.clutter/logs/ai_editor.log`. Use `log.info/warn/error` — not `print()`. |
+| `src/settings/manager.py` | JSON at `~/.clautter/config.json` (API keys, prefs, stats). Tunable defaults (thresholds, zoom, timeouts) live here — **not** in `constants.py`. |
+| `src/constants.py` | **Single source of truth** for non-tunable shared values: `COLORS` (palette, mirrors `design/palette.md`), `PATHS` (`~/.clautter` subpaths), `TRACKS` (Resolve track names), `SETTINGS_KEYS` (settings dict keys). Import + reference these — don't inline hex / track names / paths / key strings. |
+| `src/utils/logger.py` | stderr + rotating file at `~/.clautter/logs/ai_editor.log`. Use `log.info/warn/error` — not `print()`. |
 
 ### Tab → module map
 
@@ -123,7 +123,7 @@ src/
                 llm_director, placer(_zoom).
   music/        Mood-matched music + auto SFX (providers, ducking, placer)
   graphics/     Motion-graphics suggester (BETA stub)
-  settings/     JSON config manager (~/.clutter/config.json)
+  settings/     JSON config manager (~/.clautter/config.json)
   utils/        rpc_server, rpc_client, resolve_api, logger
 tests/ (ad-hoc probes, not pytest)   docs/  design/  assets/  install.py
 ```
@@ -171,7 +171,7 @@ theme — leave those as literals.
 
 Top-of-file: stdlib + third-party. **Lazy**-import heavy/Resolve-touching modules inside the worker function (e.g. `from src.subtitles.elevenlabs import ...`) to keep tab startup snappy.
 
-Reference shared constants instead of literals: `from src.constants import COLORS, PATHS, TRACKS, SETTINGS_KEYS`. Use `SETTINGS_KEYS.*` for `app.settings.get(...)` keys, `TRACKS.*` for Resolve track names (`"Music"`/`"SFX"`/`"B-Roll"`), `PATHS.*` for `~/.clutter` subpaths.
+Reference shared constants instead of literals: `from src.constants import COLORS, PATHS, TRACKS, SETTINGS_KEYS`. Use `SETTINGS_KEYS.*` for `app.settings.get(...)` keys, `TRACKS.*` for Resolve track names (`"Music"`/`"SFX"`/`"B-Roll"`), `PATHS.*` for `~/.clautter` subpaths.
 
 ### Code style
 
@@ -183,7 +183,7 @@ Reference shared constants instead of literals: `from src.constants import COLOR
 
 ## Reference: AutoSubs (working free-edition Resolve script)
 
-AutoSubs (tmoroney/auto-subs) is installed alongside Clutter at `…\Scripts\Utility\AutoSubs\`. A working example of a Resolve script that runs in the **free edition** — it works because it runs inside Resolve's process (Scripts menu), where `resolve` is a module global, the same mechanism Clutter's `main.py` uses. Consult it when debugging in-Resolve scripting or verifying an API call.
+AutoSubs (tmoroney/auto-subs) is installed alongside Clautter at `…\Scripts\Utility\AutoSubs\`. A working example of a Resolve script that runs in the **free edition** — it works because it runs inside Resolve's process (Scripts menu), where `resolve` is a module global, the same mechanism Clautter's `main.py` uses. Consult it when debugging in-Resolve scripting or verifying an API call.
 
 ---
 

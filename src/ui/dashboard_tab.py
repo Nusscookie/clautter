@@ -17,7 +17,7 @@ def build(parent: Any) -> None:
     # ── Title ──
     ctk.CTkLabel(
         parent,
-        text="CLUTTER",
+        text="CLAUTTER",
         font=ctk.CTkFont(size=18, weight="bold"),
         text_color=COLORS.TEXT_PRIMARY,
     ).pack(pady=(16, 2))

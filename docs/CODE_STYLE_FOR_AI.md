@@ -1,4 +1,4 @@
-# Writing readable code in Clutter — a guide for AI instances
+﻿# Writing readable code in Clautter — a guide for AI instances
 
 > Read this before adding a feature or a dependency. It is the *why* behind
 > the conventions in `CLAUDE.md`. `CLAUDE.md` says **what** the rules are;
@@ -22,7 +22,7 @@ constant, or a "call X" function, grep for it — it probably already exists.
 
 | You're about to write… | It already lives in… |
 |---|---|
-| a hex color, a `~/.clutter` path, a track name (`"Music"`), a settings key | `src/constants.py` (`COLORS`, `PATHS`, `TRACKS`, `SETTINGS_KEYS`) |
+| a hex color, a `~/.clautter` path, a track name (`"Music"`), a settings key | `src/constants.py` (`COLORS`, `PATHS`, `TRACKS`, `SETTINGS_KEYS`) |
 | an HTTP call to a cloud LLM | `src/utils/llm_providers.py` (`call_llm`) |
 | a JSON-array parse of an LLM reply | `src/utils/llm_providers.py` (`extract_json_array`) |
 | a settings read/write | `src/settings/manager.py` |

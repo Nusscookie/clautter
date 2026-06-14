@@ -6,7 +6,7 @@ from typing import Any
 import customtkinter as ctk
 
 from src.constants import COLORS, SETTINGS_KEYS
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from src.ui.settings_window_widgets import (
     _key_row,
     _numeric_row,
@@ -60,13 +60,13 @@ class _SettingsWindow(ctk.CTkToplevel):
     def __init__(self, app: Any) -> None:
         super().__init__()
         self._app = app
-        self.title("Clutter — Settings")
+        self.title("Clautter — Settings")
         self.geometry(f"{_WIN_W}x{_WIN_H}")
         self.minsize(780, 480)
         self.resizable(True, True)
         self.configure(fg_color=COLORS.BG_DARKEST)
         self.grab_set()
-        apply_clutter_icon(self)  # helper defers internally for Toplevels
+        apply_clautter_icon(self)  # helper defers internally for Toplevels
         self._panels: dict[str, ctk.CTkFrame] = {}
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._active_tab = _TABS[0]

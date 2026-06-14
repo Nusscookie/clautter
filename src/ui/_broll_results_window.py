@@ -17,7 +17,7 @@ import customtkinter as ctk
 
 from src.constants import COLORS
 from src.broll.providers.base import ClipResult
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -39,7 +39,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
         broll_state: dict | None = None,
     ) -> None:
         super().__init__(master)
-        apply_clutter_icon(self)
+        apply_clautter_icon(self)
 
         self._app = app
         self._set_status = set_status

@@ -1,4 +1,4 @@
-"""Apply the Clutter icon to any CTk or CTkToplevel window.
+"""Apply the Clautter icon to any CTk or CTkToplevel window.
 
 Why this is more than a one-liner: ``CTkToplevel`` creates its underlying Tk
 window lazily, so calling ``iconphoto``/``iconbitmap`` immediately after
@@ -44,7 +44,7 @@ def _ensure_assets() -> bool:
         img = Image.open(str(_ICON_PATH)).convert("RGBA")
         _photo = ImageTk.PhotoImage(img)
         if sys.platform == "win32":
-            tmp = Path(tempfile.gettempdir()) / "clutter_icon.ico"
+            tmp = Path(tempfile.gettempdir()) / "clautter_icon.ico"
             if not tmp.exists():
                 img.resize((256, 256), Image.LANCZOS).save(str(tmp), format="ICO")
             _ico_path = str(tmp)
@@ -72,7 +72,7 @@ def _set_icon(window: Any) -> None:
             pass  # some Toplevels reject iconbitmap on certain platforms
 
 
-def apply_clutter_icon(window: Any, defer: bool | None = None) -> None:
+def apply_clautter_icon(window: Any, defer: bool | None = None) -> None:
     """Apply assets/icon.png to *window* (CTk root or any CTkToplevel).
 
     *defer* controls when the icon is set. Auto-detected when None: the root

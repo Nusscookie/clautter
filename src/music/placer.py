@@ -108,7 +108,7 @@ def place_audio_clip(
     """Place an MP3/WAV on the named audio track at position_sec.
 
     Args:
-        app:          ClutterApp — needs .resolve.
+        app:          ClautterApp — needs .resolve.
         clip_path:    Absolute path to a local MP3/WAV file.
         position_sec: Start position on the timeline (seconds).
         duration_sec: How much of the clip to use; 0 = full clip.

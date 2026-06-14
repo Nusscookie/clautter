@@ -1,4 +1,4 @@
-# Clutter Color Palette
+﻿# Clautter Color Palette
 
 ## Brand Story
 
@@ -21,7 +21,7 @@ of context.
 
 | Token | Hex | Usage |
 |---|---|---|
-| `BRAND_PRIMARY` | `#D97757` | Accent labels, stat card values, slider value readouts, progress bars, "Clutter" title, segmented-button selected state, settings nav highlight |
+| `BRAND_PRIMARY` | `#D97757` | Accent labels, stat card values, slider value readouts, progress bars, "Clautter" title, segmented-button selected state, settings nav highlight |
 | `BRAND_HOVER` | `#E08A6A` | Hover for brand-colored elements (e.g. segmented-button selected hover) |
 | `BRAND_DIM` | `#A85A3E` | Muted accent — online B-Roll source tag (vs `BRAND_PRIMARY` for local) |
 | `BTN_PRIMARY_BG` | `#B85F3A` | Primary CTA button bg: Generate Transcript, Apply Cuts, Apply Zooms, Apply Pace, Add Music, Run B-Roll, Place |
@@ -80,7 +80,7 @@ of context.
 
 ## CTk theme — widget-level source of truth
 
-`assets/clutter_theme.json` is a custom customtkinter theme loaded at startup
+`assets/clautter_theme.json` is a custom customtkinter theme loaded at startup
 (`src/ui/main_window.py:_apply_theme`, with a `"blue"` fallback if the file is missing).
 It makes **every built-in widget default to terracotta** — sliders, segmented buttons,
 checkmarks, radio buttons, progress bars, option menus, scrollbars, entry focus borders.

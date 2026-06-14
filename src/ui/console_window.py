@@ -1,9 +1,9 @@
-"""Floating console log window — shows live Clutter log output."""
+"""Floating console log window — shows live Clautter log output."""
 
 from __future__ import annotations
 
 from src.constants import COLORS
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from typing import Any
 
 import customtkinter as ctk
@@ -12,10 +12,10 @@ import customtkinter as ctk
 class ConsoleWindow:
     def __init__(self, root: Any) -> None:
         self._win = ctk.CTkToplevel(root)
-        self._win.title("Clutter — Console")
+        self._win.title("Clautter — Console")
         self._win.geometry("720x380")
         self._win.configure(fg_color=COLORS.BG_DARKEST)
-        apply_clutter_icon(self._win)  # helper defers internally for Toplevels
+        apply_clautter_icon(self._win)  # helper defers internally for Toplevels
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._textbox = ctk.CTkTextbox(

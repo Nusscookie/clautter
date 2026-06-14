@@ -47,7 +47,7 @@ def generate_thread(
             set_progress(0, False)
             return
 
-        _stt_tmp = _tmpmod.mkdtemp(prefix="clutter_stt_")
+        _stt_tmp = _tmpmod.mkdtemp(prefix="clautter_stt_")
         try:
             set_status("Extracting timeline audio...")
             _cut = extract_cut_audio(clips, _stt_tmp, app.fps)
@@ -112,7 +112,7 @@ def generate_thread(
 
         tmp = tempfile.NamedTemporaryFile(
             suffix=".srt", delete=False,
-            mode="w", encoding="utf-8", prefix="clutter_"
+            mode="w", encoding="utf-8", prefix="clautter_"
         )
         tmp.write(srt)
         tmp.close()

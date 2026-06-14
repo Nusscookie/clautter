@@ -147,7 +147,7 @@ def run_sfx_pipeline(
     """For each SFX event: find/download an audio clip → place on 'SFX' track.
 
     Args:
-        app:              ClutterApp.
+        app:              ClautterApp.
         events:           List of SfxEvent from collect_sfx_events().
         audio_client:     FreesoundClient instance (may be None if sfx_source="local").
         download_folder:  Where to save downloaded MP3s.

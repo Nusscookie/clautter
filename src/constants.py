@@ -1,11 +1,11 @@
-"""Centralized constants for Clutter — single source of truth for values
+"""Centralized constants for Clautter — single source of truth for values
 that are otherwise duplicated across many modules.
 
 Change a value here and it updates everywhere. Scope is deliberately limited
 to things that are *not* user-configurable: brand colors, on-disk paths,
 Resolve track names, and the string keys used to read settings. Tunable
 defaults (silence threshold, zoom amount, timeouts, …) live in
-``src.settings.manager.ClutterSettings`` so there is exactly one source of
+``src.settings.manager.ClautterSettings`` so there is exactly one source of
 truth for each of those, too.
 
 Conventions:
@@ -64,9 +64,9 @@ class COLORS:
 
 
 class PATHS:
-    """On-disk locations under the user's ``~/.clutter`` config dir."""
+    """On-disk locations under the user's ``~/.clautter`` config dir."""
 
-    CONFIG_DIR = Path.home() / ".clutter"
+    CONFIG_DIR = Path.home() / ".clautter"
     CONFIG_FILE = CONFIG_DIR / "config.json"
     BRIDGE_FILE = CONFIG_DIR / "bridge.json"
     LOGS_DIR = CONFIG_DIR / "logs"
@@ -76,7 +76,7 @@ class PATHS:
 
 
 class TRACKS:
-    """Resolve timeline track names Clutter creates / writes to."""
+    """Resolve timeline track names Clautter creates / writes to."""
 
     MUSIC = "Music"
     SFX = "SFX"
@@ -86,7 +86,7 @@ class TRACKS:
 class SETTINGS_KEYS:
     """String keys passed to ``app.settings.get(...)`` / ``.set(...)``.
 
-    Must match field names on ``ClutterSettings`` in
+    Must match field names on ``ClautterSettings`` in
     ``src.settings.manager``. Use these instead of inline string literals so a
     rename is a one-place change and typos surface at import-reference time.
     """

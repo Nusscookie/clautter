@@ -6,7 +6,7 @@ from typing import Any, Optional
 import customtkinter as ctk
 
 from src.constants import COLORS
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from src.utils.logger import get_logger
 from src.utils.resolve_utils import find_named_video_track  # noqa: F401 — re-exported for callers
 
@@ -30,7 +30,7 @@ def show_warning_dialog(parent: Any, message: str, title: str = "Warning") -> bo
     ry = root.winfo_y() + (root.winfo_height() - dialog_h) // 2
 
     dialog = ctk.CTkToplevel(root)
-    apply_clutter_icon(dialog)
+    apply_clautter_icon(dialog)
     dialog.title(title)
     dialog.geometry(f"{dialog_w}x{dialog_h}+{rx}+{ry}")
     dialog.resizable(False, False)
@@ -147,7 +147,7 @@ def show_timeline_dialog(
     ry = root.winfo_y() + (root.winfo_height() - dialog_height) // 2
 
     dialog = ctk.CTkToplevel(root)
-    apply_clutter_icon(dialog)
+    apply_clautter_icon(dialog)
     dialog.title("Choose Timeline")
     dialog.geometry(f"420x{dialog_height}+{rx}+{ry}")
     dialog.resizable(False, False)

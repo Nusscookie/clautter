@@ -1,6 +1,6 @@
-<img src="assets/icon.png" width="96" alt="Clutter icon" />
+﻿<img src="assets/icon.png" width="96" alt="Clutter icon" />
 
-# Clutter
+# Clautter
 
 **CLAUDE + CUTTER** — built by Claude Code.
 A DaVinci Resolve plugin for editing talking-head videos faster.
@@ -13,11 +13,11 @@ Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
 ## Philosophy
 
-Clutter is built around one idea: **the editor shouldn't have to babysit the tool.**
+Clautter is built around one idea: **the editor shouldn't have to babysit the tool.**
 
 Most Resolve plugins for talking-head cleanup are assistants — they surface candidates,
 mark regions, or highlight pauses, then wait for you to confirm or discard each one.
-That's still a lot of clicking. Clutter goes the other direction: it analyzes the timeline, 
+That's still a lot of clicking. Clautter goes the other direction: it analyzes the timeline, 
 makes the call, and applies the edit.
 
 ---
@@ -33,7 +33,7 @@ makes the call, and applies the edit.
 | **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
 | **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation planned for V2. |
 
-Clutter supports OpenAI, Gemini, Minimax, Anthropic, and **NVIDIA**. NVIDIA grants free access to many open-source models via an OpenAI-compatible API, so you can run the cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
+Clautter supports OpenAI, Gemini, Minimax, Anthropic, and **NVIDIA**. NVIDIA grants free access to many open-source models via an OpenAI-compatible API, so you can run the cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
 
 ---
 
@@ -96,7 +96,7 @@ This is a part-time project. A paid installer is planned — pay once, get a one
 
 No website or community yet. Issues and PRs welcome.
 
-**Testing help wanted.** If you run Clutter on macOS or Linux, or test an API key (OpenAI, Gemini, Anthropic), please open an issue and report whether it worked. This helps update the compatibility table above.
+**Testing help wanted.** If you run Clautter on macOS or Linux, or test an API key (OpenAI, Gemini, Anthropic), please open an issue and report whether it worked. This helps update the compatibility table above.
 
 ---
 

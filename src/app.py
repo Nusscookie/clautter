@@ -1,4 +1,4 @@
-"""Central application coordinator for Clutter."""
+"""Central application coordinator for Clautter."""
 
 from __future__ import annotations
 from typing import Any, Callable, Optional
@@ -9,7 +9,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-class ClutterApp:
+class ClautterApp:
     """Wires all modules together and holds shared state."""
 
     def __init__(self) -> None:

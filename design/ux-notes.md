@@ -1,4 +1,4 @@
-# Clutter UX Notes
+﻿# Clautter UX Notes
 
 Running log of UX observations and deferred proposals. The terracotta rebrand +
 icon-fix pass (see `palette.md`) shipped the items under **Done**; the rest are
@@ -10,9 +10,9 @@ proposals to pick up later.
 
 - **Unified terracotta palette** — killed competing accents (cyan/blue/indigo/feature-
   green/feature-purple). One accent family + status hues. See `palette.md`.
-- **Custom CTk theme** (`assets/clutter_theme.json`) — all built-in widgets default
+- **Custom CTk theme** (`assets/clautter_theme.json`) — all built-in widgets default
   terracotta instead of CTk's blue.
-- **Window icons on every popup** — `icon_helper.apply_clutter_icon` now defers for
+- **Window icons on every popup** — `icon_helper.apply_clautter_icon` now defers for
   Toplevels (so the icon actually sticks on Windows) and caches the generated `.ico`.
   Added the missing call to the **console window**. Settings / timeline / B-Roll-results
   windows all branded.

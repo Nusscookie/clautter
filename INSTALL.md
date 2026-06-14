@@ -1,4 +1,4 @@
-# Installation Guide — Clutter
+﻿# Installation Guide — Clautter
 
 ## Requirements
 
@@ -12,7 +12,7 @@
 
 ## Step 1 — Install Python Dependencies
 
-**Important:** Clutter spawns its GUI in a separate Python process. The version **must** be 3.10–3.12 because DaVinci Resolve's compiled scripting module segfaults on newer interpreters. Pin the version with the `py` launcher.
+**Important:** Clautter spawns its GUI in a separate Python process. The version **must** be 3.10–3.12 because DaVinci Resolve's compiled scripting module segfaults on newer interpreters. Pin the version with the `py` launcher.
 
 Open a terminal/command prompt and run:
 
@@ -74,8 +74,8 @@ python install.py
    | Platform | Stub path |
    |---|---|
    | **Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\Clutter.py` |
-   | **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/Clutter.py` |
-   | **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/Clutter.py` |
+   | **macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/Clautter.py` |
+   | **Linux** | `~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/Clautter.py` |
 
    ```python
    import sys
@@ -99,7 +99,7 @@ python install.py
 ## Step 4 — Launch the Plugin
 
 1. Open DaVinci Resolve
-2. Click **Workspace → Scripts → Utility → Clutter**
+2. Click **Workspace → Scripts → Utility → Clautter**
 
 The plugin window opens.
 
@@ -111,7 +111,7 @@ The plugin window opens.
 2. Copy your API key from the profile menu
 3. In the plugin's **Subtitles** tab, paste the key and click **Save**
 
-The key is stored locally at `~/.clutter/config.json`.
+The key is stored locally at `~/.clautter/config.json`.
 
 ---
 
@@ -148,6 +148,6 @@ The key is stored locally at `~/.clutter/config.json`.
 
 ## Settings File
 
-Settings are stored at: `~/.clutter/config.json`
+Settings are stored at: `~/.clautter/config.json`
 
 To reset to defaults, delete this file and restart the plugin.

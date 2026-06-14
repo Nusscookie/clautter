@@ -8,7 +8,7 @@ import logging
 import customtkinter as ctk
 
 from src.constants import COLORS
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from src.utils.logger import get_logger
 from src.ui import (
     dashboard_tab, smartcuts_tab,
@@ -24,17 +24,17 @@ _WIN_W = 920
 _WIN_H = 700
 
 # Custom terracotta CTk theme — widget-level source of truth, mirrors COLORS.
-_THEME_PATH = Path(__file__).resolve().parents[2] / "assets" / "clutter_theme.json"
+_THEME_PATH = Path(__file__).resolve().parents[2] / "assets" / "clautter_theme.json"
 
 
 def _apply_theme() -> None:
-    """Load the Clutter terracotta theme; fall back to 'blue' so the app
+    """Load the Clautter terracotta theme; fall back to 'blue' so the app
     always boots even if the theme file is missing or malformed."""
     try:
         ctk.set_default_color_theme(str(_THEME_PATH))
-        log.info("Loaded Clutter theme: %s", _THEME_PATH)
+        log.info("Loaded Clautter theme: %s", _THEME_PATH)
     except Exception as e:
-        log.warning("Clutter theme load failed (%s) — falling back to 'blue'", e)
+        log.warning("Clautter theme load failed (%s) — falling back to 'blue'", e)
         ctk.set_default_color_theme("blue")
 
 _TABS: list[tuple[str, Any]] = [
@@ -65,12 +65,12 @@ class MainWindow:
 
     def _build(self) -> None:
         root = self._root
-        root.title("Clutter")
+        root.title("Clautter")
         root.geometry(f"{_WIN_W}x{_WIN_H}")
         root.resizable(True, True)
         root.configure(fg_color=COLORS.BG_DARKEST)
 
-        apply_clutter_icon(root)
+        apply_clautter_icon(root)
 
         # ── Top bar ──
         top = ctk.CTkFrame(root, height=38, fg_color=COLORS.BG_DARK, corner_radius=0)
@@ -78,7 +78,7 @@ class MainWindow:
         top.pack_propagate(False)
 
         ctk.CTkLabel(
-            top, text="Clutter",
+            top, text="Clautter",
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=COLORS.BRAND_PRIMARY,
         ).pack(side="left", padx=(14, 6), pady=6)

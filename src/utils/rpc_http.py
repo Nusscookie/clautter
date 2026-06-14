@@ -17,7 +17,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 _BRIDGE_FILE = PATHS.BRIDGE_FILE
-_REF_KEY = "__clutter_ref__"
+_REF_KEY = "__clautter_ref__"
 
 # Long operations (CreateEmptyTimeline, AppendToTimeline on a long
 # timeline, batched SetProperty calls) can easily run for a minute or

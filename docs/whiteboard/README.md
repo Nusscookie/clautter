@@ -1,6 +1,6 @@
-# Whiteboard — feature flow maps
+﻿# Whiteboard — feature flow maps
 
-Visual flow maps of how each Clutter feature actually works: the steps, the
+Visual flow maps of how each Clautter feature actually works: the steps, the
 decision points, and the real thresholds — so you can understand a feature
 **without reading the code**.
 

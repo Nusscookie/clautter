@@ -5,7 +5,7 @@ Works with both DaVinci Resolve free and Studio editions.
 Connection strategy (in order):
 
 0. Caller-supplied ``resolve_obj`` (Resolve's Scripts menu can inject one).
-1. **HTTP bridge** (``~/.clutter/bridge.json``) — the recommended path on
+1. **HTTP bridge** (``~/.clautter/bridge.json``) — the recommended path on
    the free edition. ``main.py`` starts a local HTTP server inside
    Resolve's process; the ``gui.py`` subprocess connects to it.
 2. ``DaVinciResolveScript.scriptapp("Resolve")`` — Studio only when

@@ -1,4 +1,4 @@
-"""Logging setup for Clutter."""
+"""Logging setup for Clautter."""
 
 from __future__ import annotations
 import logging
@@ -38,7 +38,7 @@ def get_logger(name: str) -> logging.Logger:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     fh = logging.handlers.RotatingFileHandler(
-        log_dir / "clutter.log",
+        log_dir / "clautter.log",
         maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",

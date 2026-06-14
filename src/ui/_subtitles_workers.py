@@ -120,7 +120,7 @@ def create_track_thread(
             from src.subtitles.generator import words_to_srt
             _srt_tmp = _tempfile.NamedTemporaryFile(
                 suffix=".srt", delete=False, mode="w", encoding="utf-8",
-                prefix="clutter_fallback_",
+                prefix="clautter_fallback_",
             )
             _srt_tmp.write(words_to_srt(remapped, preset_name, **style_overrides))
             _srt_tmp.close()

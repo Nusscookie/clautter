@@ -1,7 +1,7 @@
 """On-disk JSON cache for B-Roll search results.
 
 Honours Pixabay's ToS requirement to cache results for 24h. Pexels doesn't
-require it but cheap to share. Cache lives at ``~/.clutter/broll_cache/``
+require it but cheap to share. Cache lives at ``~/.clautter/broll_cache/``
 as one JSON file per query.
 """
 

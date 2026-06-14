@@ -1,7 +1,7 @@
 {
   "type": "excalidraw",
   "version": 2,
-  "source": "clutter-whiteboard-gen",
+  "source": "clautter-whiteboard-gen",
   "elements": [
     {
       "id": "tx0001",
@@ -435,13 +435,13 @@
       "updated": 1,
       "link": null,
       "locked": false,
-      "text": "~/.clutter/bridge.json\n(port handshake)",
+      "text": "~/.clautter/bridge.json\n(port handshake)",
       "fontSize": 16,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "el0028",
-      "originalText": "~/.clutter/bridge.json\n(port handshake)",
+      "originalText": "~/.clautter/bridge.json\n(port handshake)",
       "lineHeight": 1.25,
       "autoResize": true
     },
