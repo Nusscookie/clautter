@@ -13,6 +13,7 @@ Docs live at repo root or under `docs/`:
 | Doc | What it is |
 |---|---|
 | **CLAUDE.md** (this file) | Architecture, conventions, gotchas. Authoritative for *how the code works*. |
+| **docs/CODE_STYLE_FOR_AI.md** | The *why* behind the conventions: how to keep the codebase readable as features pile up (reuse over copy, registries over duplicated dispatch). Read before adding a feature. |
 | **README.md** | User-facing overview: features, philosophy, deps, quick start. |
 | **future.md** | **Roadmap + backlog.** Every feature idea with status (✅ done · 🔶 partial · ⬜ not started), impl notes, packages, effort, priority tiers. Check before building a feature — may already be specced or done. Gitignored. |
 | **SPECS.md** | Original product brief (per-tab requirements). Historical intent, not current state. |
@@ -97,7 +98,7 @@ talks to it through a localhost proxy that looks identical to a real
 | Pace Control | `ui/pace_tab.py` | `pace/controller.py` |
 | Subtitles | `ui/subtitles_tab.py` | `subtitles/elevenlabs.py` + `generator.py` + `exporter.py` |
 | Auto Zooms | `ui/zooms_tab.py` | `zooms/analyzer.py` + `applier.py` (+ `applier_fusion.py` Fusion keyframing) |
-| B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` + `placement_rules.py` (shared pacing predicates) + `autonomous.py` (+ `autonomous_collect.py`) + `llm_director.py` (+ `llm_director_api.py`) + `placer.py` (+ `placer_zoom.py`) |
+| B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` + `placement_rules.py` (shared pacing predicates) + `autonomous.py` (+ `autonomous_collect.py`) + `llm_director.py` + `placer.py` (+ `placer_zoom.py`) |
 | Music & SFX | `ui/music_tab.py` | `music/audio_provider.py` + `mood_analyzer.py` + `sfx_engine.py` + `placer.py` |
 | Motion Graphics | `ui/graphics_tab.py` | `graphics/suggester.py` |
 
@@ -119,7 +120,7 @@ src/
                 placement_rules.py holds the pacing predicates shared by the
                 manual tab and the autonomous agent (intro-skip, min-gap,
                 duration-cap, face-gap). Big modules split: autonomous(_collect),
-                llm_director(_api), placer(_zoom).
+                llm_director, placer(_zoom).
   music/        Mood-matched music + auto SFX (providers, ducking, placer)
   graphics/     Motion-graphics suggester (BETA stub)
   settings/     JSON config manager (~/.clutter/config.json)

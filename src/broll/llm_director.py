@@ -12,20 +12,16 @@ gracefully. Distinguishes "no API key" from "API call failed" in logs.
 """
 
 from __future__ import annotations
-import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.broll.llm_director_api import (
-    call_anthropic,
-    call_gemini,
-    call_minimax,
-    call_nvidia,
-    call_openai,
-)
 from src.constants import SETTINGS_KEYS
+from src.utils.llm_providers import (
+    call_llm,
+    extract_json_array,
+    resolve_provider,
+)
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -101,37 +97,6 @@ def _build_prompt(
     )
 
 
-def _extract_json(text: str) -> list[dict]:
-    """Extract JSON array from LLM response, tolerating markdown fences, think blocks, trailing text."""
-    original = text.strip()
-
-    # Try stripping <think> blocks first; if JSON is outside, use that
-    stripped = re.sub(r"<think>.*?</think>", "", original, flags=re.DOTALL).strip()
-    stripped = re.sub(r"```(?:json)?", "", stripped).strip()
-
-    # If JSON not found outside think block, search inside it as fallback
-    # (M2.5 sometimes puts the answer inside <think> when temperature=0)
-    think_match = re.search(r"<think>(.*?)</think>", original, flags=re.DOTALL)
-    candidates = [stripped]
-    if think_match:
-        inner = re.sub(r"```(?:json)?", "", think_match.group(1)).strip()
-        candidates.append(inner)
-
-    for text in candidates:
-        start = text.find("[")
-        if start == -1:
-            continue
-        try:
-            obj, _ = json.JSONDecoder().raw_decode(text, start)
-            if isinstance(obj, list):
-                return obj
-        except (json.JSONDecodeError, ValueError):
-            continue
-
-    log.warning("[llm_director] full LLM reply (no JSON found): %r", original[:500])
-    raise ValueError(f"no JSON array found in LLM response (first 200 chars): {original[:200]!r}")
-
-
 def _parse_decisions(raw: list[dict]) -> list[PlacementDecision]:
     decisions = []
     for item in raw:
@@ -187,8 +152,6 @@ def direct(
     if not segments or not candidates:
         return [], "No segments or candidates to send to LLM."
 
-    from src.utils.llm_providers import api_key_for, resolve_provider
-
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, NVIDIA, or Anthropic key in Settings (⚙)."
@@ -204,12 +167,7 @@ def direct(
         w["word"] for w in transcript_words if w.get("type") == "word"
     )
 
-    openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
-    gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
-    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    nvidia_model = str(settings.get("llm_nvidia_model", "") or "").strip()
-    anthropic_model = str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6")
-    if chosen == "NVIDIA" and not nvidia_model:
+    if chosen == "NVIDIA" and not str(settings.get("llm_nvidia_model", "") or "").strip():
         return [], "Set an NVIDIA model id in Settings (⚙ → LLM Models)."
     max_tokens = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 1500) or 1500)
     temperature = float(settings.get(SETTINGS_KEYS.LLM_TEMPERATURE, 0.1) or 0.1)
@@ -225,24 +183,14 @@ def direct(
     log.debug("[llm_director] prompt length: %d chars, %d candidates, %d segments",
               len(prompt), len(enriched), len(segments))
 
-    key = api_key_for(settings, chosen)
     source = chosen
     try:
-        if chosen == "OpenAI":
-            reply = call_openai(prompt, key, openai_model, max_tokens, temperature)
-        elif chosen == "Gemini":
-            reply = call_gemini(prompt, key, gemini_model, max_tokens, temperature)
-        elif chosen == "NVIDIA":
-            reply = call_nvidia(prompt, key, nvidia_model, max_tokens, temperature)
-        elif chosen == "Anthropic":
-            reply = call_anthropic(prompt, key, anthropic_model, max_tokens, temperature)
-        else:
-            reply = call_minimax(prompt, key, minimax_model, max_tokens, temperature)
+        reply = call_llm(chosen, prompt, settings, max_tokens=max_tokens, temperature=temperature)
 
         log.debug("[llm_director] %s reply (first 600 chars): %s", source, reply[:600])
         if not reply or not reply.strip():
             return [], f"{source} returned an empty response. Check your API key and quota."
-        raw = _extract_json(reply)
+        raw = extract_json_array(reply)
         decisions = _parse_decisions(raw)
         log.info("[llm_director] %s returned %d placement(s)", source, len(decisions))
 
@@ -258,31 +206,9 @@ def direct(
         return [], f"LLM call failed: {e}"
 
 
-def _dispatch_call(
-    chosen: str, prompt: str, settings: Any, max_tokens: int, temperature: float,
-) -> str:
-    """Route a prompt to the chosen provider. Caller resolves provider + model guard."""
-    from src.utils.llm_providers import api_key_for
-    key = api_key_for(settings, chosen)
-    if chosen == "OpenAI":
-        model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
-        return call_openai(prompt, key, model, max_tokens, temperature)
-    if chosen == "Gemini":
-        model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
-        return call_gemini(prompt, key, model, max_tokens, temperature)
-    if chosen == "NVIDIA":
-        model = str(settings.get("llm_nvidia_model", "") or "").strip()
-        return call_nvidia(prompt, key, model, max_tokens, temperature)
-    if chosen == "Anthropic":
-        model = str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6")
-        return call_anthropic(prompt, key, model, max_tokens, temperature)
-    model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    return call_minimax(prompt, key, model, max_tokens, temperature)
-
-
 def _extract_str_array(text: str) -> list[str]:
     """Extract a JSON array of strings from an LLM reply, tolerating fences/think blocks."""
-    raw = _extract_json(text)  # reuses the tolerant array parser
+    raw = extract_json_array(text)  # reuses the tolerant array parser
     out: list[str] = []
     for item in raw:
         s = str(item).strip()
@@ -307,8 +233,6 @@ def generate_search_terms(
     if not text:
         return [], "Empty transcript."
 
-    from src.utils.llm_providers import resolve_provider
-
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         return [], NO_KEY_SENTINEL
@@ -330,7 +254,7 @@ def generate_search_terms(
     )
 
     try:
-        reply = _dispatch_call(chosen, prompt, settings, max_tokens, temperature)
+        reply = call_llm(chosen, prompt, settings, max_tokens=max_tokens, temperature=temperature)
         if not reply or not reply.strip():
             return [], f"{chosen} returned an empty response."
         terms = _extract_str_array(reply)[:max_terms]

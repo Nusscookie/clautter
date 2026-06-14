@@ -8,20 +8,12 @@ This module has zero required deps beyond ``requests`` (already in requirements.
 """
 
 from __future__ import annotations
-import json
 from typing import Any
 
+from src.utils.llm_providers import call_llm, resolve_provider
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
-
-_OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-_MINIMAX_URL = "https://api.minimax.chat/v1/text/chatcompletion_v2"
-_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-_ANTHROPIC_VERSION = "2023-06-01"
-_TIMEOUT = 15
 
 
 def _build_prompt(segment_text: str, candidates: list[dict]) -> str:
@@ -50,96 +42,6 @@ def _parse_index(text: str, n: int) -> int:
     return 0
 
 
-def _call_openai(prompt: str, api_key: str) -> str:
-    import requests
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 8,
-        "temperature": 0,
-    }
-    resp = requests.post(
-        _OPENAI_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_gemini(prompt: str, api_key: str) -> str:
-    import requests
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    resp = requests.post(
-        f"{_GEMINI_URL}?key={api_key}",
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
-
-
-def _call_minimax(prompt: str, api_key: str) -> str:
-    import requests
-    payload = {
-        "model": "MiniMax-Text-01",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 8,
-        "temperature": 0,
-    }
-    resp = requests.post(
-        _MINIMAX_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_nvidia(prompt: str, api_key: str, model: str) -> str:
-    import requests
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 8,
-        "temperature": 0,
-        "chat_template_kwargs": {"thinking": False},
-    }
-    resp = requests.post(
-        _NVIDIA_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_anthropic(prompt: str, api_key: str, model: str) -> str:
-    import requests
-    resp = requests.post(
-        _ANTHROPIC_URL,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": _ANTHROPIC_VERSION,
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "max_tokens": 8,
-            "temperature": 0,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
-
-
 def rerank(
     segment_text: str,
     candidates: list[dict],
@@ -164,8 +66,6 @@ def rerank(
     top = candidates[:3]
     rest = candidates[3:]
 
-    from src.utils.llm_providers import api_key_for, resolve_provider
-
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         log.debug("[reranker] no cloud API key — skipping re-rank")
@@ -175,23 +75,11 @@ def rerank(
         return candidates
 
     prompt = _build_prompt(segment_text, top)
-    key = api_key_for(settings, chosen)
     source = chosen
 
     try:
-        if chosen == "OpenAI":
-            reply = _call_openai(prompt, key)
-        elif chosen == "Gemini":
-            reply = _call_gemini(prompt, key)
-        elif chosen == "NVIDIA":
-            reply = _call_nvidia(prompt, key, str(settings.get("llm_nvidia_model", "")).strip())
-        elif chosen == "Anthropic":
-            reply = _call_anthropic(
-                prompt, key,
-                str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6"),
-            )
-        else:
-            reply = _call_minimax(prompt, key)
+        # No system prompt — this call wants a single number, not JSON.
+        reply = call_llm(chosen, prompt, settings, max_tokens=8, temperature=0, system=None)
 
         best_idx = _parse_index(reply, len(top))
         log.info("[reranker] %s picked candidate %d for segment %r",
