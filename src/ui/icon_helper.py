@@ -57,10 +57,12 @@ def _ensure_assets() -> bool:
 
 def _set_icon(window: Any) -> None:
     """Apply both the photo (cross-platform title bar) and the .ico (Windows
-    taskbar / title bar). Each call is guarded — CTkToplevel may reject one."""
+    taskbar / title bar). Each call is guarded — CTkToplevel may reject one.
+    On Windows, iconbitmap must come after iconphoto — iconphoto can reset the
+    taskbar icon, so .ico wins when it is applied last."""
+    window._icon_ref = _photo  # prevent GC before either call
     try:
         window.iconphoto(False, _photo)
-        window._icon_ref = _photo  # prevent GC
     except Exception as e:
         log.debug("iconphoto failed: %s", e)
     if _ico_path is not None:
@@ -88,7 +90,7 @@ def apply_clutter_icon(window: Any, defer: bool | None = None) -> None:
 
     if defer:
         try:
-            window.after(120, lambda: _set_icon(window))
+            window.after(250, lambda: _set_icon(window))
             return
         except Exception:
             pass  # no event loop yet — fall through to immediate
