@@ -25,6 +25,7 @@ _NAV_W = 160
 _OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
 _GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-pro"]
 _MINIMAX_MODELS = ["MiniMax-Text-01", "MiniMax-M2.5", "abab6.5s-chat", "abab6.5g-chat", "abab5.5s-chat"]
+_ANTHROPIC_MODELS = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"]
 
 _SILENCE_METHOD_LABELS: dict[str, str] = {
     "vad": "Silero VAD (recommended)",
@@ -251,6 +252,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_entry, self._gem_status = _key_row(panel, "Gemini")
         self._mmx_entry, self._mmx_status = _key_row(panel, "Minimax")
         self._nv_entry, self._nv_status = _key_row(panel, "NVIDIA")
+        self._ant_entry, self._ant_status = _key_row(panel, "Anthropic")
 
         ctk.CTkLabel(
             panel,
@@ -266,6 +268,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         _prefill(self._gem_entry, str(app.settings.get("gemini_api_key", "") or ""))
         _prefill(self._mmx_entry, str(app.settings.get("minimax_api_key", "") or ""))
         _prefill(self._nv_entry, str(app.settings.get("nvidia_api_key", "") or ""))
+        _prefill(self._ant_entry, str(app.settings.get("anthropic_api_key", "") or ""))
 
         self._panels["LLM Keys"] = panel
 
@@ -289,6 +292,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_model = _option_row(panel, "Gemini model:", _GEMINI_MODELS)
         self._mmx_model = _option_row(panel, "Minimax model:", _MINIMAX_MODELS)
         self._nv_model = _text_row(panel, "NVIDIA model id:", placeholder="e.g. moonshotai/kimi-k2.6")
+        self._ant_model = _option_row(panel, "Anthropic model:", _ANTHROPIC_MODELS)
 
         self._llm_max_tokens_entry = _numeric_row(
             panel, "Max tokens:", 200, 8000,
@@ -307,6 +311,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_model.set(str(app.settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash"))
         self._mmx_model.set(str(app.settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"))
         _prefill(self._nv_model, str(app.settings.get("llm_nvidia_model", "") or ""))
+        self._ant_model.set(str(app.settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6"))
 
         self._panels["LLM Models"] = panel
 
@@ -470,6 +475,11 @@ class _SettingsWindow(ctk.CTkToplevel):
             app.settings.set("nvidia_api_key", nv)
             saved.append("NVIDIA")
             self._nv_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
+        ant = self._ant_entry.get().strip()
+        if ant:
+            app.settings.set("anthropic_api_key", ant)
+            saved.append("Anthropic")
+            self._ant_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
 
         log.info("Settings: saved LLM keys: %s", ", ".join(saved) if saved else "none")
 
@@ -479,6 +489,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         app.settings.set("llm_gemini_model", self._gem_model.get())
         app.settings.set("llm_minimax_model", self._mmx_model.get())
         app.settings.set("llm_nvidia_model", self._nv_model.get().strip())
+        app.settings.set("llm_anthropic_model", self._ant_model.get())
         try:
             app.settings.set(SETTINGS_KEYS.LLM_MAX_TOKENS, int(self._llm_max_tokens_entry.get().strip()))
         except ValueError:

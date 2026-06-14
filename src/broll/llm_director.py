@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from src.broll.llm_director_api import (
+    call_anthropic,
     call_gemini,
     call_minimax,
     call_nvidia,
@@ -190,7 +191,7 @@ def direct(
 
     chosen = resolve_provider(settings, provider)
     if chosen is None:
-        return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, or NVIDIA key in Settings (⚙)."
+        return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, NVIDIA, or Anthropic key in Settings (⚙)."
 
     # Attach canonical name to each candidate for prompt + matching
     enriched: list[dict] = []
@@ -207,6 +208,7 @@ def direct(
     gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
     minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
     nvidia_model = str(settings.get("llm_nvidia_model", "") or "").strip()
+    anthropic_model = str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6")
     if chosen == "NVIDIA" and not nvidia_model:
         return [], "Set an NVIDIA model id in Settings (⚙ → LLM Models)."
     max_tokens = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 1500) or 1500)
@@ -232,6 +234,8 @@ def direct(
             reply = call_gemini(prompt, key, gemini_model, max_tokens, temperature)
         elif chosen == "NVIDIA":
             reply = call_nvidia(prompt, key, nvidia_model, max_tokens, temperature)
+        elif chosen == "Anthropic":
+            reply = call_anthropic(prompt, key, anthropic_model, max_tokens, temperature)
         else:
             reply = call_minimax(prompt, key, minimax_model, max_tokens, temperature)
 
@@ -269,6 +273,9 @@ def _dispatch_call(
     if chosen == "NVIDIA":
         model = str(settings.get("llm_nvidia_model", "") or "").strip()
         return call_nvidia(prompt, key, model, max_tokens, temperature)
+    if chosen == "Anthropic":
+        model = str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6")
+        return call_anthropic(prompt, key, model, max_tokens, temperature)
     model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
     return call_minimax(prompt, key, model, max_tokens, temperature)
 

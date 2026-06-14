@@ -13,13 +13,14 @@ from __future__ import annotations
 from typing import Any
 
 # Priority order — first available wins when no explicit preference is given.
-PROVIDERS: list[str] = ["OpenAI", "Gemini", "Minimax", "NVIDIA"]
+PROVIDERS: list[str] = ["OpenAI", "Gemini", "Minimax", "NVIDIA", "Anthropic"]
 
 _KEY_FOR: dict[str, str] = {
     "OpenAI": "openai_api_key",
     "Gemini": "gemini_api_key",
     "Minimax": "minimax_api_key",
     "NVIDIA": "nvidia_api_key",
+    "Anthropic": "anthropic_api_key",
 }
 
 

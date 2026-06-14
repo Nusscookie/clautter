@@ -19,6 +19,8 @@ _OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.chat/v1/text/chatcompletion_v2"
 _NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_ANTHROPIC_VERSION = "2023-06-01"
 _TIMEOUT = 15
 
 
@@ -117,6 +119,27 @@ def _call_nvidia(prompt: str, api_key: str, model: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
+def _call_anthropic(prompt: str, api_key: str, model: str) -> str:
+    import requests
+    resp = requests.post(
+        _ANTHROPIC_URL,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": _ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "max_tokens": 8,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["content"][0]["text"]
+
+
 def rerank(
     segment_text: str,
     candidates: list[dict],
@@ -162,6 +185,11 @@ def rerank(
             reply = _call_gemini(prompt, key)
         elif chosen == "NVIDIA":
             reply = _call_nvidia(prompt, key, str(settings.get("llm_nvidia_model", "")).strip())
+        elif chosen == "Anthropic":
+            reply = _call_anthropic(
+                prompt, key,
+                str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6"),
+            )
         else:
             reply = _call_minimax(prompt, key)
 

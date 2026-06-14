@@ -18,11 +18,13 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_OPENAI_URL  = "https://api.openai.com/v1/chat/completions"
-_GEMINI_URL  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-_MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
-_NVIDIA_URL  = "https://integrate.api.nvidia.com/v1/chat/completions"
-_TIMEOUT     = 60
+_OPENAI_URL     = "https://api.openai.com/v1/chat/completions"
+_GEMINI_URL     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+_MINIMAX_URL    = "https://api.minimax.io/v1/chat/completions"
+_NVIDIA_URL     = "https://integrate.api.nvidia.com/v1/chat/completions"
+_ANTHROPIC_URL  = "https://api.anthropic.com/v1/messages"
+_ANTHROPIC_VERSION = "2023-06-01"
+_TIMEOUT        = 60
 
 MOOD_BUCKETS: dict[str, str] = {
     "energetic": "energetic upbeat music",
@@ -172,11 +174,12 @@ def analyze_mood_llm(
         f"Use exactly {n_sections} item(s). No prose, no markdown."
     )
 
-    openai_model  = str(settings.get("llm_openai_model",  "gpt-4o-mini") or "gpt-4o-mini")
-    gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
-    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
-    max_tokens    = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 500) or 500)
+    openai_model    = str(settings.get("llm_openai_model",    "gpt-4o-mini") or "gpt-4o-mini")
+    gemini_model    = str(settings.get("llm_gemini_model",    "gemini-2.0-flash") or "gemini-2.0-flash")
+    minimax_model   = str(settings.get("llm_minimax_model",   "MiniMax-Text-01") or "MiniMax-Text-01")
+    nvidia_model    = str(settings.get("llm_nvidia_model",    "") or "").strip()
+    anthropic_model = str(settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6")
+    max_tokens      = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 500) or 500)
 
     if chosen == "NVIDIA" and not nvidia_model:
         log.warning("[mood_llm] NVIDIA selected but no model id set — falling back to keywords")
@@ -190,6 +193,8 @@ def analyze_mood_llm(
             reply = _call_gemini(prompt, key, gemini_model, max_tokens)
         elif chosen == "NVIDIA":
             reply = _call_nvidia(prompt, key, nvidia_model, max_tokens)
+        elif chosen == "Anthropic":
+            reply = _call_anthropic(prompt, key, anthropic_model, max_tokens)
         else:
             reply = _call_minimax(prompt, key, minimax_model, max_tokens)
 
@@ -263,6 +268,25 @@ def _call_nvidia(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
+
+
+def _call_anthropic(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+    resp = requests.post(  # noqa: F821
+        _ANTHROPIC_URL,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": _ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        },
+        json={"model": model,
+              "max_tokens": max_tokens,
+              "temperature": 0.1,
+              "system": "Respond with ONLY valid JSON arrays — no prose.",
+              "messages": [{"role": "user", "content": prompt}]},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["content"][0]["text"]
 
 
 def _extract_json(text: str) -> list[dict]:

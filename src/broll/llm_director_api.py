@@ -12,6 +12,8 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_ANTHROPIC_VERSION = "2023-06-01"
 _OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 _MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
@@ -83,6 +85,34 @@ def call_minimax(prompt: str, api_key: str, model: str, max_tokens: int, tempera
     if not content or not content.strip():
         finish = data["choices"][0].get("finish_reason", "unknown")
         raise ValueError(f"Minimax returned empty content (finish_reason={finish!r})")
+    return content
+
+
+def call_anthropic(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
+    import requests
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "system": _JSON_SYSTEM_PROMPT,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    resp = requests.post(
+        _ANTHROPIC_URL,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": _ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    content = data["content"][0]["text"]
+    if not content or not content.strip():
+        stop = data.get("stop_reason", "unknown")
+        raise ValueError(f"Anthropic returned empty content (stop_reason={stop!r})")
     return content
 
 

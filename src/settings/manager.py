@@ -64,6 +64,7 @@ class ClutterSettings(BaseModel):
     gemini_api_key: str = ""
     minimax_api_key: str = ""
     nvidia_api_key: str = ""
+    anthropic_api_key: str = ""
     pixabay_api_key: str = ""
     pexels_api_key: str = ""
 
@@ -127,6 +128,7 @@ class ClutterSettings(BaseModel):
     llm_gemini_model: str = "gemini-2.0-flash"
     llm_minimax_model: str = "MiniMax-Text-01"
     llm_nvidia_model: str = ""  # free-text NVIDIA model id (e.g. moonshotai/kimi-k2.6)
+    llm_anthropic_model: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.1
 
