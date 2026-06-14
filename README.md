@@ -5,7 +5,7 @@
 **CLAUDE + CUTTER** — built by Claude Code.
 A DaVinci Resolve plugin for editing talking-head videos faster.
 
-> **Status: v0.1.0-alpha** — core features work, rough edges expected. Not production-ready.
+> **Status: v0.1.1-alpha** — core features work, rough edges expected. Not production-ready.
 
 Works with **DaVinci Resolve free and Studio** on Windows, macOS, and Linux.
 
@@ -26,8 +26,8 @@ makes the call, and applies the edit.
 
 | Tab | Status | Description |
 |---|---|---|
-| **Smart Cuts** | ✅ Full | Remove silences with a pace slider (1–10) + fine-grained controls. VAD-based detection. |
-| **Subtitles** | ✅ Full | ElevenLabs or local Whisper STT → styled ASS subtitle track. Hormozi/TikTok word-by-word mode. |
+| **Smart Cuts** | ✅ Full | Remove silences with a pace slider (1–10) + fine-grained controls. VAD-based detection. Padding scales with pace preset and is applied as total (not per-edge). |
+| **Subtitles** | ✅ Full | ElevenLabs or local Whisper STT → styled Fusion Title subtitle track. Hormozi/TikTok word-by-word mode. Re-running replaces existing subtitle clips automatically. |
 | **Auto Zooms** | ✅ Full | Face Detection (OpenCV) or RMS peaks → zoom cuts with Fusion ease-in/out. |
 | **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline. The **LLM mode** button is a provider picker — `Off` plus one segment per cloud LLM you have a key for (OpenAI / Gemini / Minimax / NVIDIA); pick one to let the LLM choose clips and positions. |
 | **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
@@ -43,10 +43,7 @@ Clutter supports OpenAI, Gemini, Minimax, and **NVIDIA**. NVIDIA grants free acc
 > module segfaults on 3.13+.
 
 ```
-1. Install dependencies:  py -3.12 -m pip install -r requirements.txt
-2. Install ffmpeg:         https://ffmpeg.org/download.html
-3. Copy folder to:        %APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\
-4. Open DaVinci Resolve → Workspace → Scripts → Utility → Clutter → main
+py -3.12 install.py             
 ```
 
 See [INSTALL.md](INSTALL.md) for the full guide.
@@ -93,7 +90,7 @@ Install: `py -3.12 -m pip install -r requirements.txt`
 
 ---
 
-## Get It
+## Get the installer
 
 This is a part-time project. A paid installer is planned — pay once, get a one-click setup that handles Python, ffmpeg, and the plugin. No fiddling required. The installer is a way to support the project; the plugin itself stays free on GitHub.
 
