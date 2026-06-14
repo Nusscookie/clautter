@@ -99,6 +99,15 @@ def place_fusion_titles(
         log.warning("place_fusion_titles: track setup failed: %s", e)
         return False
 
+    # Clear any existing subtitle clips so re-runs don't stack on top of old ones.
+    try:
+        existing = timeline.GetItemListInTrack("video", subtitle_track)
+        if existing:
+            timeline.DeleteClips(existing)
+            log.info("place_fusion_titles: cleared %d existing clip(s) from subtitle track %d", len(existing), subtitle_track)
+    except Exception as e:
+        log.warning("place_fusion_titles: could not clear subtitle track: %s", e)
+
     clip_list = []
     for block in blocks:
         record_frame = tl_start + int(block["start"] * fps)
