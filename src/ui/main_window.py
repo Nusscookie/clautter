@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import Any
+from pathlib import Path
 import logging
 
 import customtkinter as ctk
@@ -22,6 +23,20 @@ log = get_logger(__name__)
 _WIN_W = 920
 _WIN_H = 700
 
+# Custom terracotta CTk theme — widget-level source of truth, mirrors COLORS.
+_THEME_PATH = Path(__file__).resolve().parents[2] / "assets" / "clutter_theme.json"
+
+
+def _apply_theme() -> None:
+    """Load the Clutter terracotta theme; fall back to 'blue' so the app
+    always boots even if the theme file is missing or malformed."""
+    try:
+        ctk.set_default_color_theme(str(_THEME_PATH))
+        log.info("Loaded Clutter theme: %s", _THEME_PATH)
+    except Exception as e:
+        log.warning("Clutter theme load failed (%s) — falling back to 'blue'", e)
+        ctk.set_default_color_theme("blue")
+
 _TABS: list[tuple[str, Any]] = [
     ("Dashboard",       dashboard_tab),
     ("Smart Cuts",      smartcuts_tab),
@@ -37,7 +52,7 @@ class MainWindow:
     def __init__(self, app: Any) -> None:
         self._app = app
         ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
+        _apply_theme()
         self._root = ctk.CTk()
 
     def run(self) -> None:
@@ -73,13 +88,24 @@ class MainWindow:
             text_color=COLORS.SEPARATOR_DARK,
         ).pack(side="left", padx=2, pady=6)
 
+        # ── Connection status pill: a colored dot makes connected/disconnected
+        #    legible at a glance instead of relying on text alone. ──
+        pill = ctk.CTkFrame(top, fg_color=COLORS.BG_CARD, corner_radius=10)
+        pill.pack(side="left", padx=6, pady=6)
+        connected = self._app.connected
+        self._status_dot = ctk.CTkLabel(
+            pill, text="●",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS.SUCCESS if connected else COLORS.ERROR,
+        )
+        self._status_dot.pack(side="left", padx=(8, 4), pady=1)
         self._status_lbl = ctk.CTkLabel(
-            top,
+            pill,
             text=self._app.status_text(),
             font=ctk.CTkFont(size=11),
-            text_color=COLORS.TEXT_DIM,
+            text_color=COLORS.TEXT_SECONDARY if connected else COLORS.TEXT_DIM,
         )
-        self._status_lbl.pack(side="left", padx=6, pady=6)
+        self._status_lbl.pack(side="left", padx=(0, 10), pady=1)
 
         ctk.CTkButton(
             top, text="⚙",

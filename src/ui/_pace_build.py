@@ -105,10 +105,10 @@ def build(parent: Any) -> None:
     est_row.grid_columnconfigure((0, 1), weight=1)
 
     w["wpm_val"] = _mini_stat(est_row, "Est. Words Per Minute", "~145 WPM", COLORS.SUCCESS,
-                               bg=COLORS.INFO_CARD_BG)
+                               bg=COLORS.BG_CARD)
     w["wpm_val"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["retention_val"] = _mini_stat(est_row, "Est. Viewer Retention", "~77%", COLORS.PURPLE_STAT,
-                                     bg=COLORS.INFO_CARD_BG)
+    w["retention_val"] = _mini_stat(est_row, "Est. Viewer Retention", "~77%", COLORS.BRAND_PRIMARY,
+                                     bg=COLORS.BG_CARD)
     w["retention_val"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     w["apply_btn"] = ctk.CTkButton(

@@ -58,24 +58,9 @@ class COLORS:
     SEPARATOR = "#444444"       # section dividers
     SEPARATOR_DARK = "#333333"  # lighter dividers inside cards; top-bar pip
 
-    # ── Special-purpose (semantic, not brand) ──
-    GREEN_ACTION_BG = "#1b5e20"   # B-Roll Run/Search buttons
-    GREEN_ACTION_HOVER = "#2e7d32"
-    PURPLE_ZOOM_BG = "#6a1b9a"    # Auto Zooms "Apply Zooms" button
-    PURPLE_ZOOM_HOVER = "#7b1fa2"
-    PURPLE_STAT = "#ab47bc"       # "Zoom Points Found" stat value
-
-    # ── Source-tag colors (B-Roll results window) ──
+    # ── Source-tag colors (B-Roll results window — data, two distinct hues) ──
     SRC_PIXABAY = "#A85A3E"     # = BRAND_DIM
     SRC_PEXELS = "#E8903A"      # = WARNING
-
-    # ── Legacy / feature-specific accents (pre-rebrand cyan + info-card blues) ──
-    LEGACY_CYAN = "#4fc3f7"     # old accent, retained where intentionally cyan
-    INFO_CARD_BG = "#1b2838"    # pace info-card bg
-    BLUE_BTN_BG = "#0d47a1"     # music info/action blue
-    BLUE_BTN_HOVER = "#1565c0"
-    INDIGO_BTN_BG = "#1a237e"   # music secondary blue
-    INDIGO_BTN_HOVER = "#283593"
 
 
 class PATHS:

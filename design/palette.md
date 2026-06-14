@@ -2,90 +2,125 @@
 
 ## Brand Story
 
-The primary accent is derived from the app icon — an orange-terracotta crab. The dark neutral backgrounds let the video content breathe; the warm orange accent directs attention to interactive controls and live data values. Status colors (success green, error red) remain semantically neutral so they read clearly regardless of context.
+The single accent is **terracotta** (`#D97757`), derived from the app icon. Dark
+neutral backgrounds let the video content breathe; the warm terracotta accent directs
+attention to interactive controls and live data values. Status colors (success green,
+error red, warning amber) are the **only** non-brand hues — they read clearly regardless
+of context.
+
+> **Terracotta-only.** There is one accent family. Earlier builds carried competing
+> accents (cyan, blue/indigo buttons, feature-green, feature-purple). Those are gone —
+> every primary action, slider readout, progress fill, and stat value is now terracotta.
+> The only other colors are the three status hues and the two B-Roll source-data tags.
 
 ---
 
 ## Palette
 
-### Brand / Accent
+### Brand / Accent (terracotta — the only accent family)
 
 | Token | Hex | Usage |
 |---|---|---|
-| `brand_primary` | `#D97757` | Accent labels, stat card values, slider value readouts, progress bars, "Clutter" title, header text in result windows |
-| `brand_hover` | `#E08A6A` | Hover state for brand-colored elements (future use) |
-| `brand_dim` | `#A85A3E` | Secondary / muted accent — Pixabay source tag |
-| `btn_primary_bg` | `#B85F3A` | Primary CTA buttons: Generate Transcript, Apply Cuts, Apply Pace, Continue |
-| `btn_primary_hover` | `#C96A45` | Hover for primary CTA buttons |
+| `BRAND_PRIMARY` | `#D97757` | Accent labels, stat card values, slider value readouts, progress bars, "Clutter" title, segmented-button selected state, settings nav highlight |
+| `BRAND_HOVER` | `#E08A6A` | Hover for brand-colored elements (e.g. segmented-button selected hover) |
+| `BRAND_DIM` | `#A85A3E` | Muted accent — online B-Roll source tag (vs `BRAND_PRIMARY` for local) |
+| `BTN_PRIMARY_BG` | `#B85F3A` | Primary CTA button bg: Generate Transcript, Apply Cuts, Apply Zooms, Apply Pace, Add Music, Run B-Roll, Place |
+| `BTN_PRIMARY_HOVER` | `#C96A45` | Hover for primary CTA buttons |
 
-### Status
+### Status (the only non-brand hues)
 
 | Token | Hex | Usage |
 |---|---|---|
-| `success` | `#66bb6a` | Success messages, "Done" states, green action buttons (B-Roll Run/Search) |
-| `error` | `#ff6b6b` | Error messages, disconnected/failed states |
-| `warning` | `#E8903A` | Warning notices, fallback messages, BETA banner text, Pexels source tag |
+| `SUCCESS` | `#66bb6a` | Success / "Done" / import states, connected status dot |
+| `ERROR` | `#ff6b6b` | Error / failed / disconnected status dot |
+| `WARNING` | `#E8903A` | Non-blocking notices, fallbacks, BETA banner text |
+| `WARN_PARTIAL` | `#ffa726` | Partial success ("placed 3/5") — amber, not red |
 
 ### Backgrounds
 
 | Token | Hex | Usage |
 |---|---|---|
-| `bg_darkest` | `#141414` | Root window bg, modal window bg (settings, B-roll results) |
-| `bg_dark` | `#1a1a1a` | Top bar |
-| `bg_mid` | `#1e1e1e` | Tabview fg, card header bars, footer bars, option menus |
-| `bg_card` | `#2a2a2a` | Card bodies, secondary/neutral buttons |
-| `bg_hover` | `#3a3a3a` | Hover for secondary buttons |
-| `bg_warm_banner` | `#1A0E00` | BETA banner bg, Graphics tab notice bg, future-feature card bg |
+| `BG_DARKEST` | `#141414` | Root + modal window bg |
+| `BG_CONSOLE` | `#0d0d0d` | Console window text area |
+| `BG_DARK` | `#1a1a1a` | Top bar |
+| `BG_MID` | `#1e1e1e` | Tabview fg, card headers, footers, option menus |
+| `BG_CARD` | `#2a2a2a` | Card bodies, **secondary/neutral buttons** (Analyze, Preview, Export), status pill bg |
+| `BG_HOVER` | `#3a3a3a` | Hover for secondary buttons |
+| `BG_WARM_BANNER` | `#1A0E00` | BETA banner, Graphics notice, future-feature card |
 
 ### Text
 
 | Token | Hex | Usage |
 |---|---|---|
-| `text_primary` | `#ffffff` | Bold headings, key values |
-| `text_secondary` | `#cccccc` | Body text, radio/checkbox labels |
-| `text_muted` | `#aaaaaa` | Standard labels, card section headers, slider labels |
-| `text_dim` | `#888888` | Sub-labels, stat card unit labels, section title chips |
-| `text_subtle` | `#555555` | Hint text, fine print, disabled labels |
+| `TEXT_PRIMARY` | `#ffffff` | Bold headings, key values |
+| `TEXT_SECONDARY` | `#cccccc` | Body text, radio/checkbox labels, connected status text |
+| `TEXT_MUTED` | `#aaaaaa` | Standard labels, card section headers, slider labels |
+| `TEXT_DIM` | `#888888` | Sub-labels, unit labels, section chips, **disabled-button text** |
+| `TEXT_SUBTLE` | `#555555` | Hint text, fine print |
 
 ### Dividers
 
 | Token | Hex | Usage |
 |---|---|---|
-| `separator` | `#444444` | Horizontal rule dividers between sections |
-| `separator_dark` | `#333333` | Lighter dividers inside cards; top-bar pip |
+| `SEPARATOR` | `#444444` | Horizontal rule dividers between sections |
+| `SEPARATOR_DARK` | `#333333` | Lighter dividers inside cards; top-bar pip |
 
-### Special-purpose (semantic, not brand)
+### Data tags (not theme accents)
 
-| Token | Hex | Usage |
+| Token | Hex | Note |
 |---|---|---|
-| `green_action_bg` | `#1b5e20` | B-Roll Run / Search buttons (green = "go") |
-| `green_action_hover` | `#2e7d32` | Hover for green action buttons |
-| `purple_zoom_bg` | `#6a1b9a` | Auto Zooms "Apply Zooms" button |
-| `purple_zoom_hover` | `#7b1fa2` | Hover for zoom button |
-| `purple_stat` | `#ab47bc` | "Zoom Points Found" stat card value |
+| `SRC_PIXABAY` | `#A85A3E` | B-Roll results source tag (= `BRAND_DIM`) |
+| `SRC_PEXELS` | `#E8903A` | B-Roll results source tag (= `WARNING`) — two distinct hues so providers are distinguishable |
+
+> Subtitle render colors (`#FFFFFF`/`#000000`/`#FFFF00`/`#FF0000`) are **data** that flows
+> into ASS/Fusion output — they live in `src/subtitles/*` and the subtitle style preview,
+> not here. Do not theme them.
 
 ---
 
-## Source-tag colors (B-Roll results window)
+## CTk theme — widget-level source of truth
 
-| Provider | Hex | Note |
-|---|---|---|
-| Pixabay | `#A85A3E` | Brand dim — distinct from Pexels |
-| Pexels | `#E8903A` | Warning orange — distinct from Pixabay |
+`assets/clutter_theme.json` is a custom customtkinter theme loaded at startup
+(`src/ui/main_window.py:_apply_theme`, with a `"blue"` fallback if the file is missing).
+It makes **every built-in widget default to terracotta** — sliders, segmented buttons,
+checkmarks, radio buttons, progress bars, option menus, scrollbars, entry focus borders.
+
+Each value in the JSON is `[light, dark]`; the app forces dark mode, so the **second**
+element renders. The dark slots mirror `COLORS`:
+
+| CTk widget key | maps to |
+|---|---|
+| `CTkButton.fg_color` / `hover_color` | `BTN_PRIMARY_BG` / `BTN_PRIMARY_HOVER` |
+| `CTkSlider.button_color` / `progress_color` | `BRAND_PRIMARY` |
+| `CTkSegmentedButton.selected_color` | `BTN_PRIMARY_BG` |
+| `CTkCheckBox` / `CTkRadioButton.fg_color` | `BTN_PRIMARY_BG` |
+| `CTkProgressBar.progress_color` | `BRAND_PRIMARY` |
+| `CTk*.text_color_disabled` (dark) | `TEXT_DIM` (`#888888`) — legible disabled state |
+
+Because the theme already paints buttons terracotta, **neutral buttons must opt out**
+explicitly with `fg_color=BG_CARD, hover_color=BG_HOVER`. Keep the theme JSON and
+`COLORS` in sync — if you change a brand hex in `constants.py`, update the matching dark
+slot here.
 
 ---
 
 ## Do's
 
-- Use `brand_primary` (`#D97757`) for **any value the user is actively changing** (slider readouts, stat card numbers, progress bar fill).
-- Use `btn_primary_bg` / `btn_primary_hover` for the **one primary CTA** per section. Never have two primary-orange buttons side-by-side.
-- Use `warning` (`#E8903A`) for **non-blocking notices**: fallback to RMS, timing mismatch, BETA label. Reserve `error` (`#ff6b6b`) for failure states.
-- Keep `success` (`#66bb6a`) for **completion and import** actions — these are semantically green regardless of brand.
-- Keep `purple_zoom_bg` for Auto Zooms specifically — the distinct color makes it easy to identify which feature's button you're about to click.
+- Use `BRAND_PRIMARY` for **any value the user is actively changing** (slider readouts,
+  stat numbers, progress fill).
+- Use `BTN_PRIMARY_BG` for the **one primary CTA per action row**. In a row of buttons
+  (e.g. Analyze · Preview · Apply), only the final/primary action is terracotta; the
+  others opt out to `BG_CARD`. Never two terracotta CTAs side-by-side.
+- Use `WARNING` for **non-blocking notices**; reserve `ERROR` for failures.
+- Keep `SUCCESS` for completion/import and the connected status dot.
 
 ## Don'ts
 
-- Don't use `brand_primary` for body text or long-form labels — it's high-contrast and will cause visual fatigue.
-- Don't use `warning` (`#E8903A`) as a generic accent; it reads as "attention needed." Use `brand_primary` for informational accents.
-- Don't introduce new accent hues. The palette has three intentional accent families: orange (brand), green (action/success), purple (zooms). Adding a fourth creates visual noise.
-- Don't change `bg_darkest` / `bg_dark` — Resolve's own UI is dark; these neutrals blend with the host environment.
+- **Don't introduce a new accent hue.** Terracotta is the only accent family; status
+  green/red/amber are the only other colors. Adding a fourth (cyan, blue, purple…)
+  re-creates the dilution this palette was cleaned up to remove.
+- Don't use `BRAND_PRIMARY` for body text or long labels — high-contrast, causes fatigue.
+- Don't paint two primary buttons in the same row terracotta — neutralize the secondary
+  ones with `BG_CARD`.
+- Don't change `BG_DARKEST` / `BG_DARK` — Resolve's own UI is dark; these neutrals blend
+  with the host environment.

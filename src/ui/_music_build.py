@@ -74,7 +74,7 @@ def build(parent: Any) -> None:
     w["n_sections_slider"] = ctk.CTkSlider(sec_row, from_=1, to=5, number_of_steps=4)
     w["n_sections_slider"].set(3)
     w["n_sections_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
-    w["n_sections_lbl"] = ctk.CTkLabel(sec_row, text="3", text_color=COLORS.LEGACY_CYAN, width=28)
+    w["n_sections_lbl"] = ctk.CTkLabel(sec_row, text="3", text_color=COLORS.BRAND_PRIMARY, width=28)
     w["n_sections_lbl"].grid(row=0, column=2)
 
     # Music source toggle
@@ -116,7 +116,7 @@ def build(parent: Any) -> None:
     w["music_vol_slider"] = ctk.CTkSlider(vol_row, from_=10, to=100, number_of_steps=90)
     w["music_vol_slider"].set(35)
     w["music_vol_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
-    w["music_vol_lbl"] = ctk.CTkLabel(vol_row, text="35%", text_color=COLORS.LEGACY_CYAN, width=44)
+    w["music_vol_lbl"] = ctk.CTkLabel(vol_row, text="35%", text_color=COLORS.BRAND_PRIMARY, width=44)
     w["music_vol_lbl"].grid(row=0, column=2)
     ctk.CTkLabel(music_card, text="% of main track level — music is matched to dialogue then offset",
                  font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_MUTED, anchor="w").pack(
@@ -137,8 +137,8 @@ def build(parent: Any) -> None:
     w["run_music_btn"] = ctk.CTkButton(
         music_card,
         text="▶  Add Background Music",
-        fg_color=COLORS.BLUE_BTN_BG,
-        hover_color=COLORS.BLUE_BTN_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG,
+        hover_color=COLORS.BTN_PRIMARY_HOVER,
         height=32,
     )
     w["run_music_btn"].pack(fill="x", padx=10, pady=(8, 4))
@@ -239,8 +239,8 @@ def build(parent: Any) -> None:
     w["run_sfx_btn"] = ctk.CTkButton(
         sfx_card,
         text="▶  Auto-Place Sound Effects",
-        fg_color=COLORS.INDIGO_BTN_BG,
-        hover_color=COLORS.INDIGO_BTN_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG,
+        hover_color=COLORS.BTN_PRIMARY_HOVER,
         height=32,
     )
     w["run_sfx_btn"].pack(fill="x", padx=10, pady=(8, 4))

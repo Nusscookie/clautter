@@ -89,7 +89,8 @@ def build(parent: Any) -> None:
     btn_row.pack(fill="x", padx=10, pady=6)
     btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Cuts")
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Cuts",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER)
     w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
     w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
@@ -98,7 +99,7 @@ def build(parent: Any) -> None:
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
     w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Zooms",
-                                    fg_color=COLORS.PURPLE_ZOOM_BG, hover_color=COLORS.PURPLE_ZOOM_HOVER,
+                                    fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
@@ -119,7 +120,7 @@ def build(parent: Any) -> None:
     results_row.pack(fill="x", padx=10, pady=4)
     results_row.grid_columnconfigure((0, 1), weight=1)
 
-    w["found_count"] = _stat_card(results_row, "Zoom Points Found", "0", COLORS.PURPLE_STAT)
+    w["found_count"] = _stat_card(results_row, "Zoom Points Found", "0", COLORS.BRAND_PRIMARY)
     w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
     w["applied_count"] = _stat_card(results_row, "Zooms Applied", "0", COLORS.SUCCESS)
     w["applied_count"].grid(row=0, column=1, padx=(4, 0), sticky="ew")

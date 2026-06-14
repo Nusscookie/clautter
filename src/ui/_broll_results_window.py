@@ -240,7 +240,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
 
         download_btn = ctk.CTkButton(
             actions, text="Download", width=100,
-            fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
+            fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
         )
         download_btn.grid(row=0, column=2)
 

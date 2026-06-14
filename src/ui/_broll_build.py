@@ -28,8 +28,8 @@ def build(parent: Any) -> None:
         parent,
         values=["Manual", "Autonomous"],
         font=ctk.CTkFont(size=12),
-        selected_color=COLORS.GREEN_ACTION_BG,
-        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        selected_color=COLORS.BRAND_PRIMARY,
+        selected_hover_color=COLORS.BRAND_HOVER,
         unselected_color=COLORS.BG_CARD,
         unselected_hover_color=COLORS.BG_HOVER,
     )
@@ -73,7 +73,7 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
 
     w["suggest_local_btn"] = ctk.CTkButton(
         container, text="Suggest Local B-Roll",
-        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
         state="disabled",
     )
     w["suggest_local_btn"].pack(fill="x", padx=10, pady=(4, 2))
@@ -170,8 +170,8 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
         place_llm_row,
         values=["Off"],
         font=ctk.CTkFont(size=11),
-        selected_color=COLORS.GREEN_ACTION_BG,
-        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        selected_color=COLORS.BRAND_PRIMARY,
+        selected_hover_color=COLORS.BRAND_HOVER,
         unselected_color=COLORS.BG_CARD,
         unselected_hover_color=COLORS.BG_HOVER,
         width=180,
@@ -186,7 +186,7 @@ def _build_manual_content(container: Any, w: dict[str, Any]) -> None:
 
     w["place_btn"] = ctk.CTkButton(
         container, text="Auto Place on Timeline",
-        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
         state="disabled",
     )
     w["place_btn"].pack(fill="x", padx=10, pady=(4, 4))
@@ -285,8 +285,8 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
         llm_row,
         values=["Off"],  # real provider segments are set at setup() from configured keys
         font=ctk.CTkFont(size=11),
-        selected_color=COLORS.GREEN_ACTION_BG,
-        selected_hover_color=COLORS.GREEN_ACTION_HOVER,
+        selected_color=COLORS.BRAND_PRIMARY,
+        selected_hover_color=COLORS.BRAND_HOVER,
         unselected_color=COLORS.BG_CARD,
         unselected_hover_color=COLORS.BG_HOVER,
         width=180,
@@ -375,7 +375,7 @@ def _build_autonomous_card(container: Any, w: dict[str, Any]) -> None:
     w["auto_run_btn"] = ctk.CTkButton(
         card,
         text="▶  Run Autonomous B-Roll",
-        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
         font=ctk.CTkFont(size=13, weight="bold"),
         height=38,
         state="disabled",
@@ -479,7 +479,7 @@ def _build_online_card(parent: Any, w: dict[str, Any]) -> None:
     # Primary search button
     w["search_online_btn"] = ctk.CTkButton(
         card, text="Search Online for B-Roll",
-        fg_color=COLORS.GREEN_ACTION_BG, hover_color=COLORS.GREEN_ACTION_HOVER,
+        fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
     )
     w["search_online_btn"].pack(fill="x", padx=10, pady=(8, 4))
 

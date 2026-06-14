@@ -64,7 +64,7 @@ def add_clip_row(
     )
     cb.grid(row=0, column=0, padx=(6, 4), pady=6)
 
-    source_color = COLORS.BRAND_PRIMARY if source == "local" else COLORS.LEGACY_CYAN
+    source_color = COLORS.BRAND_PRIMARY if source == "local" else COLORS.BRAND_DIM
     source_tag = ctk.CTkLabel(
         row, text=source.upper(),
         font=ctk.CTkFont(size=9, weight="bold"),

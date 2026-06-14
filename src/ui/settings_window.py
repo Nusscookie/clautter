@@ -65,8 +65,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         self.resizable(True, True)
         self.configure(fg_color=COLORS.BG_DARKEST)
         self.grab_set()
-        # Defer icon so the window is fully realized on Windows before applying
-        self.after(100, lambda: apply_clutter_icon(self))
+        apply_clutter_icon(self)  # helper defers internally for Toplevels
         self._panels: dict[str, ctk.CTkFrame] = {}
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._active_tab = _TABS[0]
@@ -157,7 +156,7 @@ class _SettingsWindow(ctk.CTkToplevel):
                 panel.pack_forget()
         for name, btn in self._nav_buttons.items():
             if name == tab:
-                btn.configure(text_color=COLORS.LEGACY_CYAN, fg_color=COLORS.BG_CARD)
+                btn.configure(text_color=COLORS.BRAND_PRIMARY, fg_color=COLORS.BG_CARD)
             else:
                 btn.configure(text_color=COLORS.TEXT_MUTED, fg_color="transparent")
         self._active_tab = tab

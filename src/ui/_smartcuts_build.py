@@ -130,7 +130,8 @@ def build(parent: Any) -> None:
     btn_row.pack(fill="x", padx=10, pady=6)
     btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio")
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER)
     w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
     w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
