@@ -44,6 +44,7 @@ def apply_cuts(
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     target_timeline: Optional[Any] = None,
     detect_retakes: bool = False,
+    delete_retakes: bool = False,
     existing_retake_track: Optional[int] = None,
     silence_method: str = "vad",
     retake_method: str = "spacy",
@@ -59,7 +60,7 @@ def apply_cuts(
         clips:             List of TimelineItem objects (from video track 1).
         threshold_db:      Silence threshold (dBFS).
         min_duration_ms:   Minimum silence duration to remove (ms).
-        padding_ms:        Breathing room at each cut edge (ms).
+        padding_ms:        Total breathing room to preserve around each cut (ms). Split evenly per edge.
         progress_callback: Optional fn(current, total, message) for UI updates.
         target_timeline:   If set, append clips here instead of creating a new timeline.
 
@@ -120,15 +121,15 @@ def apply_cuts(
     if target_timeline is not None:
         dest_timeline = target_timeline
         project.SetCurrentTimeline(dest_timeline)
-        for _ttype in ("video", "audio"):
+        # Only clear Video Track 1 and Audio Track 1 — leave B-Roll, Subtitle, and all
+        # other named tracks untouched so existing work is preserved.
+        for _ttype, _track_idx in (("video", 1), ("audio", 1)):
             try:
-                _count = dest_timeline.GetTrackCount(_ttype)
-                for _i in range(1, _count + 1):
-                    _items = dest_timeline.GetItemListInTrack(_ttype, _i)
-                    if _items:
-                        dest_timeline.DeleteClips(_items)
+                _items = dest_timeline.GetItemListInTrack(_ttype, _track_idx)
+                if _items:
+                    dest_timeline.DeleteClips(_items)
             except Exception as _e:
-                log.warning("Could not clear %s tracks: %s", _ttype, _e)
+                log.warning("Could not clear %s track 1: %s", _ttype, _e)
     else:
         dest_timeline = media_pool.CreateEmptyTimeline(new_name)
         if dest_timeline is None:
@@ -145,7 +146,7 @@ def apply_cuts(
 
     tl_start = dest_timeline.GetStartFrame()
     track1_entries, retake_placements = _build_timeline_entries(
-        all_segment_records, black_item, fps, tl_start,
+        all_segment_records, black_item, fps, tl_start, delete_retakes=delete_retakes,
     )
 
     result = media_pool.AppendToTimeline(track1_entries)

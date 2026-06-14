@@ -42,11 +42,12 @@ def detect_silences(
         threshold_db:    Amplitude threshold in dBFS. Audio below this is considered silent.
                          Typical values: -40 (aggressive) to -25 (conservative).
         min_duration_ms: Minimum silence length to detect (milliseconds).
-        padding_ms:      Breathing room to leave at each end of the cut (milliseconds).
+        padding_ms:      Total breathing room to preserve around each cut (milliseconds).
+                         Split evenly: padding_ms/2 kept at each edge.
 
     Returns:
         Sorted list of SilenceRegion objects. Regions have padding already applied
-        (inner boundaries shrunk by padding_ms on each side).
+        (inner boundaries shrunk by padding_ms/2 on each side).
 
     Raises:
         RuntimeError if pydub is not installed.
@@ -92,11 +93,11 @@ def detect_silences(
         seek_step=10,  # 10ms resolution — fast enough for practical use
     )
 
+    half_pad = padding_ms / 2.0
     regions: list[SilenceRegion] = []
     for raw_start, raw_end in raw:
-        # Apply breathing room (shrink region from both ends)
-        inner_start = raw_start + padding_ms
-        inner_end = raw_end - padding_ms
+        inner_start = raw_start + half_pad
+        inner_end = raw_end - half_pad
 
         if inner_start >= inner_end:
             log.debug("Silence %d–%d ms consumed by padding, skipping", raw_start, raw_end)
@@ -124,6 +125,8 @@ def detect_silences_vad(
     vad_threshold: float = 0.5,
 ) -> list[SilenceRegion]:
     """Detect silent regions using Silero VAD (neural, handles noise/music/quiet speakers).
+
+    padding_ms is total breathing room; split evenly (padding_ms/2 per edge).
 
     Requires: pip install silero-vad onnxruntime
 
@@ -193,10 +196,11 @@ def detect_silences_vad(
     if total_ms - cursor >= min_duration_ms:
         silence_gaps.append((cursor, total_ms))
 
+    half_pad = padding_ms / 2.0
     regions: list[SilenceRegion] = []
     for raw_start, raw_end in silence_gaps:
-        inner_start = raw_start + padding_ms
-        inner_end = raw_end - padding_ms
+        inner_start = raw_start + half_pad
+        inner_end = raw_end - half_pad
         if inner_start >= inner_end:
             log.debug("VAD silence %d–%d ms consumed by padding, skipping", raw_start, raw_end)
             continue

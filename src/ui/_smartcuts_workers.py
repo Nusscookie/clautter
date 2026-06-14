@@ -140,12 +140,33 @@ def apply_thread(
         set_btn("apply_btn", False)
         set_btn("analyze_btn", False)
         set_progress(0, True)
+
+        # Warn if source timeline has content on tracks above Video 1 that will stay
+        # at original timecodes (cuts shift timing, so B-Roll/Subtitle will be out of sync).
+        _source_tl = _target_tl if _target_tl is not None else app.timeline
+        _other_track_warning = ""
+        if _source_tl:
+            try:
+                _vcount = _source_tl.GetTrackCount("video")
+                _has_other = any(
+                    bool(_source_tl.GetItemListInTrack("video", _ti))
+                    for _ti in range(2, _vcount + 1)
+                )
+                if _has_other:
+                    _other_track_warning = (
+                        "  Warning: B-Roll/Subtitle tracks kept as-is — "
+                        "re-sync them manually after cuts."
+                    )
+            except Exception:
+                pass
+
         if _target_tl is not None:
-            set_status(f"Appending cuts to '{_target_tl.GetName()}'...")
+            set_status(f"Applying cuts to '{_target_tl.GetName()}'...")
         else:
             set_status("Creating new timeline with silence removed...")
 
         _detect_retakes  = bool(w["retake_cb"].get())
+        _delete_retakes  = _detect_retakes and bool(w["delete_retakes_cb"].get())
         _silence_method  = str(app.settings.get("smartcuts_silence_method", "vad"))
         _retake_method   = str(app.settings.get("smartcuts_retake_method", "spacy"))
         _vad_threshold   = float(w["vad_threshold"].get())
@@ -165,6 +186,7 @@ def apply_thread(
             progress_callback=progress_cb,
             target_timeline=_target_tl,
             detect_retakes=_detect_retakes,
+            delete_retakes=_delete_retakes,
             existing_retake_track=_existing_retake_track,
             silence_method=_silence_method,
             retake_method=_retake_method,
@@ -177,15 +199,17 @@ def apply_thread(
         app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
         app.settings.add_stat("total_edits", 1)
 
-        retake_note = (
-            f", {result.retakes_found} retake(s) isolated on track {result.retake_track_index}"
-            if result.retakes_found else ""
-        )
+        if _delete_retakes and result.retakes_found:
+            retake_note = f", {result.retakes_found} retake(s) deleted"
+        elif result.retakes_found:
+            retake_note = f", {result.retakes_found} retake(s) isolated on track {result.retake_track_index}"
+        else:
+            retake_note = ""
         set_progress(100)
         set_status(
-            f"Done! New timeline: '{result.new_timeline_name}' "
-            f"({result.time_saved_sec:.1f}s removed{retake_note})",
-            COLORS.SUCCESS,
+            f"Done! '{result.new_timeline_name}' "
+            f"({result.time_saved_sec:.1f}s removed{retake_note}).{_other_track_warning}",
+            COLORS.WARNING if _other_track_warning else COLORS.SUCCESS,
         )
         ui(lambda: w["new_timeline_lbl"].configure(
             text=f"Created: \"{result.new_timeline_name}\""))

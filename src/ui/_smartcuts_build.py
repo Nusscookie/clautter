@@ -101,19 +101,30 @@ def build(parent: Any) -> None:
     # Not packed here — setup() shows correct row based on saved method
 
     w["min_dur"]   = _labeled_entry(card, "Min Silence Duration", "350", "ms")
-    w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
+    w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms total")
 
     ctk.CTkFrame(card, height=1, fg_color=COLORS.SEPARATOR_DARK, corner_radius=0).pack(
         fill="x", padx=10, pady=(6, 2))
     w["retake_cb"] = ctk.CTkCheckBox(
         card,
-        text="Detect & isolate retakes  (uses Whisper — adds ~30 s)",
-        font=ctk.CTkFont(size=11),
-        text_color=COLORS.TEXT_MUTED,
+        text="Detect & isolate retakes",
+        font=ctk.CTkFont(size=13),
+        text_color=COLORS.TEXT_PRIMARY,
         checkbox_width=16,
         checkbox_height=16,
     )
-    w["retake_cb"].pack(anchor="w", padx=10, pady=(2, 10))
+    w["retake_cb"].pack(anchor="w", padx=10, pady=(4, 2))
+
+    w["delete_retakes_cb"] = ctk.CTkCheckBox(
+        card,
+        text="Delete retakes (remove entirely, don't isolate)",
+        font=ctk.CTkFont(size=13),
+        text_color=COLORS.TEXT_PRIMARY,
+        checkbox_width=16,
+        checkbox_height=16,
+        state="disabled",
+    )
+    w["delete_retakes_cb"].pack(anchor="w", padx=10, pady=(0, 10))
 
     btn_row = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row.pack(fill="x", padx=10, pady=6)

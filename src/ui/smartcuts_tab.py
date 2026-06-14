@@ -65,6 +65,8 @@ def setup(frame: Any, app: Any) -> None:
         w["vad_threshold"].insert(0, str(p["vad_threshold"]))
         w["min_dur"].delete(0, "end")
         w["min_dur"].insert(0, str(p["min_silence_ms"]))
+        w["padding"].delete(0, "end")
+        w["padding"].insert(0, str(p["padding_ms"]))
         app.settings.set("default_pace", level)
         # Settings changed — previous results are stale
         if _state.get("total_silences", 0) > 0 or _state.get("clips"):

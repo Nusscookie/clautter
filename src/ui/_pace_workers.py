@@ -49,7 +49,7 @@ def apply_thread(
             clips=clips,
             threshold_db=float(p["threshold_db"]),
             min_duration_ms=float(p["min_silence_ms"]),
-            padding_ms=120.0,
+            padding_ms=float(p["padding_ms"]),
             progress_callback=progress_cb,
             target_timeline=_target_tl,
         )
