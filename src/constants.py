@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-APP_VERSION = "v0.1.0"
+APP_VERSION = "v0.1.1"
 
 
 class COLORS:
