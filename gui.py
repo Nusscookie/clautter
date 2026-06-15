@@ -68,6 +68,17 @@ def _connect_with_timeout(app: Any, timeout: float = 5.0) -> None:
         log.warning("Resolve not connected — UI will show disconnected state")
 
 
+def _startup_update_check(app: Any, root: Any) -> None:
+    """Background thread: check GitHub for newer release, notify app if found."""
+    from src.utils import updater
+    latest = updater.fetch_latest_release()
+    if latest and updater.is_update_available(latest):
+        tag = latest["tag_name"]
+        html_url = latest.get("html_url", "")
+        log.info("Update available: %s", tag)
+        root.after(0, lambda: app.notify_update_available(tag, html_url))
+
+
 def main() -> None:
     log.info("Clautter GUI starting")
 
@@ -87,6 +98,11 @@ def main() -> None:
         log.error("MainWindow() failed: %s", e)
         traceback.print_exc()
         return
+
+    # Delay update check 2s so the window is fully rendered before banner appears
+    window._root.after(2000, lambda: threading.Thread(
+        target=_startup_update_check, args=(app, window._root), daemon=True
+    ).start())
 
     try:
         window.run()

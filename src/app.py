@@ -29,6 +29,11 @@ class ClautterApp:
         # update live when Settings → Apply is pressed (no app restart needed).
         self._settings_listeners: list[Callable[[], None]] = []
 
+        # Update-available listeners — called when startup check finds a newer tag.
+        self._update_listeners: list[Callable[[str, str], None]] = []
+        self.pending_update_tag: str = ""
+        self.pending_update_url: str = ""
+
         # Shared transcript — populated by Subtitles tab, consumed by Zooms + B-Roll
         self.transcript: list[dict] = []  # list of {word, start_sec, end_sec}
 
@@ -56,6 +61,27 @@ class ClautterApp:
                 cb()
             except Exception as e:
                 log.error("settings listener failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # Update notification
+    # ------------------------------------------------------------------
+
+    def on_update_available(self, cb: Callable[[str, str], None]) -> None:
+        """Register callback fired when startup check finds a newer release.
+
+        ``cb(tag_name, html_url)`` runs on the Tk main thread via frame.after(0).
+        """
+        self._update_listeners.append(cb)
+
+    def notify_update_available(self, tag: str, html_url: str) -> None:
+        """Called from startup background thread result (via frame.after(0))."""
+        self.pending_update_tag = tag
+        self.pending_update_url = html_url
+        for cb in list(self._update_listeners):
+            try:
+                cb(tag, html_url)
+            except Exception as e:
+                log.error("update listener failed: %s", e)
 
     # ------------------------------------------------------------------
     # Connection

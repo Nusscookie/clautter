@@ -5,7 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from src.constants import COLORS, SETTINGS_KEYS
+from src.constants import APP_VERSION, COLORS, SETTINGS_KEYS
 from src.ui.icon_helper import apply_clautter_icon
 from src.ui.settings_window_widgets import (
     _key_row,
@@ -195,11 +195,103 @@ class _SettingsWindow(ctk.CTkToplevel):
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 12))
 
+        ctk.CTkFrame(panel, fg_color=COLORS.SEPARATOR, height=1).pack(fill="x", padx=12, pady=(0, 10))
+
+        # ── Update row ──
+        update_row = ctk.CTkFrame(panel, fg_color="transparent")
+        update_row.pack(fill="x", padx=12, pady=(0, 4))
+
+        ctk.CTkLabel(
+            update_row, text="Version",
+            font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED,
+            width=130, anchor="w",
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            update_row, text=APP_VERSION,
+            font=ctk.CTkFont(size=11, weight="bold"), text_color=COLORS.TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 16))
+
+        self._update_btn = ctk.CTkButton(
+            update_row, text="Check for updates",
+            font=ctk.CTkFont(size=11),
+            fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+            text_color=COLORS.TEXT_MUTED, width=140, height=26,
+            command=self._on_check_update,
+        )
+        self._update_btn.pack(side="left")
+
+        self._update_status = ctk.CTkLabel(
+            panel, text="",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
+            anchor="w",
+        )
+        self._update_status.pack(fill="x", padx=12, pady=(0, 12))
+
         ctk.CTkFrame(panel, fg_color="transparent", height=4).pack()
         self._panels["General"] = panel
 
     def _on_console_log_toggle(self) -> None:
         self._app.settings.set("show_console_log", self._console_log_var.get())
+
+    def _on_check_update(self) -> None:
+        import threading
+        from src.utils import updater
+
+        self._update_btn.configure(state="disabled", text="Checking…")
+        self._update_status.configure(text="", text_color=COLORS.TEXT_SUBTLE)
+
+        def _worker() -> None:
+            latest = updater.fetch_latest_release()
+            if latest is None:
+                self.after(0, lambda: self._set_update_status(
+                    "Could not reach GitHub. Check your connection.", COLORS.ERROR
+                ))
+                self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+                return
+
+            if latest is updater._NO_RELEASES or not updater.is_update_available(latest):
+                self.after(0, lambda: self._set_update_status("Up to date.", COLORS.SUCCESS))
+                self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+                return
+
+            tag = latest["tag_name"]
+            html_url = latest.get("html_url", "")
+            self.after(0, lambda: self._prompt_update(tag, html_url))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _set_update_status(self, msg: str, color: str) -> None:
+        self._update_status.configure(text=msg, text_color=color)
+
+    def _prompt_update(self, tag: str, html_url: str) -> None:
+        import tkinter.messagebox as mb
+        from src.utils import updater
+
+        self._update_btn.configure(state="normal", text="Check for updates")
+        self._set_update_status(f"{tag} available.", COLORS.WARNING)
+
+        confirmed = mb.askyesno(
+            "Update available",
+            f"Update to {tag}?\n\nThis will run git reset --hard to that tag.\n"
+            "Restart Clautter after the update.",
+            parent=self,
+        )
+        if not confirmed:
+            return
+
+        self._set_update_status("Updating…", COLORS.TEXT_MUTED)
+        self._update_btn.configure(state="disabled", text="Updating…")
+
+        import threading
+
+        def _do_update() -> None:
+            ok, msg = updater.run_update(tag)
+            color = COLORS.SUCCESS if ok else COLORS.ERROR
+            self.after(0, lambda: self._set_update_status(msg, color))
+            self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+
+        threading.Thread(target=_do_update, daemon=True).start()
 
     def _build_api_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+APP_VERSION = "v0.1.0"
+
 
 class COLORS:
     """Brand + UI palette. Mirrors ``design/palette.md`` — keep in sync.

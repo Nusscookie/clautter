@@ -55,6 +55,18 @@ class MainWindow:
         _apply_theme()
         self._root = ctk.CTk()
 
+    def _on_update_available(self, tag: str, html_url: str) -> None:
+        self._update_banner_lbl.configure(
+            text=f"  {tag} available — update in Settings → General"
+        )
+        if not self._update_banner_visible:
+            self._update_banner.pack(fill="x", side="top")
+            self._update_banner_visible = True
+
+    def _dismiss_update_banner(self) -> None:
+        self._update_banner.pack_forget()
+        self._update_banner_visible = False
+
     def run(self) -> None:
         try:
             self._build()
@@ -116,7 +128,23 @@ class MainWindow:
             command=lambda: open_settings(self._app),
         ).pack(side="right", padx=(0, 6), pady=3)
 
-        # ── Project-wide BETA banner ──
+        # ── Update banner (hidden until update check fires) ──
+        self._update_banner = ctk.CTkFrame(root, fg_color=COLORS.BG_WARM_BANNER, corner_radius=0, height=32)
+        self._update_banner_lbl = ctk.CTkLabel(
+            self._update_banner, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=COLORS.WARNING,
+        )
+        self._update_banner_lbl.pack(side="left", padx=(14, 6), pady=6)
+        ctk.CTkButton(
+            self._update_banner, text="✕",
+            font=ctk.CTkFont(size=11), width=24, height=24,
+            fg_color="transparent", hover_color=COLORS.BG_CARD,
+            text_color=COLORS.TEXT_DIM,
+            command=self._dismiss_update_banner,
+        ).pack(side="right", padx=6, pady=4)
+
+        self._app.on_update_available(self._on_update_available)
 
         # ── Tab view ──
         tabview = ctk.CTkTabview(root, anchor="nw", fg_color=COLORS.BG_MID)
@@ -141,6 +169,8 @@ class MainWindow:
                     text=f"Tab load error: {e}",
                     text_color=COLORS.ERROR,
                 ).pack(padx=12, pady=12)
+
+        self._update_banner_visible = False
 
         if self._app.settings.get("show_console_log", True):
             self._console: ConsoleWindow | None = None
