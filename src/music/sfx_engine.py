@@ -134,6 +134,25 @@ def collect_sfx_events(
     return deduped
 
 
+def _get_timeline_duration_sec(app: Any) -> float | None:
+    """Return timeline total duration in seconds, or None if unavailable."""
+    try:
+        resolve = getattr(app, "resolve", None)
+        if resolve is None:
+            return None
+        project  = resolve.GetProjectManager().GetCurrentProject()
+        timeline = project.GetCurrentTimeline() if project else None
+        if timeline is None:
+            return None
+        raw_fps = timeline.GetSetting("timelineFrameRate") or "25"
+        fps = float(str(raw_fps).split()[0])
+        duration_frames = timeline.GetEndFrame() - timeline.GetStartFrame()
+        return max(0.0, duration_frames / fps)
+    except Exception as e:
+        log.warning("[sfx_engine] could not read timeline duration: %s", e)
+        return None
+
+
 def run_sfx_pipeline(
     app: Any,
     events: list[SfxEvent],
@@ -168,6 +187,10 @@ def run_sfx_pipeline(
     dl_path = Path(download_folder)
     dl_path.mkdir(parents=True, exist_ok=True)
     results: list[Any] = []
+
+    timeline_duration_sec = _get_timeline_duration_sec(app)
+    if timeline_duration_sec is not None:
+        log.info("[sfx_engine] timeline duration: %.1fs — SFX clips will be capped", timeline_duration_sec)
 
     for idx, event in enumerate(events):
         progress = (idx + 1) / max(len(events), 1)
@@ -204,7 +227,14 @@ def run_sfx_pipeline(
         local_path = get_or_process_sfx(local_path, dl_path / "processed", SFX_GAIN_DB)
 
         on_progress(f"SFX: placing at {event.position_sec:.1f}s…", progress * 0.9)
-        result = place_audio_clip(app, local_path, event.position_sec, track_name=TRACKS.SFX)
+        sfx_duration = 0.0
+        if timeline_duration_sec is not None:
+            remaining = timeline_duration_sec - event.position_sec
+            if remaining <= 0.0:
+                log.info("[sfx_engine] skip SFX at %.1fs — past timeline end", event.position_sec)
+                continue
+            sfx_duration = remaining
+        result = place_audio_clip(app, local_path, event.position_sec, sfx_duration, track_name=TRACKS.SFX)
         results.append(result)
         if not result.placed:
             log.warning("[sfx_engine] placement failed: %s", result.reason)

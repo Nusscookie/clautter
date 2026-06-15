@@ -159,6 +159,24 @@ def place_audio_clip(
     except Exception:
         tl_start = 0
 
+    # Resolve clip frame count (source duration cap — endFrame must not exceed this)
+    clip_frames: int | None = None
+    try:
+        props = mpi.GetClipProperty() or {}
+        raw = props.get("Frames") or ""
+        if raw:
+            clip_frames = int(str(raw).split()[0])
+    except Exception:
+        pass
+    if clip_frames is None:
+        # Audio files often have no "Frames" entry — derive from pydub
+        try:
+            from pydub import AudioSegment
+            seg = AudioSegment.from_file(clip_path)
+            clip_frames = max(1, _sec_to_frame(len(seg) / 1000.0, fps))
+        except Exception:
+            pass
+
     record_frame   = tl_start + _sec_to_frame(position_sec, fps)
     audio_track_idx = _find_or_create_audio_track(timeline, track_name)
 
@@ -170,7 +188,14 @@ def place_audio_clip(
         "trackIndex":    audio_track_idx,
     }
     if duration_sec > 0.0:
-        clip_info["endFrame"] = max(1, _sec_to_frame(duration_sec, fps))
+        want_frames = max(1, _sec_to_frame(duration_sec, fps))
+        # Cap to clip's actual length so Resolve doesn't loop/stretch a short clip
+        if clip_frames is not None:
+            want_frames = min(want_frames, clip_frames)
+        clip_info["endFrame"] = want_frames
+    elif clip_frames is not None:
+        # No explicit trim requested — still set endFrame to prevent any Resolve looping
+        clip_info["endFrame"] = clip_frames
 
     log.debug(
         "[audio_placer] AppendToTimeline: %s → audio track %d '%s', "

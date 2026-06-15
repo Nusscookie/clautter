@@ -167,15 +167,6 @@ def setup(frame: Any, app: Any) -> None:
         w["music_vol_lbl"].configure(text=f"{saved_vol}%"),
     ))
 
-    saved_fade_enabled = bool(app.settings.get("music_fade_enabled", True))
-    _ui(lambda: w["music_fade_var"].set(1 if saved_fade_enabled else 0))
-
-    saved_fade_dur = str(app.settings.get("music_fade_duration_sec", "2") or "2")
-    _ui(lambda: (
-        w["music_fade_dur_entry"].delete(0, "end"),
-        w["music_fade_dur_entry"].insert(0, saved_fade_dur),
-    ))
-
     saved_sfx_folder = str(app.settings.get("sfx_local_folder", "") or "")
     if saved_sfx_folder:
         _ui(lambda: _set_readonly_entry(w["sfx_folder_entry"], saved_sfx_folder))
@@ -307,18 +298,9 @@ def setup(frame: Any, app: Any) -> None:
         music_source     = w["music_source"].get().lower()
         local_music      = _state["local_music_folder"] or None
         music_volume_pct = int(w["music_vol_slider"].get())
-        fade_enabled     = bool(w["music_fade_var"].get())
-        try:
-            fade_dur_sec = max(0.1, min(10.0, float(w["music_fade_dur_entry"].get().strip() or "2")))
-        except ValueError:
-            fade_dur_sec = 2.0
-        fade_in_ms  = int(fade_dur_sec * 1000) if fade_enabled else 0
-        fade_out_ms = int(fade_dur_sec * 1000) if fade_enabled else 0
 
         app.settings.set("music_n_sections",        n_sections)
         app.settings.set("music_volume_pct",        music_volume_pct)
-        app.settings.set("music_fade_enabled",      fade_enabled)
-        app.settings.set("music_fade_duration_sec", str(fade_dur_sec))
 
         keyword_method = str(app.settings.get("broll_keyword_method", "spacy") or "spacy")
 
@@ -330,7 +312,7 @@ def setup(frame: Any, app: Any) -> None:
                 music_mode=music_mode, mood_mode=mood_mode, mood_provider=mood_provider,
                 n_sections=n_sections,
                 music_source=music_source, local_music_folder=local_music,
-                music_volume_pct=music_volume_pct, fade_in_ms=fade_in_ms, fade_out_ms=fade_out_ms,
+                music_volume_pct=music_volume_pct,
                 keyword_method=keyword_method,
                 set_status=set_status, set_progress=set_progress, _ui=_ui, w=w,
             ),

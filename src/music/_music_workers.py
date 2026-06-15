@@ -92,8 +92,6 @@ def music_thread(
     music_source: str = "jamendo",
     local_music_folder: str | None = None,
     music_volume_pct: int = 35,
-    fade_in_ms: int = 2000,
-    fade_out_ms: int = 2000,
     keyword_method: str = "spacy",
 ) -> None:
     """Analyze mood, find music (local / Jamendo / both), place on 'Music' audio track."""
@@ -182,7 +180,7 @@ def music_thread(
             from src.music.audio_processor import get_or_process_music
             processed_dir = Path(download_folder) / "processed"
             audio_path = get_or_process_music(
-                audio_path, processed_dir, music_volume_pct, fade_in_ms, fade_out_ms,
+                audio_path, processed_dir, music_volume_pct,
                 target_db=main_track_rms,
             )
 

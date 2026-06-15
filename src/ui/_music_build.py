@@ -122,17 +122,6 @@ def build(parent: Any) -> None:
                  font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_MUTED, anchor="w").pack(
         fill="x", padx=10, pady=(0, 2))
 
-    # Fade in & out
-    fade_row = ctk.CTkFrame(music_card, fg_color="transparent")
-    fade_row.pack(fill="x", padx=10, pady=(2, 4))
-    w["music_fade_var"] = ctk.IntVar(value=1)
-    ctk.CTkCheckBox(fade_row, text="Fade in & out", variable=w["music_fade_var"]).pack(
-        side="left", padx=(0, 14))
-    w["music_fade_dur_entry"] = ctk.CTkEntry(fade_row, width=44, justify="center")
-    w["music_fade_dur_entry"].insert(0, "2")
-    w["music_fade_dur_entry"].pack(side="left", padx=(0, 4))
-    ctk.CTkLabel(fade_row, text="s", text_color=COLORS.TEXT_MUTED).pack(side="left")
-
     # Run Music button
     w["run_music_btn"] = ctk.CTkButton(
         music_card,

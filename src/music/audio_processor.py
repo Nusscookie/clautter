@@ -1,7 +1,7 @@
 """Pre-process audio files with pydub before placing in DaVinci Resolve.
 
-DaVinci Resolve's Python API has no per-clip volume or fade controls for audio
-TimelineItems, so we bake volume reduction and fades into the file itself.
+DaVinci Resolve's Python API has no per-clip volume controls for audio
+TimelineItems, so we bake volume reduction into the file itself.
 Processed copies are cached in a 'processed/' subfolder of the download folder.
 """
 
@@ -33,11 +33,9 @@ def process_audio(
     input_path: str,
     output_path: str,
     volume_pct: int,
-    fade_in_ms: int,
-    fade_out_ms: int,
     target_db: float | None = None,
 ) -> str:
-    """Load audio, apply volume and fades, export as MP3.
+    """Load audio, apply volume, export as MP3.
 
     Args:
         input_path:  Source audio file (any pydub-supported format).
@@ -45,8 +43,6 @@ def process_audio(
         volume_pct:  When target_db is set: offset in % relative to main track
                      (100% = match main track RMS, 35% ≈ -9 dB below it).
                      When target_db is None: absolute % of music file's own peak.
-        fade_in_ms:  Fade-in duration in milliseconds; 0 = no fade.
-        fade_out_ms: Fade-out duration in milliseconds; 0 = no fade.
         target_db:   Main track dBFS level. When provided, music is first
                      normalised to this level, then volume_pct applied as offset.
 
@@ -65,16 +61,6 @@ def process_audio(
         # Legacy absolute: volume_pct % of music file's own peak
         gain_db = 10.0 * math.log10(max(volume_pct, 1) / 100.0)
     audio = audio + gain_db
-
-    clip_len = len(audio)
-    if fade_in_ms > 0:
-        eff_fi = min(fade_in_ms, clip_len // 3)
-        if eff_fi > 0:
-            audio = audio.fade_in(eff_fi)
-    if fade_out_ms > 0:
-        eff_fo = min(fade_out_ms, clip_len // 3)
-        if eff_fo > 0:
-            audio = audio.fade_out(eff_fo)
 
     audio.export(output_path, format="mp3")
     return output_path
@@ -95,11 +81,10 @@ def apply_sfx_gain(
 
 
 def _music_cache_path(input_path: str, processed_dir: Path, volume_pct: int,
-                      fade_in_ms: int, fade_out_ms: int,
                       target_db: float | None = None) -> Path:
     stem = Path(input_path).stem
     rms_tag = f"rms{int(target_db)}" if target_db is not None else "abs"
-    return processed_dir / f"{stem}_v{volume_pct}_{rms_tag}_fi{fade_in_ms}_fo{fade_out_ms}.mp3"
+    return processed_dir / f"{stem}_v{volume_pct}_{rms_tag}.mp3"
 
 
 def _sfx_cache_path(input_path: str, processed_dir: Path, gain_db: float) -> Path:
@@ -112,8 +97,6 @@ def get_or_process_music(
     input_path: str,
     processed_dir: Union[Path, str],
     volume_pct: int,
-    fade_in_ms: int,
-    fade_out_ms: int,
     target_db: float | None = None,
 ) -> str:
     """Return path to a processed music copy, creating it if necessary.
@@ -121,8 +104,7 @@ def get_or_process_music(
     Falls back to returning input_path unchanged if pydub fails.
     """
     processed_dir = Path(processed_dir)
-    out_path = _music_cache_path(input_path, processed_dir, volume_pct, fade_in_ms, fade_out_ms,
-                                 target_db)
+    out_path = _music_cache_path(input_path, processed_dir, volume_pct, target_db)
 
     if out_path.exists():
         log.debug("[audio_processor] cache hit: %s", out_path.name)
@@ -130,7 +112,7 @@ def get_or_process_music(
 
     processed_dir.mkdir(parents=True, exist_ok=True)
     try:
-        process_audio(input_path, str(out_path), volume_pct, fade_in_ms, fade_out_ms, target_db)
+        process_audio(input_path, str(out_path), volume_pct, target_db)
         log.info("[audio_processor] processed music → %s", out_path.name)
         return str(out_path)
     except Exception as e:
