@@ -90,7 +90,7 @@ class ResolveProxy:
 
 
 def read_bridge_file() -> Optional[ResolveHTTP]:
-    """Read ``~/.clutter/bridge.json`` and return a connected :class:`ResolveHTTP`.
+    """Read ``~/.clautter/bridge.json`` and return a connected :class:`ResolveHTTP`.
 
     Returns ``None`` if the file is missing, malformed, or the server is not
     reachable. Caller is expected to fall back to other connect strategies.

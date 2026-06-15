@@ -8,6 +8,7 @@ from src.subtitles.fusion_style import apply_fusion_text_style
 from src.subtitles.fusion_template import bootstrap_textplus_template, find_fusion_title_template
 from src.subtitles.presets import PRESETS
 from src.utils.logger import get_logger
+from src.utils.resolve_utils import ensure_video_track_order
 
 log = get_logger(__name__)
 
@@ -87,17 +88,25 @@ def place_fusion_titles(
             subtitle_track = subtitle_track_index
             log.info("place_fusion_titles: reusing existing video track %d", subtitle_track)
         else:
-            existing_tracks = timeline.GetTrackCount("video")
-            timeline.AddTrack("video")
-            subtitle_track = existing_tracks + 1
-            try:
-                timeline.SetTrackName("video", subtitle_track, "Subtitle")
-            except Exception as e:
-                log.debug("SetTrackName failed: %s", e)
-            log.info("place_fusion_titles: subtitle clips on new video track %d", subtitle_track)
+            # Ensure B-Roll track exists first so Subtitle always lands above it.
+            ordered = ensure_video_track_order(timeline)
+            subtitle_track = ordered.get("Subtitle", -1)
+            if subtitle_track <= 0:
+                log.warning("place_fusion_titles: could not resolve Subtitle track")
+                return False
+            log.info("place_fusion_titles: subtitle clips on video track %d", subtitle_track)
     except Exception as e:
-        log.warning("place_fusion_titles: AddTrack failed: %s", e)
+        log.warning("place_fusion_titles: track setup failed: %s", e)
         return False
+
+    # Clear any existing subtitle clips so re-runs don't stack on top of old ones.
+    try:
+        existing = timeline.GetItemListInTrack("video", subtitle_track)
+        if existing:
+            timeline.DeleteClips(existing)
+            log.info("place_fusion_titles: cleared %d existing clip(s) from subtitle track %d", len(existing), subtitle_track)
+    except Exception as e:
+        log.warning("place_fusion_titles: could not clear subtitle track: %s", e)
 
     clip_list = []
     for block in blocks:

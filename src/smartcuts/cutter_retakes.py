@@ -18,6 +18,7 @@ def _build_timeline_entries(
     black_item: Any | None,
     fps: float,
     tl_start: int,
+    delete_retakes: bool = False,
 ) -> tuple[list[dict], list[tuple[int, int, Any, int]]]:
     """Walk segments and build Track 1 entries + retake placements.
 
@@ -44,7 +45,7 @@ def _build_timeline_entries(
             continue
 
         # One or more retake sub-ranges inside this clip. Split the clip at each:
-        # kept speech → Track 1, retake spans → black gap on Track 1 + Track 2.
+        # kept speech → Track 1, retake spans → excised (delete_retakes) or black gap + Track 2.
         regions = _merge_regions(s, fps)
         cur = cursor
         prev_frame = s.start_frame  # next kept sub-clip starts here
@@ -61,22 +62,26 @@ def _build_timeline_entries(
                 cur += retake_sf - prev_frame
 
             retake_dur = retake_ef - retake_sf + 1
-            if black_item is not None:
-                track1_entries.append({
-                    "mediaPoolItem": black_item,
-                    "mediaType":     1,
-                    "startFrame":    0,
-                    "endFrame":      retake_dur,
-                    "recordFrame":   cur,
-                    "trackIndex":    1,
-                })
+            if delete_retakes:
+                # Excise retake entirely — no placeholder, no Track 2 placement.
+                log.debug("Deleting retake at source frames %d–%d (%.2fs)", retake_sf, retake_ef, retake_dur / fps)
             else:
-                log.warning(
-                    "No black Solid Color — retake at recordFrame=%d (%.2fs) omitted "
-                    "from Track 1; drag it manually from Track 2.", cur, retake_dur / fps,
-                )
-            retake_placements.append((retake_sf, retake_ef, s.media_item, cur))
-            cur += retake_dur
+                if black_item is not None:
+                    track1_entries.append({
+                        "mediaPoolItem": black_item,
+                        "mediaType":     1,
+                        "startFrame":    0,
+                        "endFrame":      retake_dur,
+                        "recordFrame":   cur,
+                        "trackIndex":    1,
+                    })
+                else:
+                    log.warning(
+                        "No black Solid Color — retake at recordFrame=%d (%.2fs) omitted "
+                        "from Track 1; drag it manually from Track 2.", cur, retake_dur / fps,
+                    )
+                retake_placements.append((retake_sf, retake_ef, s.media_item, cur))
+                cur += retake_dur
             prev_frame = retake_ef + 1
 
         if prev_frame <= s.end_frame:

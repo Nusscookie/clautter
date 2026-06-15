@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -32,7 +33,7 @@ def analyze_thread(
         app.refresh_timeline()
         clips = app.get_video_clips(1)
         if not clips:
-            set_status("No clips found on Video Track 1.", "#ff6b6b")
+            set_status("No clips found on Video Track 1.", COLORS.ERROR)
             set_progress(0, False)
             set_btn("analyze_btn", True)
             return
@@ -71,7 +72,7 @@ def analyze_thread(
             except RuntimeError as e:
                 if silence_method == "vad" and not _vad_fallback_warned:
                     _vad_fallback_warned = True
-                    set_status("Silero VAD unavailable — falling back to pydub RMS", "#E8903A")
+                    set_status("Silero VAD unavailable — falling back to pydub RMS", COLORS.WARNING)
                     silence_method = "rms"
                     state["silence_method"] = "rms"
                 try:
@@ -105,17 +106,17 @@ def analyze_thread(
             set_status(
                 f"Found {total_silences} silence(s) totaling "
                 f"{state['total_time_saved']:.1f}s. Click Apply Cuts.",
-                "#66bb6a",
+                COLORS.SUCCESS,
             )
             set_btn("apply_btn", True)
             set_btn("preview_btn", True)
         else:
-            set_status("No significant silences found. Try lowering the threshold.", "#E8903A")
+            set_status("No significant silences found. Try lowering the threshold.", COLORS.WARNING)
         set_progress(0, False)
 
     except Exception as e:
         log.error("Analyze thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("analyze_btn", True)
@@ -139,12 +140,33 @@ def apply_thread(
         set_btn("apply_btn", False)
         set_btn("analyze_btn", False)
         set_progress(0, True)
+
+        # Warn if source timeline has content on tracks above Video 1 that will stay
+        # at original timecodes (cuts shift timing, so B-Roll/Subtitle will be out of sync).
+        _source_tl = _target_tl if _target_tl is not None else app.timeline
+        _other_track_warning = ""
+        if _source_tl:
+            try:
+                _vcount = _source_tl.GetTrackCount("video")
+                _has_other = any(
+                    bool(_source_tl.GetItemListInTrack("video", _ti))
+                    for _ti in range(2, _vcount + 1)
+                )
+                if _has_other:
+                    _other_track_warning = (
+                        "  Warning: B-Roll/Subtitle tracks kept as-is — "
+                        "re-sync them manually after cuts."
+                    )
+            except Exception:
+                pass
+
         if _target_tl is not None:
-            set_status(f"Appending cuts to '{_target_tl.GetName()}'...")
+            set_status(f"Applying cuts to '{_target_tl.GetName()}'...")
         else:
             set_status("Creating new timeline with silence removed...")
 
         _detect_retakes  = bool(w["retake_cb"].get())
+        _delete_retakes  = _detect_retakes and bool(w["delete_retakes_cb"].get())
         _silence_method  = str(app.settings.get("smartcuts_silence_method", "vad"))
         _retake_method   = str(app.settings.get("smartcuts_retake_method", "spacy"))
         _vad_threshold   = float(w["vad_threshold"].get())
@@ -164,6 +186,7 @@ def apply_thread(
             progress_callback=progress_cb,
             target_timeline=_target_tl,
             detect_retakes=_detect_retakes,
+            delete_retakes=_delete_retakes,
             existing_retake_track=_existing_retake_track,
             silence_method=_silence_method,
             retake_method=_retake_method,
@@ -176,15 +199,17 @@ def apply_thread(
         app.settings.add_stat("total_time_saved_sec", result.time_saved_sec)
         app.settings.add_stat("total_edits", 1)
 
-        retake_note = (
-            f", {result.retakes_found} retake(s) isolated on track {result.retake_track_index}"
-            if result.retakes_found else ""
-        )
+        if _delete_retakes and result.retakes_found:
+            retake_note = f", {result.retakes_found} retake(s) deleted"
+        elif result.retakes_found:
+            retake_note = f", {result.retakes_found} retake(s) isolated on track {result.retake_track_index}"
+        else:
+            retake_note = ""
         set_progress(100)
         set_status(
-            f"Done! New timeline: '{result.new_timeline_name}' "
-            f"({result.time_saved_sec:.1f}s removed{retake_note})",
-            "#66bb6a",
+            f"Done! '{result.new_timeline_name}' "
+            f"({result.time_saved_sec:.1f}s removed{retake_note}).{_other_track_warning}",
+            COLORS.WARNING if _other_track_warning else COLORS.SUCCESS,
         )
         ui(lambda: w["new_timeline_lbl"].configure(
             text=f"Created: \"{result.new_timeline_name}\""))
@@ -192,7 +217,7 @@ def apply_thread(
 
     except Exception as e:
         log.error("Apply thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         set_btn("apply_btn", True)
@@ -211,7 +236,7 @@ def preview_thread(
         set_status("Adding markers at silence locations...")
 
         if not app.timeline:
-            set_status("No active timeline.", "#ff6b6b")
+            set_status("No active timeline.", COLORS.ERROR)
             return
 
         marker_count = 0
@@ -228,9 +253,9 @@ def preview_thread(
                 except Exception as me:
                     log.debug("Marker add error: %s", me)
 
-        set_status(f"Added {marker_count} marker(s). Red markers = silences.", "#66bb6a")
+        set_status(f"Added {marker_count} marker(s). Red markers = silences.", COLORS.SUCCESS)
     except Exception as e:
         log.error("Preview thread error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         set_btn("preview_btn", True)

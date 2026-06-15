@@ -1,4 +1,4 @@
-"""Clutter — standalone GUI entry point.
+"""Clautter — standalone GUI entry point.
 
 Run this directly with system Python (requires customtkinter):
     python gui.py
@@ -17,7 +17,7 @@ if sys.platform == "win32":
     import ctypes
     # Must be called before any window is created. Separates this process from
     # python.exe in the Windows taskbar so iconbitmap() applies to the correct app.
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Clutter.Plugin.1")
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Clautter.Plugin.1")
 
 try:
     _PLUGIN_DIR = Path(__file__).resolve().parent
@@ -27,8 +27,11 @@ except NameError:
 if str(_PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_DIR))
 
+from src.utils.migration import migrate_data_dir
+migrate_data_dir()
+
 from src.utils.logger import get_logger
-from src.app import ClutterApp
+from src.app import ClautterApp
 
 log = get_logger("gui")
 
@@ -65,10 +68,21 @@ def _connect_with_timeout(app: Any, timeout: float = 5.0) -> None:
         log.warning("Resolve not connected — UI will show disconnected state")
 
 
-def main() -> None:
-    log.info("Clutter GUI starting")
+def _startup_update_check(app: Any, root: Any) -> None:
+    """Background thread: check GitHub for newer release, notify app if found."""
+    from src.utils import updater
+    latest = updater.fetch_latest_release()
+    if latest and updater.is_update_available(latest):
+        tag = latest["tag_name"]
+        html_url = latest.get("html_url", "")
+        log.info("Update available: %s", tag)
+        root.after(0, lambda: app.notify_update_available(tag, html_url))
 
-    app = ClutterApp()
+
+def main() -> None:
+    log.info("Clautter GUI starting")
+
+    app = ClautterApp()
     _connect_with_timeout(app, timeout=5.0)
 
     try:
@@ -85,6 +99,11 @@ def main() -> None:
         traceback.print_exc()
         return
 
+    # Delay update check 2s so the window is fully rendered before banner appears
+    window._root.after(2000, lambda: threading.Thread(
+        target=_startup_update_check, args=(app, window._root), daemon=True
+    ).start())
+
     try:
         window.run()
     except Exception as e:
@@ -92,7 +111,7 @@ def main() -> None:
         traceback.print_exc()
         return
 
-    log.info("Clutter closed")
+    log.info("Clautter closed")
 
 
 if __name__ == "__main__":

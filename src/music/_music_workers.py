@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from src.constants import COLORS, TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -20,6 +21,58 @@ def _download_audio(url: str, dest: Path) -> None:
             for chunk in resp.iter_content(chunk_size=_CHUNK_BYTES):
                 if chunk:
                     f.write(chunk)
+
+
+def _get_timeline_duration_sec(app: Any) -> float | None:
+    """Return timeline total duration in seconds, or None if unavailable."""
+    try:
+        resolve  = getattr(app, "resolve", None)
+        if resolve is None:
+            return None
+        project  = resolve.GetProjectManager().GetCurrentProject()
+        timeline = project.GetCurrentTimeline() if project else None
+        if timeline is None:
+            return None
+        raw_fps = timeline.GetSetting("timelineFrameRate") or "25"
+        fps = float(str(raw_fps).split()[0])
+        duration_frames = timeline.GetEndFrame() - timeline.GetStartFrame()
+        return max(0.0, duration_frames / fps)
+    except Exception as e:
+        log.warning("[music_worker] could not read timeline duration: %s", e)
+        return None
+
+
+def _get_main_track_rms(app: Any) -> float | None:
+    """Return dBFS of the loudest clip on video track 1, or None if unavailable."""
+    try:
+        from src.music.audio_processor import measure_rms_db
+        resolve  = getattr(app, "resolve", None)
+        if resolve is None:
+            return None
+        project  = resolve.GetProjectManager().GetCurrentProject()
+        timeline = project.GetCurrentTimeline() if project else None
+        if timeline is None:
+            return None
+        items = timeline.GetItemListInTrack("video", 1) or []
+        best_rms: float | None = None
+        for item in items:
+            try:
+                mpi   = item.GetMediaPoolItem()
+                props = mpi.GetClipProperty() if mpi else {}
+                fpath = props.get("File Path") or props.get("Clip Path") or ""
+                if not fpath:
+                    continue
+                rms = measure_rms_db(fpath)
+                if rms is not None and (best_rms is None or rms > best_rms):
+                    best_rms = rms
+            except Exception:
+                continue
+        if best_rms is not None:
+            log.info("[music_worker] main track RMS: %.1f dBFS", best_rms)
+        return best_rms
+    except Exception as e:
+        log.warning("[music_worker] could not measure main track RMS: %s", e)
+        return None
 
 
 def music_thread(
@@ -39,8 +92,7 @@ def music_thread(
     music_source: str = "jamendo",
     local_music_folder: str | None = None,
     music_volume_pct: int = 35,
-    fade_in_ms: int = 2000,
-    fade_out_ms: int = 2000,
+    keyword_method: str = "spacy",
 ) -> None:
     """Analyze mood, find music (local / Jamendo / both), place on 'Music' audio track."""
     try:
@@ -50,16 +102,25 @@ def music_thread(
         set_status("Analyzing transcript mood…")
         set_progress(10, True)
 
+        timeline_duration_sec = _get_timeline_duration_sec(app)
+        if timeline_duration_sec is not None:
+            log.info("[music_worker] timeline duration: %.1fs", timeline_duration_sec)
+        else:
+            log.warning("[music_worker] timeline duration unavailable — music will not be trimmed")
+
+        set_status("Measuring main track level…")
+        main_track_rms = _get_main_track_rms(app)
+
         sections_count = n_sections if music_mode == "segments" else 1
 
         if mood_mode == "llm":
             sections = analyze_mood_llm(app.transcript, app.settings, sections_count,
-                                        provider=mood_provider)
+                                        provider=mood_provider, method=keyword_method)
         else:
-            sections = analyze_mood_keywords(app.transcript, sections_count)
+            sections = analyze_mood_keywords(app.transcript, sections_count, method=keyword_method)
 
         if not sections:
-            set_status("Could not determine mood from transcript.", "#E8903A")
+            set_status("Could not determine mood from transcript.", COLORS.WARNING)
             set_progress(0, False)
             return
 
@@ -107,7 +168,7 @@ def music_thread(
                         _download_audio(hit.download_url, dest)
                     except Exception as e:
                         log.error("[music_worker] download failed: %s", e)
-                        set_status(f"Download failed: {e}", "#ff6b6b")
+                        set_status(f"Download failed: {e}", COLORS.ERROR)
                         continue
                 audio_path = str(dest)
 
@@ -119,13 +180,25 @@ def music_thread(
             from src.music.audio_processor import get_or_process_music
             processed_dir = Path(download_folder) / "processed"
             audio_path = get_or_process_music(
-                audio_path, processed_dir, music_volume_pct, fade_in_ms, fade_out_ms,
+                audio_path, processed_dir, music_volume_pct,
+                target_db=main_track_rms,
             )
 
             fname = Path(audio_path).name
             set_status(f"Placing '{fname}' at {section.start_sec:.1f}s…")
-            duration = section.end_sec - section.start_sec if music_mode == "segments" else 0.0
-            result = place_audio_clip(app, audio_path, section.start_sec, duration, "Music")
+
+            if music_mode == "segments":
+                duration = section.end_sec - section.start_sec
+                if timeline_duration_sec is not None:
+                    duration = min(duration, max(0.0, timeline_duration_sec - section.start_sec))
+            else:
+                # Single track: fill from start to timeline end
+                if timeline_duration_sec is not None:
+                    duration = max(0.0, timeline_duration_sec - section.start_sec)
+                else:
+                    duration = 0.0  # full clip (no trim possible)
+
+            result = place_audio_clip(app, audio_path, section.start_sec, duration, TRACKS.MUSIC)
 
             if result.placed:
                 placed_count += 1
@@ -135,17 +208,17 @@ def music_thread(
 
         set_progress(100)
         if placed_count == total:
-            set_status(f"Done! {placed_count} music track(s) placed on 'Music' audio track.", "#66bb6a")
+            set_status(f"Done! {placed_count} music track(s) placed on 'Music' audio track.", COLORS.SUCCESS)
         elif placed_count > 0:
-            set_status(f"Placed {placed_count}/{total} track(s). Check logs for details.", "#ffa726")
+            set_status(f"Placed {placed_count}/{total} track(s). Check logs for details.", COLORS.WARN_PARTIAL)
         else:
-            set_status("No tracks placed — check Resolve connection and audio source settings.", "#ff6b6b")
+            set_status("No tracks placed — check Resolve connection and audio source settings.", COLORS.ERROR)
 
         set_progress(0, False)
 
     except Exception as e:
         log.error("[music_worker] error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
         set_progress(0, False)
     finally:
         _ui(lambda: w["run_music_btn"].configure(state="normal"))
@@ -186,11 +259,18 @@ def sfx_thread(
     set_sfx_progress: Callable,
     _ui: Callable,
     w: dict,
+    sfx_source: str = "freesound",
+    sfx_mood_mode: str = "hardcoded",
+    sfx_llm_provider: str | None = None,
 ) -> None:
     """Collect trigger events and place SFX clips on 'SFX' audio track."""
     try:
-        from src.music.audio_provider import FreesoundClient
-        from src.music.sfx_engine import collect_sfx_events, run_sfx_pipeline
+        from src.music.sfx_engine import (
+            collect_sfx_events, run_sfx_pipeline,
+            build_event_manifest, get_sfx_terms_llm,
+        )
+
+        use_freesound = sfx_source in ("freesound", "both")
 
         set_sfx_status("Collecting SFX trigger events…")
         set_sfx_progress(10, True)
@@ -204,14 +284,25 @@ def sfx_thread(
                 hint.append("No analysis data found — run SmartCuts, Auto Zooms, or B-Roll first.")
             else:
                 hint.append("No events found for selected triggers.")
-            set_sfx_status(" ".join(hint), "#E8903A")
+            set_sfx_status(" ".join(hint), COLORS.WARNING)
             set_sfx_progress(0, False)
             return
 
         set_sfx_status(f"Found {len(events)} event(s). Downloading SFX…")
         set_sfx_progress(20)
 
-        client = FreesoundClient(freesound_api_key)
+        # LLM term selection (optional)
+        custom_terms: dict[int, str] | None = None
+        if sfx_mood_mode == "llm" and app.transcript:
+            set_sfx_status("Asking LLM for context-aware SFX terms…")
+            manifest = build_event_manifest(events, app.transcript)
+            custom_terms = get_sfx_terms_llm(manifest, app.settings, provider=sfx_llm_provider) or None
+
+        client = None
+        if use_freesound and freesound_api_key:
+            from src.music.audio_provider import FreesoundClient
+            client = FreesoundClient(freesound_api_key)
+
         dl_path = Path(download_folder)
 
         def on_progress(msg: str, frac: float) -> None:
@@ -226,6 +317,8 @@ def sfx_thread(
             download_folder=str(dl_path),
             on_progress=on_progress,
             local_sfx_folder=local_sfx_folder or None,
+            sfx_source=sfx_source,
+            custom_terms=custom_terms,
         )
 
         placed = sum(1 for r in results if r.placed)
@@ -233,17 +326,17 @@ def sfx_thread(
         set_sfx_progress(100)
 
         if placed == total and total > 0:
-            set_sfx_status(f"Done! {placed}/{total} SFX clip(s) placed on 'SFX' track.", "#66bb6a")
+            set_sfx_status(f"Done! {placed}/{total} SFX clip(s) placed on 'SFX' track.", COLORS.SUCCESS)
         elif placed > 0:
-            set_sfx_status(f"Placed {placed}/{total} SFX clip(s). Check logs.", "#ffa726")
+            set_sfx_status(f"Placed {placed}/{total} SFX clip(s). Check logs.", COLORS.WARN_PARTIAL)
         else:
-            set_sfx_status("No SFX placed — check Resolve connection.", "#ff6b6b")
+            set_sfx_status("No SFX placed — check Resolve connection.", COLORS.ERROR)
 
         set_sfx_progress(0, False)
 
     except Exception as e:
         log.error("[sfx_worker] error: %s", e)
-        set_sfx_status(f"Error: {e}", "#ff6b6b")
+        set_sfx_status(f"Error: {e}", COLORS.ERROR)
         set_sfx_progress(0, False)
     finally:
         _ui(lambda: w["run_sfx_btn"].configure(state="normal"))

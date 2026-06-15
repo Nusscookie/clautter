@@ -1,10 +1,11 @@
-"""Logging setup for Clutter."""
+"""Logging setup for Clautter."""
 
 from __future__ import annotations
 import logging
 import logging.handlers
-from pathlib import Path
 from typing import Callable
+
+from src.constants import PATHS
 
 
 class UILogHandler(logging.Handler):
@@ -33,11 +34,11 @@ def get_logger(name: str) -> logging.Logger:
 
     logger.setLevel(logging.DEBUG)
 
-    log_dir = Path.home() / ".clutter" / "logs"
+    log_dir = PATHS.LOGS_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
 
     fh = logging.handlers.RotatingFileHandler(
-        log_dir / "clutter.log",
+        log_dir / "clautter.log",
         maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",

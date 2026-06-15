@@ -5,6 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -16,16 +17,16 @@ def build(parent: Any) -> None:
     # ── Title ──
     ctk.CTkLabel(
         parent,
-        text="CLUTTER",
+        text="CLAUTTER",
         font=ctk.CTkFont(size=18, weight="bold"),
-        text_color="#ffffff",
+        text_color=COLORS.TEXT_PRIMARY,
     ).pack(pady=(16, 2))
 
     ctk.CTkLabel(
         parent,
         text="DaVinci Resolve Plugin  •  v0.1.0-alpha",
         font=ctk.CTkFont(size=11),
-        text_color="#888888",
+        text_color=COLORS.TEXT_DIM,
     ).pack(pady=(0, 8))
 
     _divider(parent)
@@ -35,25 +36,25 @@ def build(parent: Any) -> None:
         parent,
         text="SESSION STATS",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
     ).pack(anchor="w", padx=14, pady=(10, 4))
 
     row1 = ctk.CTkFrame(parent, fg_color="transparent")
     row1.pack(fill="x", padx=10, pady=2)
     row1.grid_columnconfigure((0, 1), weight=1)
 
-    w["time_saved"] = _stat_card(row1, "Time Saved", "0.0 s", "#D97757")
+    w["time_saved"] = _stat_card(row1, "Time Saved", "0.0 s", COLORS.BRAND_PRIMARY)
     w["time_saved"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["total_edits"] = _stat_card(row1, "Total Edits", "0", "#D97757")
+    w["total_edits"] = _stat_card(row1, "Total Edits", "0", COLORS.BRAND_PRIMARY)
     w["total_edits"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     row2 = ctk.CTkFrame(parent, fg_color="transparent")
     row2.pack(fill="x", padx=10, pady=2)
     row2.grid_columnconfigure((0, 1), weight=1)
 
-    w["zooms"] = _stat_card(row2, "Zooms Applied", "0", "#D97757")
+    w["zooms"] = _stat_card(row2, "Zooms Applied", "0", COLORS.BRAND_PRIMARY)
     w["zooms"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["subs"] = _stat_card(row2, "Subtitles Generated", "0", "#D97757")
+    w["subs"] = _stat_card(row2, "Subtitles Generated", "0", COLORS.BRAND_PRIMARY)
     w["subs"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     _divider(parent)
@@ -63,7 +64,7 @@ def build(parent: Any) -> None:
         parent,
         text="QUICK START",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
     ).pack(anchor="w", padx=14, pady=(10, 4))
 
     for tip in [
@@ -75,7 +76,7 @@ def build(parent: Any) -> None:
             parent,
             text=tip,
             font=ctk.CTkFont(size=12),
-            text_color="#cccccc",
+            text_color=COLORS.TEXT_SECONDARY,
             anchor="w",
         ).pack(anchor="w", padx=14, pady=1)
 
@@ -91,19 +92,19 @@ def build(parent: Any) -> None:
     w["refresh_btn"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
 
     w["reconnect_btn"] = ctk.CTkButton(btn_row, text="Reconnect to Resolve",
-                                        fg_color="#2a2a2a", hover_color="#3a3a3a")
+                                        fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER)
     w["reconnect_btn"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     parent._w = w
 
 
 def _divider(parent: Any) -> None:
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+    ctk.CTkFrame(parent, height=1, fg_color=COLORS.SEPARATOR, corner_radius=0).pack(
         fill="x", padx=10, pady=4)
 
 
 def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     val_lbl = ctk.CTkLabel(
         card,
         text=default,
@@ -115,7 +116,7 @@ def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFram
         card,
         text=label,
         font=ctk.CTkFont(size=10),
-        text_color="#888888",
+        text_color=COLORS.TEXT_DIM,
     ).pack(pady=(0, 10))
     card._val_lbl = val_lbl
     return card

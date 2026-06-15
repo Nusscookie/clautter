@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 from typing import Any
+from pathlib import Path
 import logging
 
 import customtkinter as ctk
 
-from src.ui.icon_helper import apply_clutter_icon
+from src.constants import COLORS
+from src.ui.icon_helper import apply_clautter_icon
 from src.utils.logger import get_logger
 from src.ui import (
     dashboard_tab, smartcuts_tab,
@@ -20,6 +22,20 @@ log = get_logger(__name__)
 
 _WIN_W = 920
 _WIN_H = 700
+
+# Custom terracotta CTk theme — widget-level source of truth, mirrors COLORS.
+_THEME_PATH = Path(__file__).resolve().parents[2] / "assets" / "clautter_theme.json"
+
+
+def _apply_theme() -> None:
+    """Load the Clautter terracotta theme; fall back to 'blue' so the app
+    always boots even if the theme file is missing or malformed."""
+    try:
+        ctk.set_default_color_theme(str(_THEME_PATH))
+        log.info("Loaded Clautter theme: %s", _THEME_PATH)
+    except Exception as e:
+        log.warning("Clautter theme load failed (%s) — falling back to 'blue'", e)
+        ctk.set_default_color_theme("blue")
 
 _TABS: list[tuple[str, Any]] = [
     ("Dashboard",       dashboard_tab),
@@ -36,8 +52,20 @@ class MainWindow:
     def __init__(self, app: Any) -> None:
         self._app = app
         ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
+        _apply_theme()
         self._root = ctk.CTk()
+
+    def _on_update_available(self, tag: str, html_url: str) -> None:
+        self._update_banner_lbl.configure(
+            text=f"  {tag} available — update in Settings → General"
+        )
+        if not self._update_banner_visible:
+            self._update_banner.pack(fill="x", side="top")
+            self._update_banner_visible = True
+
+    def _dismiss_update_banner(self) -> None:
+        self._update_banner.pack_forget()
+        self._update_banner_visible = False
 
     def run(self) -> None:
         try:
@@ -49,62 +77,77 @@ class MainWindow:
 
     def _build(self) -> None:
         root = self._root
-        root.title("Clutter")
+        root.title("Clautter")
         root.geometry(f"{_WIN_W}x{_WIN_H}")
         root.resizable(True, True)
-        root.configure(fg_color="#141414")
+        root.configure(fg_color=COLORS.BG_DARKEST)
 
-        apply_clutter_icon(root)
+        apply_clautter_icon(root)
 
         # ── Top bar ──
-        top = ctk.CTkFrame(root, height=38, fg_color="#1a1a1a", corner_radius=0)
+        top = ctk.CTkFrame(root, height=38, fg_color=COLORS.BG_DARK, corner_radius=0)
         top.pack(fill="x", side="top")
         top.pack_propagate(False)
 
         ctk.CTkLabel(
-            top, text="Clutter",
+            top, text="Clautter",
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#D97757",
+            text_color=COLORS.BRAND_PRIMARY,
         ).pack(side="left", padx=(14, 6), pady=6)
 
         ctk.CTkLabel(
             top, text="│",
-            text_color="#333333",
+            text_color=COLORS.SEPARATOR_DARK,
         ).pack(side="left", padx=2, pady=6)
 
+        # ── Connection status pill: a colored dot makes connected/disconnected
+        #    legible at a glance instead of relying on text alone. ──
+        pill = ctk.CTkFrame(top, fg_color=COLORS.BG_CARD, corner_radius=10)
+        pill.pack(side="left", padx=6, pady=6)
+        connected = self._app.connected
+        self._status_dot = ctk.CTkLabel(
+            pill, text="●",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS.SUCCESS if connected else COLORS.ERROR,
+        )
+        self._status_dot.pack(side="left", padx=(8, 4), pady=1)
         self._status_lbl = ctk.CTkLabel(
-            top,
+            pill,
             text=self._app.status_text(),
             font=ctk.CTkFont(size=11),
-            text_color="#888888",
+            text_color=COLORS.TEXT_SECONDARY if connected else COLORS.TEXT_DIM,
         )
-        self._status_lbl.pack(side="left", padx=6, pady=6)
+        self._status_lbl.pack(side="left", padx=(0, 10), pady=1)
 
         ctk.CTkButton(
             top, text="⚙",
             font=ctk.CTkFont(size=15),
-            fg_color="transparent", hover_color="#2a2a2a",
-            text_color="#aaaaaa", width=32, height=32,
+            fg_color="transparent", hover_color=COLORS.BG_CARD,
+            text_color=COLORS.TEXT_MUTED, width=32, height=32,
             corner_radius=4,
             command=lambda: open_settings(self._app),
         ).pack(side="right", padx=(0, 6), pady=3)
 
-        # ── Project-wide BETA banner ──
-        # Single source of truth for "this build is not finished".
-        self._beta_banner = ctk.CTkFrame(
-            root, height=26, fg_color="#1A0E00", corner_radius=0)
-        self._beta_banner.pack(fill="x", side="top", after=top)
-        self._beta_banner.pack_propagate(False)
-        ctk.CTkLabel(
-            self._beta_banner,
-            text="⚠  ALPHA — Clutter is in active development. Expect rough edges.",
+        # ── Update banner (hidden until update check fires) ──
+        self._update_banner = ctk.CTkFrame(root, fg_color=COLORS.BG_WARM_BANNER, corner_radius=0, height=32)
+        self._update_banner_lbl = ctk.CTkLabel(
+            self._update_banner, text="",
             font=ctk.CTkFont(size=11),
-            text_color="#E8903A",
-            anchor="w",
-        ).pack(side="left", padx=12)
+            text_color=COLORS.WARNING,
+        )
+        self._update_banner_lbl.pack(side="left", padx=(14, 6), pady=6)
+        ctk.CTkButton(
+            self._update_banner, text="✕",
+            font=ctk.CTkFont(size=11), width=24, height=24,
+            fg_color="transparent", hover_color=COLORS.BG_CARD,
+            text_color=COLORS.TEXT_DIM,
+            command=self._dismiss_update_banner,
+        ).pack(side="right", padx=6, pady=4)
+
+        self._app.on_update_available(self._on_update_available)
 
         # ── Tab view ──
-        tabview = ctk.CTkTabview(root, anchor="nw", fg_color="#1e1e1e")
+        tabview = ctk.CTkTabview(root, anchor="nw", fg_color=COLORS.BG_MID)
         tabview.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
         for name, module in _TABS:
@@ -124,8 +167,10 @@ class MainWindow:
                 ctk.CTkLabel(
                     content,
                     text=f"Tab load error: {e}",
-                    text_color="#ff6b6b",
+                    text_color=COLORS.ERROR,
                 ).pack(padx=12, pady=12)
+
+        self._update_banner_visible = False
 
         if self._app.settings.get("show_console_log", True):
             self._console: ConsoleWindow | None = None

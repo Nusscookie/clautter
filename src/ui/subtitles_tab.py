@@ -6,6 +6,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.ui._subtitles_build import (
     build_action_buttons, build_provider_slot, build_settings_row,
     build_style_controls, build_text_style_card, build_transcript_panel,
@@ -24,7 +25,7 @@ def build(parent: Any) -> None:
         parent,
         text="SUBTITLES  —  Generate captions via Speech-to-Text",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
@@ -55,7 +56,7 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
     def set_progress(value: float, visible: bool = True) -> None:

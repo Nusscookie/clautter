@@ -4,6 +4,8 @@ Extracted from zooms_tab.py so the tab file stays under 200 lines.
 """
 
 from __future__ import annotations
+
+from src.constants import COLORS
 from typing import Any
 
 import customtkinter as ctk
@@ -16,16 +18,16 @@ def build(parent: Any) -> None:
         parent,
         text="AUTO ZOOMS  —  Apply dynamic zoom cuts at your edit's cut points",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     card.pack(fill="x", padx=10, pady=4)
 
     ctk.CTkLabel(card, text="ZOOM SETTINGS",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     # Track-face checkbox — centers each zoom on the speaker. Off = plain center
     # zoom (no OpenCV). Zooms are *triggered* by cut points either way.
@@ -39,7 +41,7 @@ def build(parent: Any) -> None:
         card,
         text="Face tracking requires opencv-python  •  pip install opencv-python",
         font=ctk.CTkFont(size=10),
-        text_color="#888888",
+        text_color=COLORS.TEXT_DIM,
         anchor="w",
     )
     w["detect_note"].pack(fill="x", padx=10, pady=(0, 4))
@@ -51,7 +53,7 @@ def build(parent: Any) -> None:
     w["zoom_slider"] = ctk.CTkSlider(amount_row, from_=105, to=150, number_of_steps=45)
     w["zoom_slider"].set(115)
     w["zoom_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
-    w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color="#D97757", width=44)
+    w["zoom_lbl"] = ctk.CTkLabel(amount_row, text="115%", text_color=COLORS.BRAND_PRIMARY, width=44)
     w["zoom_lbl"].grid(row=0, column=2)
 
     take_row = ctk.CTkFrame(card, fg_color="transparent")
@@ -87,16 +89,17 @@ def build(parent: Any) -> None:
     btn_row.pack(fill="x", padx=10, pady=6)
     btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Cuts")
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Cuts",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER)
     w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
     w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
-                                      fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
                                       state="disabled")
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
     w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Zooms",
-                                    fg_color="#6a1b9a", hover_color="#7b1fa2",
+                                    fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
@@ -107,34 +110,34 @@ def build(parent: Any) -> None:
 
     w["status"] = ctk.CTkLabel(
         parent, text="Run Smart Cuts first, then Analyze Cuts to place zooms at your cut points.",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800)
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=800)
     w["status"].pack(fill="x", padx=12, pady=(2, 4))
 
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+    ctk.CTkFrame(parent, height=1, fg_color=COLORS.SEPARATOR, corner_radius=0).pack(
         fill="x", padx=10, pady=6)
 
     results_row = ctk.CTkFrame(parent, fg_color="transparent")
     results_row.pack(fill="x", padx=10, pady=4)
     results_row.grid_columnconfigure((0, 1), weight=1)
 
-    w["found_count"] = _stat_card(results_row, "Zoom Points Found", "0", "#ab47bc")
+    w["found_count"] = _stat_card(results_row, "Zoom Points Found", "0", COLORS.BRAND_PRIMARY)
     w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["applied_count"] = _stat_card(results_row, "Zooms Applied", "0", "#66bb6a")
+    w["applied_count"] = _stat_card(results_row, "Zooms Applied", "0", COLORS.SUCCESS)
     w["applied_count"].grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
     w["new_timeline_lbl"] = ctk.CTkLabel(
-        parent, text="", font=ctk.CTkFont(size=11), text_color="#66bb6a", anchor="w")
+        parent, text="", font=ctk.CTkFont(size=11), text_color=COLORS.SUCCESS, anchor="w")
     w["new_timeline_lbl"].pack(fill="x", padx=12, pady=(6, 12))
 
     parent._w = w
 
 
 def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     val = ctk.CTkLabel(card, text=default,
                        font=ctk.CTkFont(size=24, weight="bold"), text_color=color)
     val.pack(pady=(8, 2))
     ctk.CTkLabel(card, text=label, font=ctk.CTkFont(size=10),
-                 text_color="#888888").pack(pady=(0, 8))
+                 text_color=COLORS.TEXT_DIM).pack(pady=(0, 8))
     card._val = val
     return card

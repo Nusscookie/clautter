@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -14,7 +14,7 @@ venv/
 .claude/
 
 # Runtime config (contains API keys)
-~/.clutter/
+~/.clautter/
 
 # OS
 .DS_Store
@@ -24,12 +24,15 @@ desktop.ini
 # Personal notes (not for repo)
 FUTURE.md
 SPECS.md
-UNOFFICIAL_DOC.md
+docs/UNOFFICIAL_DOC.md
 docs/autocut_teardown.md
 docs/autocut_templates/
 docs/package-evaluation-autocut.md
+docs/ResolveCafe-main
+docs/resolve-cafe-summary.md
 tests/
 scripts/
+assets/preview/
 
 # Editor
 .vscode/

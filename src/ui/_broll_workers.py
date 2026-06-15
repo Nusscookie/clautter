@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -53,7 +54,7 @@ def add_clip_row(
     }
     _state.setdefault("pinned", []).append(entry)
 
-    row = ctk.CTkFrame(suggestions_frame, fg_color="#2a2a2a", corner_radius=4)
+    row = ctk.CTkFrame(suggestions_frame, fg_color=COLORS.BG_CARD, corner_radius=4)
     row.pack(fill="x", padx=4, pady=(0, 3))
     row.grid_columnconfigure(1, weight=1)
 
@@ -63,18 +64,18 @@ def add_clip_row(
     )
     cb.grid(row=0, column=0, padx=(6, 4), pady=6)
 
-    source_color = "#D97757" if source == "local" else "#4fc3f7"
+    source_color = COLORS.BRAND_PRIMARY if source == "local" else COLORS.BRAND_DIM
     source_tag = ctk.CTkLabel(
         row, text=source.upper(),
         font=ctk.CTkFont(size=9, weight="bold"),
-        text_color="#141414", fg_color=source_color,
+        text_color=COLORS.BG_DARKEST, fg_color=source_color,
         corner_radius=3, width=50,
     )
     source_tag.grid(row=0, column=1, sticky="w", padx=(0, 6), pady=6)
 
     ctk.CTkLabel(
         row, text=clip_name,
-        font=ctk.CTkFont(size=11), text_color="#ffffff", anchor="w",
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_PRIMARY, anchor="w",
     ).grid(row=0, column=2, sticky="ew", padx=(0, 6))
 
     time_str = f"@ {suggested_time:.1f}s"
@@ -82,7 +83,7 @@ def add_clip_row(
         time_str += f"  ({duration_sec:.1f}s)"
     ctk.CTkLabel(
         row, text=time_str,
-        font=ctk.CTkFont(size=10), text_color="#888888", anchor="e",
+        font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_DIM, anchor="e",
     ).grid(row=0, column=3, padx=(0, 8))
 
     row.grid_columnconfigure(2, weight=1)
@@ -96,8 +97,8 @@ def add_clip_row(
 
     ctk.CTkButton(
         row, text="✕", width=24, height=24,
-        fg_color="transparent", hover_color="#3a3a3a",
-        text_color="#888888", font=ctk.CTkFont(size=10),
+        fg_color="transparent", hover_color=COLORS.BG_HOVER,
+        text_color=COLORS.TEXT_DIM, font=ctk.CTkFont(size=10),
         command=_remove,
     ).grid(row=0, column=4, padx=(0, 4))
 
@@ -119,11 +120,11 @@ def suggest_local_thread(
 
         folder = _state.get("folder", "").strip()
         if not folder:
-            set_status("Select a folder first.", "#ff6b6b")
+            set_status("Select a folder first.", COLORS.ERROR)
             return
 
         if not app.transcript:
-            set_status("No transcript found. Generate one in the Subtitles tab first.", "#ff6b6b")
+            set_status("No transcript found. Generate one in the Subtitles tab first.", COLORS.ERROR)
             return
 
         set_status(f"Scanning: {folder}…")
@@ -131,7 +132,7 @@ def suggest_local_thread(
         _state["clips"] = clips
 
         if not clips:
-            set_status("No video clips found in folder.", "#E8903A")
+            set_status("No video clips found in folder.", COLORS.WARNING)
             return
 
         set_status(f"Found {len(clips)} clip(s). Analyzing transcript…")
@@ -143,7 +144,7 @@ def suggest_local_thread(
         _state["suggestions"] = suggestions
 
         if not suggestions:
-            set_status("No strong keyword matches. Try clips with more descriptive filenames.", "#E8903A")
+            set_status("No strong keyword matches. Try clips with more descriptive filenames.", COLORS.WARNING)
             return
 
         frame = w["suggestions_frame"]
@@ -159,10 +160,10 @@ def suggest_local_thread(
                 source="local",
             ))
 
-        set_status(f"{len(suggestions)} suggestion(s) added — check clips to include.", "#66bb6a")
+        set_status(f"{len(suggestions)} suggestion(s) added — check clips to include.", COLORS.SUCCESS)
     except Exception as e:
         log.error("B-roll suggest error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         _ui(lambda: w["suggest_local_btn"].configure(state="normal"))
 
@@ -202,7 +203,7 @@ def search_online_thread(
 
     try:
         if not providers:
-            set_search_status("No provider selected.", "#ff6b6b")
+            set_search_status("No provider selected.", COLORS.ERROR)
             return
 
         top_n = int(round(float(w["top_n_slider"].get())))
@@ -210,17 +211,17 @@ def search_online_thread(
         use_mock = bool(app.settings.get("broll_use_mock", False))
 
         if not app.transcript:
-            set_search_status("No transcript. Generate one in the Subtitles tab first.", "#ff6b6b")
+            set_search_status("No transcript. Generate one in the Subtitles tab first.", COLORS.ERROR)
             return
 
         method = str(app.settings.get("broll_keyword_method", "spacy"))
         hint = " (may download model on first use)" if method in ("keybert", "spacy") else ""
-        set_search_status(f"Extracting keywords via {method}{hint}…", "#D97757")
+        set_search_status(f"Extracting keywords via {method}{hint}…", COLORS.BRAND_PRIMARY)
         keywords = extract_top_keywords(app.transcript, top_n=top_n, method=method)
         if not keywords:
             set_search_status(
                 "Couldn't extract keywords. Need at least a few non-stopword tokens in the transcript.",
-                "#E8903A",
+                COLORS.WARNING,
             )
             return
 
@@ -241,7 +242,7 @@ def search_online_thread(
                     log.warning("search_online_thread: unknown provider %r", name)
 
         if not slots:
-            set_search_status("No valid provider slots.", "#ff6b6b")
+            set_search_status("No valid provider slots.", COLORS.ERROR)
             return
 
         provider_label = (
@@ -260,7 +261,7 @@ def search_online_thread(
             for slot_name, client in list(slots):
                 set_search_status(
                     f"Searching {provider_label} for '{kw}' ({idx}/{len(keywords)})…",
-                    "#D97757",
+                    COLORS.BRAND_PRIMARY,
                 )
                 try:
                     hits = client.search(kw, per_page=5)
@@ -268,7 +269,7 @@ def search_online_thread(
                     errors.append(f"{slot_name}/{kw}: {e}")
                     set_search_status(
                         f"{slot_name} auth failed — disabling for this search.",
-                        "#ff6b6b",
+                        COLORS.ERROR,
                     )
                     slots = [(n, c) for n, c in slots if n != slot_name]
                     continue
@@ -277,7 +278,7 @@ def search_online_thread(
                     set_search_status(
                         f"{slot_name} rate limit hit. Skipping it; "
                         f"continuing with others.",
-                        "#E8903A",
+                        COLORS.WARNING,
                     )
                     slots = [(n, c) for n, c in slots if n != slot_name]
                     continue
@@ -311,7 +312,7 @@ def search_online_thread(
             msg = "No results for any keyword."
             if errors:
                 msg += f" ({len(errors)} error(s) — check log)"
-            set_search_status(msg, "#E8903A")
+            set_search_status(msg, COLORS.WARNING)
             return
 
         # Store results in state so other code (debug) can inspect
@@ -335,7 +336,7 @@ def search_online_thread(
             except Exception as e:
                 log.exception("Results window open failed")
                 set_search_status(
-                    f"Results window failed to open: {e}", "#ff6b6b")
+                    f"Results window failed to open: {e}", COLORS.ERROR)
 
         _ui(_open)
 
@@ -344,11 +345,11 @@ def search_online_thread(
             f" from {provider_label}."
             + (f" {len(errors)} error(s)." if errors else "")
         )
-        set_search_status(summary, "#66bb6a")
+        set_search_status(summary, COLORS.SUCCESS)
 
     except Exception as e:
         log.error("B-roll online search error: %s", e)
-        set_search_status(f"Error: {e}", "#ff6b6b")
+        set_search_status(f"Error: {e}", COLORS.ERROR)
     finally:
         # Re-enable the search button if a transcript + key is still present
         def _reenable() -> None:
@@ -422,31 +423,31 @@ def autonomous_thread(
 
         if placed == 0 and total == 0:
             msg = result.warnings[0] if result.warnings else "No segments processed."
-            set_auto_status(msg, "#E8903A")
+            set_auto_status(msg, COLORS.WARNING)
         elif placed == 0:
             if natural_placement and skipped > 0:
                 set_auto_status(
                     f"No clips placed — all segments within intro skip or gap window. "
                     f"Try disabling Natural Placement or shortening the intro skip. "
                     f"({skipped} segment(s) skipped)",
-                    "#E8903A",
+                    COLORS.WARNING,
                 )
             else:
                 set_auto_status(
                     f"Clips matched but not placed on timeline — check Resolve connection. "
                     f"({skipped} segment(s) skipped)",
-                    "#E8903A",
+                    COLORS.WARNING,
                 )
         else:
             set_auto_status(
                 f"Done! {placed}/{total} segment(s) placed on B-Roll track."
                 + (f" {skipped} skipped." if skipped else ""),
-                "#66bb6a",
+                COLORS.SUCCESS,
             )
 
     except Exception as e:
         log.error("Autonomous B-roll error: %s", e)
-        set_auto_status(f"Error: {e}", "#ff6b6b")
+        set_auto_status(f"Error: {e}", COLORS.ERROR)
     finally:
         _state["auto_running"] = False
         _ui(lambda: w["auto_run_btn"].configure(state="normal"))
@@ -470,17 +471,17 @@ def download_thread(
     from src.broll.providers.base import NetworkError
 
     try:
-        on_status(f"Downloading {clip.title}…", "#D97757")
+        on_status(f"Downloading {clip.title}…", COLORS.BRAND_PRIMARY)
         downloader = BrollDownloader(Path(target_dir), app)
         result = downloader.download_and_import(clip)
         on_status(
             f"Saved: {Path(result['path']).name} → media pool.",
-            "#66bb6a",
+            COLORS.SUCCESS,
         )
     except NetworkError as e:
         log.error("Download failed for %s: %s", clip.external_id, e)
-        on_status(f"Download failed: {e}", "#ff6b6b")
+        on_status(f"Download failed: {e}", COLORS.ERROR)
     except Exception as e:
         log.error("Unexpected download error: %s", e)
-        on_status(f"Error: {e}", "#ff6b6b")
+        on_status(f"Error: {e}", COLORS.ERROR)
 

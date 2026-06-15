@@ -7,21 +7,15 @@ Two modes:
 """
 
 from __future__ import annotations
-import json
-import re
 from dataclasses import dataclass
 from typing import Any
 
 from src.broll.keywords import extract_top_keywords
+from src.constants import SETTINGS_KEYS
+from src.utils.llm_providers import call_llm, extract_json_array, resolve_provider
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
-
-_OPENAI_URL  = "https://api.openai.com/v1/chat/completions"
-_GEMINI_URL  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-_MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
-_NVIDIA_URL  = "https://integrate.api.nvidia.com/v1/chat/completions"
-_TIMEOUT     = 60
 
 MOOD_BUCKETS: dict[str, str] = {
     "energetic": "energetic upbeat music",
@@ -82,6 +76,7 @@ class MoodSection:
 def analyze_mood_keywords(
     transcript: list[dict],
     n_sections: int = 1,
+    method: str = "spacy",
 ) -> list[MoodSection]:
     """Split transcript into n equal sections, extract keywords, map to mood."""
     if not transcript:
@@ -109,7 +104,7 @@ def analyze_mood_keywords(
         sec_start = float(chunk[0].get("start_sec", total_start))
         sec_end   = float(chunk[-1].get("end_sec", total_end))
 
-        keywords = extract_top_keywords(chunk, top_n=5, method="frequency")
+        keywords = extract_top_keywords(chunk, top_n=5, method=method)
         mood = _DEFAULT_MOOD
         for kw in keywords:
             kw_lower = kw.lower()
@@ -140,18 +135,17 @@ def analyze_mood_llm(
     settings: Any,
     n_sections: int = 1,
     provider: str | None = None,
+    method: str = "spacy",
 ) -> list[MoodSection]:
     """Ask a cloud LLM for mood sections. Falls back to keyword mode on failure."""
-    from src.utils.llm_providers import api_key_for, resolve_provider
-
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         log.warning("[mood_llm] no cloud API key — falling back to keyword mode")
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
     word_entries = [e for e in transcript if e.get("type") == "word"]
     if not word_entries:
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
     text = " ".join(str(e.get("word", "")) for e in word_entries)[:3000]
     total_end = float(word_entries[-1].get("end_sec", 0.0))
@@ -169,28 +163,15 @@ def analyze_mood_llm(
         f"Use exactly {n_sections} item(s). No prose, no markdown."
     )
 
-    openai_model  = str(settings.get("llm_openai_model",  "gpt-4o-mini") or "gpt-4o-mini")
-    gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
-    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
-    max_tokens    = int(settings.get("llm_max_tokens", 500) or 500)
+    max_tokens = int(settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 500) or 500)
 
-    if chosen == "NVIDIA" and not nvidia_model:
+    if chosen == "NVIDIA" and not str(settings.get("llm_nvidia_model", "") or "").strip():
         log.warning("[mood_llm] NVIDIA selected but no model id set — falling back to keywords")
-        return analyze_mood_keywords(transcript, n_sections)
+        return analyze_mood_keywords(transcript, n_sections, method=method)
 
-    key = api_key_for(settings, chosen)
     try:
-        if chosen == "OpenAI":
-            reply = _call_openai(prompt, key, openai_model, max_tokens)
-        elif chosen == "Gemini":
-            reply = _call_gemini(prompt, key, gemini_model, max_tokens)
-        elif chosen == "NVIDIA":
-            reply = _call_nvidia(prompt, key, nvidia_model, max_tokens)
-        else:
-            reply = _call_minimax(prompt, key, minimax_model, max_tokens)
-
-        raw = _extract_json(reply)
+        reply = call_llm(chosen, prompt, settings, max_tokens=max_tokens, temperature=0.1)
+        raw = extract_json_array(reply)
         sections = _parse_sections(raw, total_end)
         if sections:
             log.info("[mood_llm] got %d section(s) from LLM", len(sections))
@@ -199,79 +180,7 @@ def analyze_mood_llm(
     except Exception as e:
         log.warning("[mood_llm] LLM call failed (%s) — falling back to keywords", e)
 
-    return analyze_mood_keywords(transcript, n_sections)
-
-
-# ── LLM call helpers (mirror llm_director.py) ─────────────────────────────────
-
-def _call_openai(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
-    resp = requests.post(  # noqa: F821 — imported lazily below
-        _OPENAI_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": [{"role": "user", "content": prompt}],
-              "max_tokens": max_tokens, "temperature": 0.1},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_gemini(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
-    url = _GEMINI_URL.replace("gemini-2.0-flash", model)
-    resp = requests.post(  # noqa: F821
-        f"{url}?key={api_key}",
-        headers={"Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}],
-              "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.1}},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-
-def _call_minimax(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
-    resp = requests.post(  # noqa: F821
-        _MINIMAX_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model,
-              "messages": [
-                  {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
-                  {"role": "user", "content": prompt},
-              ],
-              "max_tokens": max_tokens, "temperature": 0.1},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_nvidia(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
-    resp = requests.post(  # noqa: F821
-        _NVIDIA_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model,
-              "messages": [
-                  {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
-                  {"role": "user", "content": prompt},
-              ],
-              "max_tokens": max_tokens, "temperature": 0.1,
-              "chat_template_kwargs": {"thinking": False}},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _extract_json(text: str) -> list[dict]:
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    text = re.sub(r"```(?:json)?", "", text).strip()
-    start = text.find("[")
-    if start == -1:
-        raise ValueError("no JSON array in LLM response")
-    obj, _ = json.JSONDecoder().raw_decode(text, start)
-    if not isinstance(obj, list):
-        raise ValueError("LLM response is not a JSON array")
-    return obj
+    return analyze_mood_keywords(transcript, n_sections, method=method)
 
 
 def _parse_sections(raw: list[dict], total_end: float) -> list[MoodSection]:
@@ -293,8 +202,3 @@ def _parse_sections(raw: list[dict], total_end: float) -> list[MoodSection]:
         except (KeyError, TypeError, ValueError) as e:
             log.debug("[mood_llm] skip malformed section %r: %s", item, e)
     return sections
-
-
-# lazy import fix — requests is available at import time but the module-level
-# functions above reference it without an import statement in scope.
-import requests  # noqa: E402  (must be after function defs that reference it at call time)

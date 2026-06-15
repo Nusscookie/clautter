@@ -4,6 +4,8 @@ Extracted from smartcuts_tab.py so the tab file stays under 200 lines.
 """
 
 from __future__ import annotations
+
+from src.constants import COLORS
 from typing import Any
 
 import customtkinter as ctk
@@ -16,27 +18,27 @@ def build(parent: Any) -> None:
         parent,
         text="SMART CUTS  —  Remove silences from selected clips",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
-    pace_card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    pace_card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     pace_card.pack(fill="x", padx=10, pady=4)
 
     ctk.CTkLabel(pace_card, text="PACE PRESET",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     slider_row = ctk.CTkFrame(pace_card, fg_color="transparent")
     slider_row.pack(fill="x", padx=10, pady=(0, 4))
     slider_row.grid_columnconfigure(1, weight=1)
 
-    ctk.CTkLabel(slider_row, text="Slow", text_color="#888888",
+    ctk.CTkLabel(slider_row, text="Slow", text_color=COLORS.TEXT_DIM,
                  font=ctk.CTkFont(size=11)).grid(row=0, column=0, padx=(0, 8))
     w["pace_slider"] = ctk.CTkSlider(slider_row, from_=1, to=10, number_of_steps=9)
     w["pace_slider"].set(5)
     w["pace_slider"].grid(row=0, column=1, sticky="ew")
-    ctk.CTkLabel(slider_row, text="Fast", text_color="#888888",
+    ctk.CTkLabel(slider_row, text="Fast", text_color=COLORS.TEXT_DIM,
                  font=ctk.CTkFont(size=11)).grid(row=0, column=2, padx=(8, 0))
 
     info_row = ctk.CTkFrame(pace_card, fg_color="transparent")
@@ -44,7 +46,7 @@ def build(parent: Any) -> None:
 
     w["pace_level_lbl"] = ctk.CTkLabel(info_row, text="5",
                                         font=ctk.CTkFont(size=22, weight="bold"),
-                                        text_color="#D97757", width=36, anchor="w")
+                                        text_color=COLORS.BRAND_PRIMARY, width=36, anchor="w")
     w["pace_level_lbl"].pack(side="left")
 
     desc_col = ctk.CTkFrame(info_row, fg_color="transparent")
@@ -52,21 +54,21 @@ def build(parent: Any) -> None:
 
     w["pace_name_lbl"] = ctk.CTkLabel(desc_col, text="YouTube",
                                        font=ctk.CTkFont(size=13, weight="bold"),
-                                       text_color="#ffffff", anchor="w")
+                                       text_color=COLORS.TEXT_PRIMARY, anchor="w")
     w["pace_name_lbl"].pack(fill="x")
 
     w["pace_desc_lbl"] = ctk.CTkLabel(desc_col,
                                        text="Standard YouTube pacing — best all-round starting point",
-                                       font=ctk.CTkFont(size=10), text_color="#aaaaaa",
+                                       font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_MUTED,
                                        anchor="w", wraplength=600)
     w["pace_desc_lbl"].pack(fill="x")
 
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     card.pack(fill="x", padx=10, pady=4)
 
     ctk.CTkLabel(card, text="DETECTION SETTINGS",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=10, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
     # Threshold container: holds one of two rows (swapped by setup on method change)
     threshold_container = ctk.CTkFrame(card, fg_color="transparent")
@@ -79,7 +81,7 @@ def build(parent: Any) -> None:
     _thr_entry = ctk.CTkEntry(threshold_row, width=90, justify="center")
     _thr_entry.insert(0, "-35")
     _thr_entry.grid(row=0, column=1, padx=6)
-    ctk.CTkLabel(threshold_row, text="dB", text_color="#888888",
+    ctk.CTkLabel(threshold_row, text="dB", text_color=COLORS.TEXT_DIM,
                  font=ctk.CTkFont(size=11)).grid(row=0, column=2, padx=(0, 10))
     w["threshold"] = _thr_entry
     w["threshold_row"] = threshold_row
@@ -92,41 +94,53 @@ def build(parent: Any) -> None:
     _vad_entry = ctk.CTkEntry(vad_row, width=90, justify="center")
     _vad_entry.insert(0, "0.50")
     _vad_entry.grid(row=0, column=1, padx=6)
-    ctk.CTkLabel(vad_row, text="(0 – 1)", text_color="#888888",
+    ctk.CTkLabel(vad_row, text="(0 – 1)", text_color=COLORS.TEXT_DIM,
                  font=ctk.CTkFont(size=11)).grid(row=0, column=2, padx=(0, 10))
     w["vad_threshold"] = _vad_entry
     w["vad_threshold_row"] = vad_row
     # Not packed here — setup() shows correct row based on saved method
 
     w["min_dur"]   = _labeled_entry(card, "Min Silence Duration", "350", "ms")
-    w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms each side")
+    w["padding"]   = _labeled_entry(card, "Breathing Room (padding)", "120", "ms total")
 
-    ctk.CTkFrame(card, height=1, fg_color="#333333", corner_radius=0).pack(
+    ctk.CTkFrame(card, height=1, fg_color=COLORS.SEPARATOR_DARK, corner_radius=0).pack(
         fill="x", padx=10, pady=(6, 2))
     w["retake_cb"] = ctk.CTkCheckBox(
         card,
-        text="Detect & isolate retakes  (uses Whisper — adds ~30 s)",
-        font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa",
+        text="Detect & isolate retakes",
+        font=ctk.CTkFont(size=13),
+        text_color=COLORS.TEXT_PRIMARY,
         checkbox_width=16,
         checkbox_height=16,
     )
-    w["retake_cb"].pack(anchor="w", padx=10, pady=(2, 10))
+    w["retake_cb"].pack(anchor="w", padx=10, pady=(4, 2))
+
+    w["delete_retakes_cb"] = ctk.CTkCheckBox(
+        card,
+        text="Delete retakes (remove entirely, don't isolate)",
+        font=ctk.CTkFont(size=13),
+        text_color=COLORS.TEXT_PRIMARY,
+        checkbox_width=16,
+        checkbox_height=16,
+        state="disabled",
+    )
+    w["delete_retakes_cb"].pack(anchor="w", padx=10, pady=(0, 10))
 
     btn_row = ctk.CTkFrame(parent, fg_color="transparent")
     btn_row.pack(fill="x", padx=10, pady=6)
     btn_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio")
+    w["analyze_btn"] = ctk.CTkButton(btn_row, text="Analyze Audio",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER)
     w["analyze_btn"].grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
     w["preview_btn"] = ctk.CTkButton(btn_row, text="Preview (Add Markers)",
-                                      fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                      fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
                                       state="disabled")
     w["preview_btn"].grid(row=0, column=1, padx=3, sticky="ew")
 
     w["apply_btn"] = ctk.CTkButton(btn_row, text="Apply Cuts",
-                                    fg_color="#B85F3A", hover_color="#C96A45",
+                                    fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
                                     state="disabled")
     w["apply_btn"].grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
@@ -138,30 +152,30 @@ def build(parent: Any) -> None:
     w["status"] = ctk.CTkLabel(
         parent,
         text="Ready. Select clips in the Edit page timeline, then click Analyze.",
-        font=ctk.CTkFont(size=11), text_color="#aaaaaa", anchor="w", wraplength=800,
+        font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED, anchor="w", wraplength=800,
     )
     w["status"].pack(fill="x", padx=12, pady=(2, 4))
 
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+    ctk.CTkFrame(parent, height=1, fg_color=COLORS.SEPARATOR, corner_radius=0).pack(
         fill="x", padx=10, pady=6)
 
     ctk.CTkLabel(parent, text="ANALYSIS RESULTS",
                  font=ctk.CTkFont(size=10, weight="bold"),
-                 text_color="#888888").pack(anchor="w", padx=12, pady=(8, 4))
+                 text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(8, 4))
 
     results_row = ctk.CTkFrame(parent, fg_color="transparent")
     results_row.pack(fill="x", padx=10, pady=2)
     results_row.grid_columnconfigure((0, 1, 2), weight=1)
 
-    w["found_count"] = _stat_card(results_row, "Silences Found", "0", "#D97757")
+    w["found_count"] = _stat_card(results_row, "Silences Found", "0", COLORS.BRAND_PRIMARY)
     w["found_count"].grid(row=0, column=0, padx=(0, 4), sticky="ew")
-    w["time_saved"] = _stat_card(results_row, "Estimated Time Saved", "0.0 s", "#66bb6a")
+    w["time_saved"] = _stat_card(results_row, "Estimated Time Saved", "0.0 s", COLORS.SUCCESS)
     w["time_saved"].grid(row=0, column=1, padx=4, sticky="ew")
-    w["clips_count"] = _stat_card(results_row, "Clips Analyzed", "0", "#D97757")
+    w["clips_count"] = _stat_card(results_row, "Clips Analyzed", "0", COLORS.BRAND_PRIMARY)
     w["clips_count"].grid(row=0, column=2, padx=(4, 0), sticky="ew")
 
     w["new_timeline_lbl"] = ctk.CTkLabel(
-        parent, text="", font=ctk.CTkFont(size=11), text_color="#66bb6a", anchor="w")
+        parent, text="", font=ctk.CTkFont(size=11), text_color=COLORS.SUCCESS, anchor="w")
     w["new_timeline_lbl"].pack(fill="x", padx=12, pady=(6, 12))
 
     parent._w = w
@@ -175,17 +189,17 @@ def _labeled_entry(parent: Any, label: str, default: str, unit: str) -> ctk.CTkE
     entry = ctk.CTkEntry(row, width=90, justify="center")
     entry.insert(0, default)
     entry.grid(row=0, column=1, padx=6)
-    ctk.CTkLabel(row, text=unit, text_color="#888888",
+    ctk.CTkLabel(row, text=unit, text_color=COLORS.TEXT_DIM,
                  font=ctk.CTkFont(size=11)).grid(row=0, column=2)
     return entry
 
 
 def _stat_card(parent: Any, label: str, default: str, color: str) -> ctk.CTkFrame:
-    card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+    card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
     val = ctk.CTkLabel(card, text=default,
                        font=ctk.CTkFont(size=24, weight="bold"), text_color=color)
     val.pack(pady=(8, 2))
     ctk.CTkLabel(card, text=label, font=ctk.CTkFont(size=10),
-                 text_color="#888888").pack(pady=(0, 8))
+                 text_color=COLORS.TEXT_DIM).pack(pady=(0, 8))
     card._val = val
     return card

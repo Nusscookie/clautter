@@ -5,7 +5,15 @@ from typing import Any
 
 import customtkinter as ctk
 
-from src.ui.icon_helper import apply_clutter_icon
+from src.constants import APP_VERSION, COLORS, SETTINGS_KEYS
+from src.ui.icon_helper import apply_clautter_icon
+from src.ui.settings_window_widgets import (
+    _key_row,
+    _numeric_row,
+    _option_row,
+    _prefill,
+    _text_row,
+)
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -17,6 +25,7 @@ _NAV_W = 160
 _OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
 _GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-pro"]
 _MINIMAX_MODELS = ["MiniMax-Text-01", "MiniMax-M2.5", "abab6.5s-chat", "abab6.5g-chat", "abab5.5s-chat"]
+_ANTHROPIC_MODELS = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"]
 
 _SILENCE_METHOD_LABELS: dict[str, str] = {
     "vad": "Silero VAD (recommended)",
@@ -51,14 +60,13 @@ class _SettingsWindow(ctk.CTkToplevel):
     def __init__(self, app: Any) -> None:
         super().__init__()
         self._app = app
-        self.title("Clutter — Settings")
+        self.title("Clautter — Settings")
         self.geometry(f"{_WIN_W}x{_WIN_H}")
         self.minsize(780, 480)
         self.resizable(True, True)
-        self.configure(fg_color="#141414")
+        self.configure(fg_color=COLORS.BG_DARKEST)
         self.grab_set()
-        # Defer icon so the window is fully realized on Windows before applying
-        self.after(100, lambda: apply_clutter_icon(self))
+        apply_clautter_icon(self)  # helper defers internally for Toplevels
         self._panels: dict[str, ctk.CTkFrame] = {}
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._active_tab = _TABS[0]
@@ -74,14 +82,14 @@ class _SettingsWindow(ctk.CTkToplevel):
         outer.columnconfigure(1, weight=1)
 
         # ── Left nav panel ────────────────────────────────────────────────
-        nav = ctk.CTkFrame(outer, fg_color="#1e1e1e", corner_radius=0, width=_NAV_W)
+        nav = ctk.CTkFrame(outer, fg_color=COLORS.BG_MID, corner_radius=0, width=_NAV_W)
         nav.grid(row=0, column=0, sticky="nsw")
         nav.pack_propagate(False)
 
         ctk.CTkLabel(
             nav, text="SETTINGS",
             font=ctk.CTkFont(size=10, weight="bold"),
-            text_color="#555555",
+            text_color=COLORS.TEXT_SUBTLE,
         ).pack(anchor="w", padx=16, pady=(16, 8))
 
         for tab in _TABS:
@@ -90,8 +98,8 @@ class _SettingsWindow(ctk.CTkToplevel):
                 text=tab,
                 anchor="w",
                 fg_color="transparent",
-                hover_color="#2a2a2a",
-                text_color="#aaaaaa",
+                hover_color=COLORS.BG_CARD,
+                text_color=COLORS.TEXT_MUTED,
                 font=ctk.CTkFont(size=12),
                 corner_radius=4,
                 height=32,
@@ -120,21 +128,21 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._build_broll(scroll)
 
         # ── Bottom bar ────────────────────────────────────────────────────
-        bottom_host = ctk.CTkFrame(self, fg_color="#1a1a1a", corner_radius=0, height=52)
+        bottom_host = ctk.CTkFrame(self, fg_color=COLORS.BG_DARK, corner_radius=0, height=52)
         bottom_host.pack(fill="x", side="bottom")
         bottom_host.pack_propagate(False)
 
         ctk.CTkButton(
             bottom_host, text="Apply",
-            fg_color="#B85F3A", hover_color="#C96A45",
-            text_color="#ffffff", width=100,
+            fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
+            text_color=COLORS.TEXT_PRIMARY, width=100,
             command=self._on_apply,
         ).pack(side="right", padx=(0, 8), pady=10)
 
         ctk.CTkButton(
             bottom_host, text="Done",
-            fg_color="#2a2a2a", hover_color="#3a3a3a",
-            text_color="#aaaaaa", width=100,
+            fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+            text_color=COLORS.TEXT_MUTED, width=100,
             command=self.destroy,
         ).pack(side="right", padx=(0, 4), pady=10)
 
@@ -149,20 +157,20 @@ class _SettingsWindow(ctk.CTkToplevel):
                 panel.pack_forget()
         for name, btn in self._nav_buttons.items():
             if name == tab:
-                btn.configure(text_color="#4fc3f7", fg_color="#2a2a2a")
+                btn.configure(text_color=COLORS.BRAND_PRIMARY, fg_color=COLORS.BG_CARD)
             else:
-                btn.configure(text_color="#aaaaaa", fg_color="transparent")
+                btn.configure(text_color=COLORS.TEXT_MUTED, fg_color="transparent")
         self._active_tab = tab
 
     # ── Panel builders ────────────────────────────────────────────────────────
 
     def _build_general(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="GENERAL",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 6))
 
         row = ctk.CTkFrame(panel, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(0, 4))
@@ -175,7 +183,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             text="Show console log window on launch",
             variable=self._console_log_var,
             font=ctk.CTkFont(size=11),
-            text_color="#aaaaaa",
+            text_color=COLORS.TEXT_MUTED,
             command=self._on_console_log_toggle,
         ).pack(side="left")
 
@@ -183,9 +191,42 @@ class _SettingsWindow(ctk.CTkToplevel):
             panel,
             text="Opens a floating window showing live log output. "
                  "Takes effect on next launch.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 12))
+
+        ctk.CTkFrame(panel, fg_color=COLORS.SEPARATOR, height=1).pack(fill="x", padx=12, pady=(0, 10))
+
+        # ── Update row ──
+        update_row = ctk.CTkFrame(panel, fg_color="transparent")
+        update_row.pack(fill="x", padx=12, pady=(0, 4))
+
+        ctk.CTkLabel(
+            update_row, text="Version",
+            font=ctk.CTkFont(size=11), text_color=COLORS.TEXT_MUTED,
+            width=130, anchor="w",
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            update_row, text=APP_VERSION,
+            font=ctk.CTkFont(size=11, weight="bold"), text_color=COLORS.TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 16))
+
+        self._update_btn = ctk.CTkButton(
+            update_row, text="Check for updates",
+            font=ctk.CTkFont(size=11),
+            fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+            text_color=COLORS.TEXT_MUTED, width=140, height=26,
+            command=self._on_check_update,
+        )
+        self._update_btn.pack(side="left")
+
+        self._update_status = ctk.CTkLabel(
+            panel, text="",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
+            anchor="w",
+        )
+        self._update_status.pack(fill="x", padx=12, pady=(0, 12))
 
         ctk.CTkFrame(panel, fg_color="transparent", height=4).pack()
         self._panels["General"] = panel
@@ -193,13 +234,72 @@ class _SettingsWindow(ctk.CTkToplevel):
     def _on_console_log_toggle(self) -> None:
         self._app.settings.set("show_console_log", self._console_log_var.get())
 
+    def _on_check_update(self) -> None:
+        import threading
+        from src.utils import updater
+
+        self._update_btn.configure(state="disabled", text="Checking…")
+        self._update_status.configure(text="", text_color=COLORS.TEXT_SUBTLE)
+
+        def _worker() -> None:
+            latest = updater.fetch_latest_release()
+            if latest is None:
+                self.after(0, lambda: self._set_update_status(
+                    "Could not reach GitHub. Check your connection.", COLORS.ERROR
+                ))
+                self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+                return
+
+            if latest is updater._NO_RELEASES or not updater.is_update_available(latest):
+                self.after(0, lambda: self._set_update_status("Up to date.", COLORS.SUCCESS))
+                self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+                return
+
+            tag = latest["tag_name"]
+            html_url = latest.get("html_url", "")
+            self.after(0, lambda: self._prompt_update(tag, html_url))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _set_update_status(self, msg: str, color: str) -> None:
+        self._update_status.configure(text=msg, text_color=color)
+
+    def _prompt_update(self, tag: str, html_url: str) -> None:
+        import tkinter.messagebox as mb
+        from src.utils import updater
+
+        self._update_btn.configure(state="normal", text="Check for updates")
+        self._set_update_status(f"{tag} available.", COLORS.WARNING)
+
+        confirmed = mb.askyesno(
+            "Update available",
+            f"Update to {tag}?\n\nThis will run git reset --hard to that tag.\n"
+            "Restart Clautter after the update.",
+            parent=self,
+        )
+        if not confirmed:
+            return
+
+        self._set_update_status("Updating…", COLORS.TEXT_MUTED)
+        self._update_btn.configure(state="disabled", text="Updating…")
+
+        import threading
+
+        def _do_update() -> None:
+            ok, msg = updater.run_update(tag)
+            color = COLORS.SUCCESS if ok else COLORS.ERROR
+            self.after(0, lambda: self._set_update_status(msg, color))
+            self.after(0, lambda: self._update_btn.configure(state="normal", text="Check for updates"))
+
+        threading.Thread(target=_do_update, daemon=True).start()
+
     def _build_api_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="API KEYS",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 6))
 
         self._el_entry,  self._el_status  = _key_row(panel, "ElevenLabs")
         self._px_entry,  self._px_status  = _key_row(panel, "Pixabay")
@@ -212,7 +312,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             panel,
             text="Freesound (freesound.org/apiv2): SFX placement.  "
                  "Jamendo (devportal.jamendo.com): background music.  Both free accounts.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 12))
 
@@ -226,17 +326,17 @@ class _SettingsWindow(ctk.CTkToplevel):
 
     def _build_llm_keys(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="CLOUD LLM RE-RANK",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 6))
 
         ctk.CTkLabel(
             panel,
             text="Optional: used by Autonomous B-Roll to pick the best clip per segment. "
                  "Leave blank to use semantic ranking only.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 6))
 
@@ -244,12 +344,13 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_entry, self._gem_status = _key_row(panel, "Gemini")
         self._mmx_entry, self._mmx_status = _key_row(panel, "Minimax")
         self._nv_entry, self._nv_status = _key_row(panel, "NVIDIA")
+        self._ant_entry, self._ant_status = _key_row(panel, "Anthropic")
 
         ctk.CTkLabel(
             panel,
             text="NVIDIA gives free access to many open-source models. "
                  "Set the model id in the LLM Models tab.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 4))
 
@@ -259,22 +360,23 @@ class _SettingsWindow(ctk.CTkToplevel):
         _prefill(self._gem_entry, str(app.settings.get("gemini_api_key", "") or ""))
         _prefill(self._mmx_entry, str(app.settings.get("minimax_api_key", "") or ""))
         _prefill(self._nv_entry, str(app.settings.get("nvidia_api_key", "") or ""))
+        _prefill(self._ant_entry, str(app.settings.get("anthropic_api_key", "") or ""))
 
         self._panels["LLM Keys"] = panel
 
     def _build_llm_models(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="LLM MODEL CONFIG",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 4))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 4))
 
         ctk.CTkLabel(
             panel,
             text="Model and generation settings used by Full Director mode. "
                  "Applied to whichever provider has an API key.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(0, 6))
 
@@ -282,15 +384,16 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_model = _option_row(panel, "Gemini model:", _GEMINI_MODELS)
         self._mmx_model = _option_row(panel, "Minimax model:", _MINIMAX_MODELS)
         self._nv_model = _text_row(panel, "NVIDIA model id:", placeholder="e.g. moonshotai/kimi-k2.6")
+        self._ant_model = _option_row(panel, "Anthropic model:", _ANTHROPIC_MODELS)
 
         self._llm_max_tokens_entry = _numeric_row(
             panel, "Max tokens:", 200, 8000,
-            str(int(app.settings.get("llm_max_tokens", 1500) or 1500)),
+            str(int(app.settings.get(SETTINGS_KEYS.LLM_MAX_TOKENS, 1500) or 1500)),
             hint="Tokens LLM may generate. Higher = longer but slower.",
         )
         self._llm_temp_entry = _numeric_row(
             panel, "Temperature:", 0.0, 2.0,
-            f"{float(app.settings.get('llm_temperature', 0.1) or 0.1):.2f}",
+            f"{float(app.settings.get(SETTINGS_KEYS.LLM_TEMPERATURE, 0.1) or 0.1):.2f}",
             hint="0 = deterministic, higher = more creative.",
         )
 
@@ -300,16 +403,17 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._gem_model.set(str(app.settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash"))
         self._mmx_model.set(str(app.settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"))
         _prefill(self._nv_model, str(app.settings.get("llm_nvidia_model", "") or ""))
+        self._ant_model.set(str(app.settings.get("llm_anthropic_model", "claude-sonnet-4-6") or "claude-sonnet-4-6"))
 
         self._panels["LLM Models"] = panel
 
     def _build_smart_cuts(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="SMART CUTS",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 6))
 
         self._silence_menu = _option_row(
             panel, "Silence detection:",
@@ -324,7 +428,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             panel,
             text="Silero VAD downloads ~5 MB model on first run. "
                  "spaCy uses en_core_web_sm (already installed).",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w", wraplength=640,
         ).pack(fill="x", padx=12, pady=(2, 12))
 
@@ -344,11 +448,11 @@ class _SettingsWindow(ctk.CTkToplevel):
 
     def _build_broll(self, scroll: ctk.CTkScrollableFrame) -> None:
         app = self._app
-        panel = ctk.CTkFrame(scroll, fg_color="#2a2a2a", corner_radius=6)
+        panel = ctk.CTkFrame(scroll, fg_color=COLORS.BG_CARD, corner_radius=6)
 
         ctk.CTkLabel(panel, text="B-ROLL",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(10, 6))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(10, 6))
 
         self._keyword_menu = _option_row(
             panel, "Keyword method:",
@@ -358,27 +462,27 @@ class _SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(
             panel,
             text="KeyBERT and spaCy download a model (~80 MB) on first use.",
-            font=ctk.CTkFont(size=10), text_color="#555555",
+            font=ctk.CTkFont(size=10), text_color=COLORS.TEXT_SUBTLE,
             anchor="w",
         ).pack(fill="x", padx=12, pady=(2, 8))
 
         ctk.CTkLabel(panel, text="NATURAL PLACEMENT",
                      font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="#888888").pack(anchor="w", padx=12, pady=(4, 4))
+                     text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=12, pady=(4, 4))
 
         self._intro_skip_entry = _numeric_row(
             panel, "Intro skip (s):", 0.0, 60.0,
-            f"{float(app.settings.get('broll_intro_skip_sec', 4.0)):.1f}",
+            f"{float(app.settings.get(SETTINGS_KEYS.BROLL_INTRO_SKIP, 4.0)):.1f}",
             hint="No B-roll before this time. Default: 4s.",
         )
         self._min_gap_entry = _numeric_row(
             panel, "Min gap (s):", 0.0, 30.0,
-            f"{float(app.settings.get('broll_min_gap_sec', 5.0)):.1f}",
+            f"{float(app.settings.get(SETTINGS_KEYS.BROLL_MIN_GAP, 5.0)):.1f}",
             hint="Minimum face time between clips. Default: 5s.",
         )
         self._max_clip_entry = _numeric_row(
             panel, "Max clip (s):", 1.0, 30.0,
-            f"{float(app.settings.get('broll_max_broll_duration', 5.0)):.1f}",
+            f"{float(app.settings.get(SETTINGS_KEYS.BROLL_MAX_DUR, 5.0)):.1f}",
             hint="Maximum B-roll clip duration. Default: 5s.",
         )
 
@@ -423,19 +527,19 @@ class _SettingsWindow(ctk.CTkToplevel):
         saved: list[str] = []
         if el:
             saved.append("ElevenLabs")
-            self._el_status.configure(text="Saved.", text_color="#66bb6a")
+            self._el_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if px:
             saved.append("Pixabay")
-            self._px_status.configure(text="Saved.", text_color="#66bb6a")
+            self._px_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if pex:
             saved.append("Pexels")
-            self._pex_status.configure(text="Saved.", text_color="#66bb6a")
+            self._pex_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if fs:
             saved.append("Freesound")
-            self._fs_status.configure(text="Saved.", text_color="#66bb6a")
+            self._fs_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if jam:
             saved.append("Jamendo")
-            self._jam_status.configure(text="Saved.", text_color="#66bb6a")
+            self._jam_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
 
         log.info("Settings: saved keys: %s", ", ".join(saved) if saved else "none")
 
@@ -449,20 +553,25 @@ class _SettingsWindow(ctk.CTkToplevel):
         if oai:
             app.settings.set("openai_api_key", oai)
             saved.append("OpenAI")
-            self._oai_status.configure(text="Saved.", text_color="#66bb6a")
+            self._oai_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if gem:
             app.settings.set("gemini_api_key", gem)
             saved.append("Gemini")
-            self._gem_status.configure(text="Saved.", text_color="#66bb6a")
+            self._gem_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         if mmx:
             app.settings.set("minimax_api_key", mmx)
             saved.append("Minimax")
-            self._mmx_status.configure(text="Saved.", text_color="#66bb6a")
+            self._mmx_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
         nv = self._nv_entry.get().strip()
         if nv:
             app.settings.set("nvidia_api_key", nv)
             saved.append("NVIDIA")
-            self._nv_status.configure(text="Saved.", text_color="#66bb6a")
+            self._nv_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
+        ant = self._ant_entry.get().strip()
+        if ant:
+            app.settings.set("anthropic_api_key", ant)
+            saved.append("Anthropic")
+            self._ant_status.configure(text="Saved.", text_color=COLORS.SUCCESS)
 
         log.info("Settings: saved LLM keys: %s", ", ".join(saved) if saved else "none")
 
@@ -472,12 +581,13 @@ class _SettingsWindow(ctk.CTkToplevel):
         app.settings.set("llm_gemini_model", self._gem_model.get())
         app.settings.set("llm_minimax_model", self._mmx_model.get())
         app.settings.set("llm_nvidia_model", self._nv_model.get().strip())
+        app.settings.set("llm_anthropic_model", self._ant_model.get())
         try:
-            app.settings.set("llm_max_tokens", int(self._llm_max_tokens_entry.get().strip()))
+            app.settings.set(SETTINGS_KEYS.LLM_MAX_TOKENS, int(self._llm_max_tokens_entry.get().strip()))
         except ValueError:
             pass
         try:
-            app.settings.set("llm_temperature", float(self._llm_temp_entry.get().strip()))
+            app.settings.set(SETTINGS_KEYS.LLM_TEMPERATURE, float(self._llm_temp_entry.get().strip()))
         except ValueError:
             pass
         log.info("Settings: saved LLM model config")
@@ -485,15 +595,15 @@ class _SettingsWindow(ctk.CTkToplevel):
     def _on_save_placement(self) -> None:
         app = self._app
         try:
-            app.settings.set("broll_intro_skip_sec", float(self._intro_skip_entry.get().strip()))
+            app.settings.set(SETTINGS_KEYS.BROLL_INTRO_SKIP, float(self._intro_skip_entry.get().strip()))
         except ValueError:
             pass
         try:
-            app.settings.set("broll_min_gap_sec", float(self._min_gap_entry.get().strip()))
+            app.settings.set(SETTINGS_KEYS.BROLL_MIN_GAP, float(self._min_gap_entry.get().strip()))
         except ValueError:
             pass
         try:
-            app.settings.set("broll_max_broll_duration", float(self._max_clip_entry.get().strip()))
+            app.settings.set(SETTINGS_KEYS.BROLL_MAX_DUR, float(self._max_clip_entry.get().strip()))
         except ValueError:
             pass
         log.info("Settings: saved natural placement config")
@@ -511,85 +621,5 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._app.settings.set("broll_keyword_method", key)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _key_row(
-    parent: Any, label: str, placeholder: str | None = None
-) -> tuple[ctk.CTkEntry, ctk.CTkLabel]:
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=12, pady=(0, 4))
-    row.grid_columnconfigure(1, weight=1)
-
-    ctk.CTkLabel(row, text=f"{label}:", font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=130, anchor="w").grid(row=0, column=0, sticky="w")
-
-    entry = ctk.CTkEntry(row, show="*",
-                         placeholder_text=placeholder or f"Paste {label} API key")
-    entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-
-    status = ctk.CTkLabel(parent, text="", font=ctk.CTkFont(size=10),
-                          text_color="#aaaaaa", anchor="w")
-    status.pack(fill="x", padx=12, pady=(0, 2))
-
-    return entry, status
-
-
-def _option_row(parent: Any, label: str, values: list[str]) -> ctk.CTkOptionMenu:
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=12, pady=(0, 6))
-
-    ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=150, anchor="w").pack(side="left")
-
-    menu = ctk.CTkOptionMenu(
-        row, values=values, width=240,
-        fg_color="#1e1e1e", button_color="#1e1e1e", button_hover_color="#3a3a3a",
-    )
-    menu.pack(side="left", padx=(6, 0))
-    return menu
-
-
-def _text_row(parent: Any, label: str, placeholder: str = "") -> ctk.CTkEntry:
-    """Single-line free-text input row (visible, not masked)."""
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=12, pady=(0, 6))
-    row.grid_columnconfigure(1, weight=1)
-
-    ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=150, anchor="w").grid(row=0, column=0, sticky="w")
-
-    entry = ctk.CTkEntry(row, placeholder_text=placeholder)
-    entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-    return entry
-
-
-def _numeric_row(
-    parent: Any,
-    label: str,
-    min_val: float,
-    max_val: float,
-    default: str,
-    hint: str = "",
-) -> ctk.CTkEntry:
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=12, pady=(0, 4))
-    row.grid_columnconfigure(2, weight=1)
-
-    ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11),
-                 text_color="#aaaaaa", width=130, anchor="w").grid(row=0, column=0, sticky="w")
-
-    entry = ctk.CTkEntry(row, width=80, placeholder_text=default)
-    entry.grid(row=0, column=1, padx=(6, 8))
-    entry.insert(0, default)
-
-    if hint:
-        ctk.CTkLabel(row, text=hint, font=ctk.CTkFont(size=10),
-                     text_color="#555555", anchor="w").grid(row=0, column=2, sticky="w")
-
-    return entry
-
-
-def _prefill(entry: ctk.CTkEntry, value: str) -> None:
-    if value:
-        entry.delete(0, "end")
-        entry.insert(0, value)
+# Row-builder helpers (_key_row, _option_row, _text_row, _numeric_row,
+# _prefill) live in settings_window_widgets.py and are imported above.

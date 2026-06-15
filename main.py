@@ -1,4 +1,4 @@
-"""Clutter — DaVinci Resolve Plugin launcher.
+"""Clautter — DaVinci Resolve Plugin launcher.
 
 Place this file AND the src/ folder in DaVinci Resolve's Scripts/Utility folder:
 
@@ -6,7 +6,7 @@ Place this file AND the src/ folder in DaVinci Resolve's Scripts/Utility folder:
   macOS:    ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/
   Linux:    ~/.local/share/DaVinciResolve/Fusion/Scripts/Utility/
 
-Then launch via:  Workspace → Scripts → Utility → Clutter → main
+Then launch via:  Workspace → Scripts → Utility → Clautter → main
 
 What this does:
 
@@ -25,7 +25,7 @@ What this does:
    closes is a no-op anyway because Resolve only allows one execution
    per script at a time.
 
-The HTTP server writes its port to ``~/.clutter/bridge.json``; the
+The HTTP server writes its port to ``~/.clautter/bridge.json``; the
 client (gui.py) reads the file and connects. If the file is stale
 (Resolve restarted), the client's ``/ping`` fails and the connect
 falls through to other strategies.
@@ -117,15 +117,15 @@ def _acquire_resolve():
 
 def main() -> None:
     if not _GUI_SCRIPT.exists():
-        print(f"[Clutter] ERROR: gui.py not found at {_GUI_SCRIPT}")
+        print(f"[Clautter] ERROR: gui.py not found at {_GUI_SCRIPT}")
         return
 
     # 1. Acquire the live resolve object.
     resolve = _acquire_resolve()
     if resolve is None:
         print(
-            "[Clutter] ERROR: Cannot reach DaVinci Resolve from this script context.\n"
-            "Make sure you launched this from Workspace > Scripts > Utility > Clutter."
+            "[Clautter] ERROR: Cannot reach DaVinci Resolve from this script context.\n"
+            "Make sure you launched this from Workspace > Scripts > Utility > Clautter."
         )
         return
 
@@ -134,6 +134,9 @@ def main() -> None:
     if str(_PLUGIN_DIR) not in sys.path:
         sys.path.insert(0, str(_PLUGIN_DIR))
 
+    from src.utils.migration import migrate_data_dir
+    migrate_data_dir()
+
     try:
         from src.utils.rpc_server import start_server
         # _server is intentionally unused here — the daemon thread holds
@@ -141,14 +144,14 @@ def main() -> None:
         # the variable isn't garbage-collected mid-call.
         _server, port = start_server(resolve)
     except Exception as e:
-        print(f"[Clutter] ERROR: Failed to start HTTP bridge: {e!r}")
+        print(f"[Clautter] ERROR: Failed to start HTTP bridge: {e!r}")
         return
 
     # 3. Find a Python that has customtkinter and spawn the GUI.
     python = _find_python()
     if python is None:
         print(
-            "[Clutter] ERROR: No Python interpreter with customtkinter found.\n"
+            "[Clautter] ERROR: No Python interpreter with customtkinter found.\n"
             "Resolve 19.x requires Python 3.10–3.12. Install:\n"
             "  py -3.12 -m pip install customtkinter"
         )

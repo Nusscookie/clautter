@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -17,7 +18,7 @@ def import_style_thread(
     """Read Text+ inputs from a Fusion Title clip and call apply_text_style_fn with the result."""
     try:
         if not app.timeline:
-            set_status("No timeline — connect Resolve first.", "#ff6b6b")
+            set_status("No timeline — connect Resolve first.", COLORS.ERROR)
             return
         item = app.timeline.GetCurrentVideoItem()
 
@@ -46,7 +47,7 @@ def import_style_thread(
         if not item:
             set_status(
                 "No Fusion Title clip found. Move playhead over a subtitle clip and try again.",
-                "#E8903A",
+                COLORS.WARNING,
             )
             return
 
@@ -55,7 +56,7 @@ def import_style_thread(
         except Exception:
             comp_count = 0
         if not comp_count:
-            set_status("Selected clip has no Fusion composition.", "#E8903A")
+            set_status("Selected clip has no Fusion composition.", COLORS.WARNING)
             return
 
         comp = item.GetFusionCompByIndex(1)
@@ -63,7 +64,7 @@ def import_style_thread(
         if not text_tool:
             set_status(
                 "No Text+ tool in selected clip. Select a Fusion Title or Text+ generator.",
-                "#E8903A",
+                COLORS.WARNING,
             )
             return
 
@@ -129,13 +130,13 @@ def import_style_thread(
             except Exception as _e:
                 log.debug("GetInputList failed: %s", _e)
             set_status(
-                "Could not read style from clip. Check log for available inputs.", "#E8903A")
+                "Could not read style from clip. Check log for available inputs.", COLORS.WARNING)
             return
 
         log.info("Imported style from Resolve clip: %s", style)
         ui(lambda: apply_text_style_fn(style))
-        set_status("Style imported from Fusion clip.", "#66bb6a")
+        set_status("Style imported from Fusion clip.", COLORS.SUCCESS)
 
     except Exception as e:
         log.error("Import style from Resolve: %s", e)
-        set_status(f"Import error: {e}", "#ff6b6b")
+        set_status(f"Import error: {e}", COLORS.ERROR)

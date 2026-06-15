@@ -1,4 +1,4 @@
-"""Per-feature scene builders for the Clutter whiteboard.
+"""Per-feature scene builders for the Clautter whiteboard.
 
 Each function receives a gen.Builder and lays out a high-level flow on the
 vertical spine, branch nodes to the right, and a legend panel of the real
@@ -318,7 +318,7 @@ def overview(b: Builder) -> None:
     m = b.step("io", "main.py (Resolve-side)\nacquires resolve, no UI\nmain.py", prev=r)
     srv = b.step("process",
                  "rpc_server (daemon thread)\nhttp://127.0.0.1:<rand>\nrpc_server.py", prev=m)
-    bj = b.branch("io", "~/.clutter/bridge.json\n(port handshake)",
+    bj = b.branch("io", "~/.clautter/bridge.json\n(port handshake)",
                   from_id=srv, label="writes", dx=380)
     gui = b.step("process", "subprocess: gui.py\nCTk window\ngui.py", prev=srv,
                  label="spawns + proc.wait()")

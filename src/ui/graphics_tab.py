@@ -6,6 +6,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -18,7 +19,7 @@ def build(parent: Any) -> None:
         parent,
         text="MOTION GRAPHICS  —  AI-powered Hyperframes renderer",
         font=ctk.CTkFont(size=11, weight="bold"),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     ).pack(fill="x", padx=12, pady=(12, 6))
 
@@ -33,7 +34,7 @@ def build(parent: Any) -> None:
         provider_frame,
         text="AI Provider",
         font=ctk.CTkFont(size=10),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
     ).pack(anchor="w")
     w["provider"] = ctk.CTkComboBox(provider_frame, values=["(auto)"], state="readonly")
     w["provider"].set("(auto)")
@@ -51,7 +52,7 @@ def build(parent: Any) -> None:
         parent,
         text="Select a provider and click Generate. Requires transcript from Subtitles tab.",
         font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         anchor="w",
     )
     w["status"].pack(fill="x", padx=12, pady=(4, 2))
@@ -65,14 +66,14 @@ def build(parent: Any) -> None:
     _divider(parent)
 
     # ── Info card ──
-    info_card = ctk.CTkFrame(parent, fg_color="#1A1A1A", corner_radius=6)
+    info_card = ctk.CTkFrame(parent, fg_color=COLORS.BG_DARK, corner_radius=6)
     info_card.pack(fill="x", padx=10, pady=(8, 12))
 
     ctk.CTkLabel(
         info_card,
         text="HOW IT WORKS",
         font=ctk.CTkFont(size=10, weight="bold"),
-        text_color="#888888",
+        text_color=COLORS.TEXT_DIM,
     ).pack(anchor="w", padx=10, pady=(8, 4))
 
     ctk.CTkLabel(
@@ -84,7 +85,7 @@ def build(parent: Any) -> None:
             "3. Rendered clips are imported into Resolve and placed on the Motion Graphics track."
         ),
         font=ctk.CTkFont(size=11),
-        text_color="#aaaaaa",
+        text_color=COLORS.TEXT_MUTED,
         justify="left",
         anchor="w",
     ).pack(anchor="w", padx=10, pady=(0, 8))
@@ -93,7 +94,7 @@ def build(parent: Any) -> None:
 
 
 def _divider(parent: Any) -> None:
-    ctk.CTkFrame(parent, height=1, fg_color="#444444", corner_radius=0).pack(
+    ctk.CTkFrame(parent, height=1, fg_color=COLORS.SEPARATOR, corner_radius=0).pack(
         fill="x", padx=10, pady=4)
 
 
@@ -103,7 +104,7 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
     def set_progress(current: int, total: int) -> None:
@@ -140,15 +141,15 @@ def setup(frame: Any, app: Any) -> None:
                     progress_cb=set_progress,
                 )
                 if err:
-                    set_status(f"Error: {err}", "#ff6b6b")
+                    set_status(f"Error: {err}", COLORS.ERROR)
                 else:
                     set_status(
                         f"{placed} motion graphic(s) placed on timeline.",
-                        "#66bb6a",
+                        COLORS.SUCCESS,
                     )
             except Exception as e:
                 log.error("Motion graphics pipeline error: %s", e)
-                set_status(f"Error: {e}", "#ff6b6b")
+                set_status(f"Error: {e}", COLORS.ERROR)
             finally:
                 _ui(lambda: w["generate_btn"].configure(state="normal"))
                 _ui(lambda: w["progress"].pack_forget())

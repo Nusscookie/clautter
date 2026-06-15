@@ -1,4 +1,4 @@
-"""Generator for Clutter's Excalidraw feature flow maps.
+"""Generator for Clautter's Excalidraw feature flow maps.
 
 Standalone — no project / Resolve deps. Emits one `.excalidraw` scene per
 feature into `docs/whiteboard/`, each a high-level flow (process boxes,
@@ -200,7 +200,7 @@ def scene(elements: list[dict]) -> dict:
     return {
         "type": "excalidraw",
         "version": 2,
-        "source": "clutter-whiteboard-gen",
+        "source": "clautter-whiteboard-gen",
         "elements": elements,
         "appState": {"gridSize": 20, "viewBackgroundColor": "#ffffff"},
         "files": {},
@@ -220,7 +220,7 @@ def write(name: str, b: Builder) -> None:
 def main() -> None:
     from builders import BUILDERS  # local module; imported here to avoid cycle
 
-    print("Generating Clutter whiteboard scenes…")
+    print("Generating Clautter whiteboard scenes…")
     for name, fn in BUILDERS.items():
         ids = _Ids()
         b = Builder(ids)

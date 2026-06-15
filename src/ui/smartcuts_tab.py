@@ -4,6 +4,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from src.constants import COLORS
 from src.ui._smartcuts_build import build
 from src.ui._smartcuts_data import PACE_PRESETS
 from src.ui._smartcuts_workers import analyze_thread, apply_thread, preview_thread
@@ -26,7 +27,7 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
     def set_progress(value: float, visible: bool = True) -> None:
@@ -64,6 +65,8 @@ def setup(frame: Any, app: Any) -> None:
         w["vad_threshold"].insert(0, str(p["vad_threshold"]))
         w["min_dur"].delete(0, "end")
         w["min_dur"].insert(0, str(p["min_silence_ms"]))
+        w["padding"].delete(0, "end")
+        w["padding"].insert(0, str(p["padding_ms"]))
         app.settings.set("default_pace", level)
         # Settings changed — previous results are stale
         if _state.get("total_silences", 0) > 0 or _state.get("clips"):
@@ -74,12 +77,19 @@ def setup(frame: Any, app: Any) -> None:
             w["preview_btn"].configure(state="disabled")
             w["status"].configure(
                 text="Settings changed — click Analyze to update results.",
-                text_color="#E8903A",
+                text_color=COLORS.WARNING,
             )
+
+    def _on_retake_cb_toggle() -> None:
+        if w["retake_cb"].get():
+            w["delete_retakes_cb"].configure(state="normal")
+        else:
+            w["delete_retakes_cb"].deselect()
+            w["delete_retakes_cb"].configure(state="disabled")
 
     def on_analyze() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         threading.Thread(
             target=analyze_thread,
@@ -89,15 +99,35 @@ def setup(frame: Any, app: Any) -> None:
 
     def on_apply() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         try:
-            from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog
+            from src.ui.timeline_dialog import find_named_video_track, show_timeline_dialog, show_warning_dialog
             _retake_track_idx: int | None = None
+            _has_other_tracks = False
             if app.timeline:
                 _retake_track_idx = find_named_video_track(app.timeline, "Retakes")
+                try:
+                    _vcount = app.timeline.GetTrackCount("video")
+                    _has_other_tracks = any(
+                        bool(app.timeline.GetItemListInTrack("video", _ti))
+                        for _ti in range(2, _vcount + 1)
+                    )
+                except Exception:
+                    pass
+            if _has_other_tracks:
+                if not show_warning_dialog(
+                    frame,
+                    "This timeline has B-Roll or Subtitle tracks above Video 1.\n\n"
+                    "After cuts are applied, those tracks will be out of sync "
+                    "and need to be re-synced manually.",
+                    title="Tracks will be out of sync",
+                ):
+                    set_status("Apply cancelled.", COLORS.TEXT_MUTED)
+                    return
             choice = show_timeline_dialog(
                 frame, app.project,
+                current_timeline=app.timeline,
                 secondary_section={
                     "detect": _retake_track_idx is not None,
                     "label": "Retake layer",
@@ -108,10 +138,10 @@ def setup(frame: Any, app: Any) -> None:
             )
         except Exception as e:
             log.error("Timeline dialog error: %s", e)
-            set_status(f"Dialog error: {e}", "#ff6b6b")
+            set_status(f"Dialog error: {e}", COLORS.ERROR)
             return
         if choice is None:
-            set_status("Apply cancelled.", "#aaaaaa")
+            set_status("Apply cancelled.", COLORS.TEXT_MUTED)
             return
         _state["timeline_choice"] = choice["timeline"]
         _state["track_mode"] = choice.get("track_mode", "new")
@@ -126,7 +156,7 @@ def setup(frame: Any, app: Any) -> None:
 
     def on_preview() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         threading.Thread(
             target=preview_thread,
@@ -141,6 +171,7 @@ def setup(frame: Any, app: Any) -> None:
     w["apply_btn"].configure(command=on_apply)
     w["preview_btn"].configure(command=on_preview)
     w["pace_slider"].configure(command=on_pace_slider)
+    w["retake_cb"].configure(command=_on_retake_cb_toggle)
 
     default_pace = app.settings.get("default_pace", 5)
     w["pace_slider"].set(default_pace)

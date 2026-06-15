@@ -15,8 +15,9 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from src.constants import COLORS
 from src.broll.providers.base import ClipResult
-from src.ui.icon_helper import apply_clutter_icon
+from src.ui.icon_helper import apply_clautter_icon
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -38,7 +39,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
         broll_state: dict | None = None,
     ) -> None:
         super().__init__(master)
-        apply_clutter_icon(self)
+        apply_clautter_icon(self)
 
         self._app = app
         self._set_status = set_status
@@ -50,7 +51,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
         self.title("B-Roll Search Results")
         self.geometry("780x620")
         self.minsize(620, 400)
-        self.configure(fg_color="#141414")
+        self.configure(fg_color=COLORS.BG_DARKEST)
 
         # Resolve to the actual top-level window. ``master`` may be a
         # CTkFrame inside a CTkTabview, in which case ``transient(master)``
@@ -89,7 +90,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
     # ── Layout ──────────────────────────────────────────────────────
 
     def _build(self, results_by_keyword: dict[str, list[ClipResult]]) -> None:
-        header = ctk.CTkFrame(self, fg_color="#1e1e1e", corner_radius=0, height=48)
+        header = ctk.CTkFrame(self, fg_color=COLORS.BG_MID, corner_radius=0, height=48)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
         ctk.CTkLabel(
@@ -97,14 +98,14 @@ class BrollResultsWindow(ctk.CTkToplevel):
             text=f"B-Roll Results  —  {len(results_by_keyword)} keyword(s)  ·  "
                  f"{sum(len(v) for v in results_by_keyword.values())} clip(s)",
             font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#D97757", anchor="w",
+            text_color=COLORS.BRAND_PRIMARY, anchor="w",
         ).pack(side="left", padx=14, pady=12)
 
         ctk.CTkLabel(
             header,
             text=f"Saving to: {self._target_dir}",
             font=ctk.CTkFont(size=10),
-            text_color="#888888", anchor="e",
+            text_color=COLORS.TEXT_DIM, anchor="e",
         ).pack(side="right", padx=14, pady=12)
 
         # Scrollable body
@@ -118,18 +119,18 @@ class BrollResultsWindow(ctk.CTkToplevel):
             self._build_section(body, keyword, hits)
 
         # Footer
-        footer = ctk.CTkFrame(self, fg_color="#1e1e1e", corner_radius=0, height=36)
+        footer = ctk.CTkFrame(self, fg_color=COLORS.BG_MID, corner_radius=0, height=36)
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
         ctk.CTkLabel(
             footer,
             text="Downloaded clips are saved locally and added to Resolve's Media Pool.",
             font=ctk.CTkFont(size=10),
-            text_color="#888888", anchor="w",
+            text_color=COLORS.TEXT_DIM, anchor="w",
         ).pack(side="left", padx=14, pady=8)
         ctk.CTkButton(
             footer, text="Close", width=80,
-            fg_color="#2a2a2a", hover_color="#3a3a3a",
+            fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
             command=self.destroy,
         ).pack(side="right", padx=14, pady=6)
 
@@ -141,8 +142,8 @@ class BrollResultsWindow(ctk.CTkToplevel):
             parent,
             text=f"  '{keyword}'  —  {len(hits)} result(s)",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#aaaaaa", anchor="w",
-            fg_color="#1e1e1e", corner_radius=4,
+            text_color=COLORS.TEXT_MUTED, anchor="w",
+            fg_color=COLORS.BG_MID, corner_radius=4,
         ).pack(fill="x", padx=4, pady=(10, 4), ipady=4)
 
         for idx, hit in enumerate(hits):
@@ -151,7 +152,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
     def _build_card(
         self, parent: Any, clip: ClipResult, keyword: str, idx: int,
     ) -> None:
-        card = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=6)
+        card = ctk.CTkFrame(parent, fg_color=COLORS.BG_CARD, corner_radius=6)
         card.pack(fill="x", padx=4, pady=(0, 4))
 
         # Top row: source tag + title
@@ -162,20 +163,20 @@ class BrollResultsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(
             top, text=clip.source.upper(),
             font=ctk.CTkFont(size=9, weight="bold"),
-            text_color="#141414",
-            fg_color="#A85A3E" if clip.source == "pixabay" else "#E8903A",
+            text_color=COLORS.BG_DARKEST,
+            fg_color=COLORS.BRAND_DIM if clip.source == "pixabay" else COLORS.WARNING,
             corner_radius=3, width=64,
         ).grid(row=0, column=0, padx=(0, 8), sticky="w", ipady=2)
 
         ctk.CTkLabel(
             top, text=clip.title or "(untitled)",
             font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#ffffff", anchor="w",
+            text_color=COLORS.TEXT_PRIMARY, anchor="w",
         ).grid(row=0, column=1, sticky="ew")
 
         # Thumbnail preview
         thumb_lbl = ctk.CTkLabel(
-            card, text="", fg_color="#1e1e1e",
+            card, text="", fg_color=COLORS.BG_MID,
             width=320, height=90, corner_radius=4,
         )
         thumb_lbl.pack(fill="x", padx=10, pady=(4, 2))
@@ -207,7 +208,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
             card,
             text="  ·  ".join(meta_bits) if meta_bits else " ",
             font=ctk.CTkFont(size=10),
-            text_color="#888888", anchor="w",
+            text_color=COLORS.TEXT_DIM, anchor="w",
         ).pack(fill="x", padx=10, pady=(0, 2))
 
         # Page URL
@@ -215,7 +216,7 @@ class BrollResultsWindow(ctk.CTkToplevel):
             ctk.CTkLabel(
                 card, text=clip.page_url,
                 font=ctk.CTkFont(size=9),
-                text_color="#555555", anchor="w", wraplength=720,
+                text_color=COLORS.TEXT_SUBTLE, anchor="w", wraplength=720,
             ).pack(fill="x", padx=10, pady=(0, 4))
 
         # Action row
@@ -226,26 +227,26 @@ class BrollResultsWindow(ctk.CTkToplevel):
         status_lbl = ctk.CTkLabel(
             actions, text="",
             font=ctk.CTkFont(size=10),
-            text_color="#aaaaaa", anchor="w",
+            text_color=COLORS.TEXT_MUTED, anchor="w",
         )
         status_lbl.grid(row=0, column=0, sticky="w")
 
         if clip.page_url:
             ctk.CTkButton(
                 actions, text="Open Page", width=90,
-                fg_color="#2a2a2a", hover_color="#3a3a3a",
+                fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
                 command=lambda url=clip.page_url: self._open_url(url),
             ).grid(row=0, column=1, padx=(0, 6))
 
         download_btn = ctk.CTkButton(
             actions, text="Download", width=100,
-            fg_color="#1b5e20", hover_color="#2e7d32",
+            fg_color=COLORS.BTN_PRIMARY_BG, hover_color=COLORS.BTN_PRIMARY_HOVER,
         )
         download_btn.grid(row=0, column=2)
 
         def on_download(clip=clip, btn=download_btn, lbl=status_lbl) -> None:
             btn.configure(state="disabled", text="Downloading…")
-            lbl.configure(text="Starting download…", text_color="#D97757")
+            lbl.configure(text="Starting download…", text_color=COLORS.BRAND_PRIMARY)
 
             def per_card_status(msg: str, color: str) -> None:
                 self._ui(lambda m=msg, c=color: lbl.configure(text=m, text_color=c))
@@ -254,13 +255,13 @@ class BrollResultsWindow(ctk.CTkToplevel):
                 from src.broll.downloader import BrollDownloader
                 from src.broll.providers.base import NetworkError
                 try:
-                    per_card_status(f"Downloading {clip.title}…", "#D97757")
+                    per_card_status(f"Downloading {clip.title}…", COLORS.BRAND_PRIMARY)
                     downloader = BrollDownloader(self._target_dir, self._app)
                     result = downloader.download_and_import(clip)
                     clip_path = result["path"]
                     clip_name = Path(clip_path).name
                     per_card_status(
-                        f"Saved: {clip_name} → media pool. Added to clips list.", "#66bb6a")
+                        f"Saved: {clip_name} → media pool. Added to clips list.", COLORS.SUCCESS)
                     # Auto-add to the pinned clips list in the main tab
                     if self._broll_w and self._broll_state is not None:
                         from src.ui._broll_workers import add_clip_row
@@ -277,10 +278,10 @@ class BrollResultsWindow(ctk.CTkToplevel):
                         ))
                 except NetworkError as e:
                     log.error("Download failed for %s: %s", clip.external_id, e)
-                    per_card_status(f"Download failed: {e}", "#ff6b6b")
+                    per_card_status(f"Download failed: {e}", COLORS.ERROR)
                 except Exception as e:
                     log.error("Unexpected download error: %s", e)
-                    per_card_status(f"Error: {e}", "#ff6b6b")
+                    per_card_status(f"Error: {e}", COLORS.ERROR)
                 finally:
                     self._ui(lambda: btn.configure(state="normal", text="Download"))
 

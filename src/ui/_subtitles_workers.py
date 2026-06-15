@@ -10,6 +10,7 @@ from __future__ import annotations
 import tempfile
 from typing import Any, Callable
 
+from src.constants import COLORS
 from src.ui._subtitles_generate import generate_thread  # re-export for backwards compat
 from src.utils.logger import get_logger
 
@@ -37,7 +38,7 @@ def create_track_thread(
         set_btn("create_track_btn", False)
 
         if not state["words"]:
-            set_status("Generate transcript first.", "#ff6b6b")
+            set_status("Generate transcript first.", COLORS.ERROR)
             return
 
         _placeholder = "Transcript will appear here after generation..."
@@ -71,7 +72,7 @@ def create_track_thread(
                     )
                     set_status(
                         f"Word count changed ({len(_orig_words)}→{len(_tokens)}) — timing approximated.",
-                        "#E8903A",
+                        COLORS.WARNING,
                     )
                 else:
                     _words_src = state["words"]
@@ -85,7 +86,7 @@ def create_track_thread(
             set_status(f"Adding subtitle track to '{_target_tl.GetName()}'...")
         elif _mode == "new":
             if not app.timeline:
-                set_status("No active timeline. Open a timeline in Resolve first.", "#ff6b6b")
+                set_status("No active timeline. Open a timeline in Resolve first.", COLORS.ERROR)
                 return
             set_status(f"Adding subtitle track to '{app.timeline.GetName()}'...")
         else:
@@ -119,21 +120,21 @@ def create_track_thread(
             from src.subtitles.generator import words_to_srt
             _srt_tmp = _tempfile.NamedTemporaryFile(
                 suffix=".srt", delete=False, mode="w", encoding="utf-8",
-                prefix="clutter_fallback_",
+                prefix="clautter_fallback_",
             )
             _srt_tmp.write(words_to_srt(remapped, preset_name, **style_overrides))
             _srt_tmp.close()
             ok = import_srt_to_timeline(app.resolve, _srt_tmp.name, app.timeline)
 
         if ok:
-            set_status("Subtitle track created.", "#66bb6a")
+            set_status("Subtitle track created.", COLORS.SUCCESS)
         else:
             set_status(
                 "Could not auto-import. Drag SRT from Media Pool to the subtitle track.",
-                "#E8903A",
+                COLORS.WARNING,
             )
     except Exception as e:
         log.error("Create track error: %s", e)
-        set_status(f"Error: {e}", "#ff6b6b")
+        set_status(f"Error: {e}", COLORS.ERROR)
     finally:
         set_btn("create_track_btn", True)

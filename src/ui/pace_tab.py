@@ -4,6 +4,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from src.constants import COLORS
 from src.ui._pace_build import build, _PACE_PRESETS, _WPM_ESTIMATE, _RETENTION_EST
 from src.ui._pace_workers import apply_thread
 from src.utils.logger import get_logger
@@ -19,7 +20,7 @@ def setup(frame: Any, app: Any) -> None:
     def _ui(fn: Any) -> None:
         frame.after(0, fn)
 
-    def set_status(msg: str, color: str = "#aaaaaa") -> None:
+    def set_status(msg: str, color: str = COLORS.TEXT_MUTED) -> None:
         _ui(lambda: w["status"].configure(text=msg, text_color=color))
 
     def _update(level: int) -> None:
@@ -37,14 +38,14 @@ def setup(frame: Any, app: Any) -> None:
 
     def on_apply() -> None:
         if not app.connected:
-            set_status("Not connected to DaVinci Resolve.", "#ff6b6b")
+            set_status("Not connected to DaVinci Resolve.", COLORS.ERROR)
             return
         try:
             from src.ui.timeline_dialog import show_timeline_dialog
-            choice = show_timeline_dialog(frame, app.project)
+            choice = show_timeline_dialog(frame, app.project, current_timeline=app.timeline)
         except Exception as e:
             log.error("Timeline dialog error: %s", e)
-            set_status(f"Dialog error: {e}", "#ff6b6b")
+            set_status(f"Dialog error: {e}", COLORS.ERROR)
             return
         if choice is None:
             return

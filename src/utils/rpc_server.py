@@ -23,15 +23,15 @@ import json
 import os
 import socketserver
 import threading
-from pathlib import Path
 from typing import Any
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 from src.utils.rpc_handler import _Handler, _State
 
 log = get_logger(__name__)
 
-_BRIDGE_FILE = Path.home() / ".clutter" / "bridge.json"
+_BRIDGE_FILE = PATHS.BRIDGE_FILE
 
 
 class _ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -45,7 +45,7 @@ def start_server(resolve_obj: Any) -> tuple[_ThreadingServer, int]:
     """Start the bridge HTTP server on a random localhost port.
 
     Returns the live server (caller may hold it for shutdown) and the
-    port that was bound. Writes ``{port, pid}`` to ``~/.clutter/bridge.json``
+    port that was bound. Writes ``{port, pid}`` to ``~/.clautter/bridge.json``
     so the client subprocess can find us.
     """
     if resolve_obj is None:
@@ -58,7 +58,7 @@ def start_server(resolve_obj: Any) -> tuple[_ThreadingServer, int]:
     server = _ThreadingServer(("127.0.0.1", 0), _Handler)
     port = server.server_address[1]
 
-    thread = threading.Thread(target=server.serve_forever, daemon=True, name="clutter-bridge")
+    thread = threading.Thread(target=server.serve_forever, daemon=True, name="clautter-bridge")
     thread.start()
     log.info("bridge listening on http://127.0.0.1:%d", port)
 

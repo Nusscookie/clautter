@@ -1,4 +1,4 @@
-"""JSON-backed settings persistence for Clutter — typed via Pydantic v2."""
+"""JSON-backed settings persistence for Clautter — typed via Pydantic v2."""
 
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_CONFIG_DIR = Path.home() / ".clutter"
-_CONFIG_FILE = _CONFIG_DIR / "config.json"
+_CONFIG_DIR = PATHS.CONFIG_DIR
+_CONFIG_FILE = PATHS.CONFIG_FILE
 
 
 # ---------------------------------------------------------------------------
@@ -56,13 +57,14 @@ _DEFAULT_STYLE_PRESETS: dict[str, dict[str, Any]] = {
 # Root settings model
 # ---------------------------------------------------------------------------
 
-class ClutterSettings(BaseModel):
+class ClautterSettings(BaseModel):
     # API keys
     elevenlabs_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
     minimax_api_key: str = ""
     nvidia_api_key: str = ""
+    anthropic_api_key: str = ""
     pixabay_api_key: str = ""
     pexels_api_key: str = ""
 
@@ -126,6 +128,7 @@ class ClutterSettings(BaseModel):
     llm_gemini_model: str = "gemini-2.0-flash"
     llm_minimax_model: str = "MiniMax-Text-01"
     llm_nvidia_model: str = ""  # free-text NVIDIA model id (e.g. moonshotai/kimi-k2.6)
+    llm_anthropic_model: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.1
 
@@ -155,11 +158,11 @@ class ClutterSettings(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SettingsManager:
-    """Load and persist plugin settings as JSON, backed by ClutterSettings."""
+    """Load and persist plugin settings as JSON, backed by ClautterSettings."""
 
     def __init__(self, path: Path = _CONFIG_FILE) -> None:
         self._path = path
-        self._model: ClutterSettings = ClutterSettings()
+        self._model: ClautterSettings = ClautterSettings()
         self.load()
 
     # ------------------------------------------------------------------
@@ -172,13 +175,13 @@ class SettingsManager:
             try:
                 with open(self._path, "r", encoding="utf-8") as f:
                     raw: dict[str, Any] = json.load(f)
-                self._model = ClutterSettings.model_validate(raw)
+                self._model = ClautterSettings.model_validate(raw)
                 log.debug("Settings loaded from %s", self._path)
             except Exception as e:
                 log.error("Failed to load settings (%s) — using defaults", e)
-                self._model = ClutterSettings()
+                self._model = ClautterSettings()
         else:
-            self._model = ClutterSettings()
+            self._model = ClautterSettings()
             self.save()
 
     def save(self) -> None:
@@ -196,7 +199,7 @@ class SettingsManager:
         # model_dump → merge → re-validate keeps validation intact
         data = self._model.model_dump()
         data[key] = value
-        self._model = ClutterSettings.model_validate(data)
+        self._model = ClautterSettings.model_validate(data)
         self.save()
 
     def add_stat(self, stat_key: str, amount: float = 1.0) -> None:

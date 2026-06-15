@@ -1,4 +1,4 @@
-"""Central application coordinator for Clutter."""
+"""Central application coordinator for Clautter."""
 
 from __future__ import annotations
 from typing import Any, Callable, Optional
@@ -9,7 +9,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-class ClutterApp:
+class ClautterApp:
     """Wires all modules together and holds shared state."""
 
     def __init__(self) -> None:
@@ -28,6 +28,11 @@ class ClutterApp:
         # Settings-change listeners — tabs register refresh callbacks so UI can
         # update live when Settings → Apply is pressed (no app restart needed).
         self._settings_listeners: list[Callable[[], None]] = []
+
+        # Update-available listeners — called when startup check finds a newer tag.
+        self._update_listeners: list[Callable[[str, str], None]] = []
+        self.pending_update_tag: str = ""
+        self.pending_update_url: str = ""
 
         # Shared transcript — populated by Subtitles tab, consumed by Zooms + B-Roll
         self.transcript: list[dict] = []  # list of {word, start_sec, end_sec}
@@ -56,6 +61,27 @@ class ClutterApp:
                 cb()
             except Exception as e:
                 log.error("settings listener failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # Update notification
+    # ------------------------------------------------------------------
+
+    def on_update_available(self, cb: Callable[[str, str], None]) -> None:
+        """Register callback fired when startup check finds a newer release.
+
+        ``cb(tag_name, html_url)`` runs on the Tk main thread via frame.after(0).
+        """
+        self._update_listeners.append(cb)
+
+    def notify_update_available(self, tag: str, html_url: str) -> None:
+        """Called from startup background thread result (via frame.after(0))."""
+        self.pending_update_tag = tag
+        self.pending_update_url = html_url
+        for cb in list(self._update_listeners):
+            try:
+                cb(tag, html_url)
+            except Exception as e:
+                log.error("update listener failed: %s", e)
 
     # ------------------------------------------------------------------
     # Connection
