@@ -39,6 +39,7 @@ def _build_prompt(
     total_duration_sec: float,
     blocks_summary: str,
     timeline_dims: tuple[int, int] | None = None,
+    user_instructions: str | None = None,
 ) -> str:
     seg_lines = "\n".join(
         f"  [{i+1}] {start:.1f}s — \"{text[:120]}\""
@@ -58,6 +59,17 @@ def _build_prompt(
     else:
         dims_rule = ""
 
+    if user_instructions:
+        user_block = (
+            "\nUSER INSTRUCTIONS (highest priority — follow these exactly):\n"
+            f"{user_instructions}\n"
+            "Use these to guide which blocks you choose, when and how many you place, "
+            "what text/data you fill into params, and the overall visual style. "
+            "They override the default rules below where they conflict.\n"
+        )
+    else:
+        user_block = ""
+
     return (
         "You are an expert motion graphics editor enhancing a talking-head video.\n\n"
         f"TRANSCRIPT (full, first 3000 chars):\n\"{transcript_text[:3000]}\"\n\n"
@@ -67,7 +79,11 @@ def _build_prompt(
         f"{seg_lines}\n\n"
         "AVAILABLE HYPERFRAMES BLOCKS:\n"
         f"{blocks_summary}\n\n"
-        "Decide which motion graphics to add. Rules:\n"
+        "RENDERER NOTE: blocks tagged webgl, webgpu, gltf, shader, or "
+        "liquid-glass-html-in-canvas require GPU rendering not available in this "
+        "headless environment — they will fail to render. Avoid them.\n"
+        + user_block +
+        "\nDecide which motion graphics to add. Rules:\n"
         "  - Only use blocks from the list above — exact name, no invented blocks.\n"
         "  - Place at most 3 graphics total. Prefer fewer, higher-quality placements.\n"
         "  - Do NOT overlap graphics in time (no two start_sec windows should overlap).\n"
@@ -247,14 +263,16 @@ def analyze(
     settings: Any,
     provider: str | None = None,
     timeline_dims: tuple[int, int] | None = None,
+    user_instructions: str | None = None,
 ) -> tuple[list[GraphicPlacement], str]:
     """Ask LLM which Hyperframes blocks to place and when.
 
     Args:
-        transcript_words: Raw transcript word dicts from app.transcript.
-        blocks:           Catalog blocks from catalog_client.list_blocks().
-        settings:         SettingsManager for API keys.
-        provider:         Preferred provider name or None (auto-select).
+        transcript_words:  Raw transcript word dicts from app.transcript.
+        blocks:            Catalog blocks from catalog_client.list_blocks().
+        settings:          SettingsManager for API keys.
+        provider:          Preferred provider name or None (auto-select).
+        user_instructions: Optional free-text guidance from the user.
 
     Returns:
         (placements, error_str). error_str is "" on success.
@@ -300,7 +318,10 @@ def analyze(
 
     total_duration_sec = segments[-1][1] + 5.0 if segments else 0.0
     valid_names = {b.get("name", "") for b in blocks}
-    prompt = _build_prompt(transcript_text, segments, total_duration_sec, block_summary(blocks), timeline_dims=timeline_dims)
+    prompt = _build_prompt(
+        transcript_text, segments, total_duration_sec, block_summary(blocks),
+        timeline_dims=timeline_dims, user_instructions=user_instructions,
+    )
 
     openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
     gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")

@@ -24,16 +24,18 @@ log = get_logger(__name__)
 def run(
     app: Any,
     provider: str | None = None,
+    user_instructions: str | None = None,
     status_cb: Callable[[str], None] | None = None,
     progress_cb: Callable[[int, int], None] | None = None,
 ) -> tuple[int, str]:
     """Execute the full motion graphics pipeline.
 
     Args:
-        app:         AIEditorApp instance (needs .transcript, .resolve, .timeline, .settings).
-        provider:    LLM provider name or None (auto-select from available keys).
-        status_cb:   Called with human-readable status strings during execution.
-        progress_cb: Called with (current_step, total_steps) for progress bar.
+        app:               AIEditorApp instance (needs .transcript, .resolve, .timeline, .settings).
+        provider:          LLM provider name or None (auto-select from available keys).
+        user_instructions: Optional free-text guidance from the user, forwarded to the LLM.
+        status_cb:         Called with human-readable status strings during execution.
+        progress_cb:       Called with (current_step, total_steps) for progress bar.
 
     Returns:
         (placed_count, error_str). error_str is "" on full success.
@@ -69,27 +71,11 @@ def run(
             "Could not load Hyperframes catalog. "
             "Check your internet connection and Node.js installation."
         )
-    # Only renderable standalone blocks (not components/transitions/code showcases)
-    _BAD_TAGS = {
-        "transition", "shader", "showcase", "code", "developer",
-        "terminal", "vscode", "apple-terminal", "html-in-canvas",
-        "gltf", "webgl", "webgpu", "liquid-glass-html-in-canvas",
-        "geography", "choropleth", "sfx",
-    }
-    # Blocks that require brand-specific assets the LLM cannot fill in
-    _EXCLUDED_NAMES = {"logo-outro", "flowchart-vertical"}
-
-    def _is_suitable(b: dict) -> bool:
-        if b.get("type") != "block":
-            return False
-        if b.get("name") in _EXCLUDED_NAMES:
-            return False
-        tags = set(b.get("tags") or [])
-        return not (tags & _BAD_TAGS)
-
-    renderable_blocks = [b for b in blocks if _is_suitable(b)]
-    status(f"Catalog loaded: {len(renderable_blocks)} suitable blocks available.")
-    block_by_name = {b["name"]: b for b in renderable_blocks}
+    # Pass the full catalog to the LLM — it decides suitability based on
+    # transcript + user instructions. (Only restriction is the GPU-renderer
+    # note baked into the LLM prompt; see llm_director._build_prompt.)
+    status(f"Catalog loaded: {len(blocks)} blocks available.")
+    block_by_name = {b["name"]: b for b in blocks if b.get("name")}
 
     project_name = ""
     try:
@@ -111,7 +97,11 @@ def run(
     # ── 4. LLM analysis ───────────────────────────────────────────────
     status("Analyzing transcript with LLM…")
     from src.graphics.llm_director import analyze
-    placements, err = analyze(app.transcript, renderable_blocks, app.settings, provider=provider, timeline_dims=timeline_dims)
+    placements, err = analyze(
+        app.transcript, blocks, app.settings,
+        provider=provider, timeline_dims=timeline_dims,
+        user_instructions=user_instructions,
+    )
     if err:
         return 0, err
     if not placements:

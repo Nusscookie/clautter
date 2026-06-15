@@ -11,6 +11,11 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_PLACEHOLDER = (
+    "e.g. 'My YouTube channel is @TechTalk with 128K subs. Prefer data charts. "
+    "Place graphics only in the second half.'"
+)
+
 
 def build(parent: Any) -> None:
     w: dict[str, Any] = {}
@@ -46,6 +51,20 @@ def build(parent: Any) -> None:
         width=190,
     )
     w["generate_btn"].grid(row=0, column=1, sticky="s")
+
+    # ── User instructions ──
+    instr_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    instr_frame.pack(fill="x", padx=10, pady=(6, 0))
+    ctk.CTkLabel(
+        instr_frame,
+        text="Custom Instructions (optional)",
+        font=ctk.CTkFont(size=10),
+        text_color=COLORS.TEXT_MUTED,
+    ).pack(anchor="w")
+    w["instructions"] = ctk.CTkTextbox(instr_frame, height=60, font=ctk.CTkFont(size=11))
+    w["instructions"].pack(fill="x")
+    w["instructions"].insert("1.0", _PLACEHOLDER)
+    w["instructions"].configure(text_color=COLORS.TEXT_SUBTLE)
 
     # ── Status ──
     w["status"] = ctk.CTkLabel(
@@ -122,6 +141,24 @@ def setup(frame: Any, app: Any) -> None:
 
     _refresh_providers()
 
+    # ── Instructions placeholder behaviour ──
+    def _instr_text() -> str:
+        return w["instructions"].get("1.0", "end-1c")
+
+    def _on_focus_in(_e: Any) -> None:
+        if _instr_text() == _PLACEHOLDER:
+            w["instructions"].delete("1.0", "end")
+            w["instructions"].configure(text_color=COLORS.TEXT_MUTED)
+
+    def _on_focus_out(_e: Any) -> None:
+        if not _instr_text().strip():
+            w["instructions"].delete("1.0", "end")
+            w["instructions"].insert("1.0", _PLACEHOLDER)
+            w["instructions"].configure(text_color=COLORS.TEXT_SUBTLE)
+
+    w["instructions"].bind("<FocusIn>", _on_focus_in)
+    w["instructions"].bind("<FocusOut>", _on_focus_out)
+
     def on_generate() -> None:
         w["generate_btn"].configure(state="disabled")
         w["progress"].pack(in_=w["progress_frame"], fill="x")
@@ -131,12 +168,16 @@ def setup(frame: Any, app: Any) -> None:
         provider_val = w["provider"].get()
         chosen_provider = None if provider_val == "(auto)" else provider_val
 
+        raw_instr = _instr_text().strip()
+        user_instructions = raw_instr if raw_instr and raw_instr != _PLACEHOLDER else None
+
         def _work() -> None:
             try:
                 from src.graphics.engine import run
                 placed, err = run(
                     app,
                     provider=chosen_provider,
+                    user_instructions=user_instructions,
                     status_cb=lambda msg: set_status(msg, COLORS.BRAND_PRIMARY),
                     progress_cb=set_progress,
                 )
