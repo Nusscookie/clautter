@@ -126,7 +126,7 @@ def setup(frame: Any, app: Any) -> None:
         w["generate_btn"].configure(state="disabled")
         w["progress"].pack(in_=w["progress_frame"], fill="x")
         w["progress"].set(0)
-        set_status("Starting…", "#4fc3f7")
+        set_status("Starting…", COLORS.BRAND_PRIMARY)
 
         provider_val = w["provider"].get()
         chosen_provider = None if provider_val == "(auto)" else provider_val
@@ -137,7 +137,7 @@ def setup(frame: Any, app: Any) -> None:
                 placed, err = run(
                     app,
                     provider=chosen_provider,
-                    status_cb=lambda msg: set_status(msg, "#4fc3f7"),
+                    status_cb=lambda msg: set_status(msg, COLORS.BRAND_PRIMARY),
                     progress_cb=set_progress,
                 )
                 if err:

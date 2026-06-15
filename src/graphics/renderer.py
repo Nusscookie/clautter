@@ -1,7 +1,7 @@
 """Hyperframes block renderer.
 
 For each GraphicPlacement:
-  1. Creates a timestamped workspace subfolder under ~/.clutter/graphics/<project>/
+  1. Creates a timestamped workspace subfolder under ~/.clautter/graphics/<project>/
   2. Installs the block via `npx hyperframes add`
   3. LLM edits block HTML with real transcript-derived values + aspect ratio fix
   4. Injects LLM-supplied params as data-param-* attributes
@@ -10,7 +10,7 @@ For each GraphicPlacement:
   6. Returns the Path to the rendered file
 
 Workspace layout:
-  ~/.clutter/graphics/
+  ~/.clautter/graphics/
     <project_name>/
       <timestamp>_<block_name>/
         compositions/
@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.constants import PATHS
 from src.utils.logger import get_logger
 from src.graphics.catalog_client import add_block
 from src.graphics.llm_director import GraphicPlacement
@@ -34,7 +35,7 @@ from src.graphics.llm_director import GraphicPlacement
 log = get_logger(__name__)
 
 _RENDER_TIMEOUT = 300  # 5 min max per block
-_GRAPHICS_ROOT = Path.home() / ".clutter" / "graphics"
+_GRAPHICS_ROOT = PATHS.GRAPHICS_CACHE
 _NPX = "npx.cmd" if sys.platform == "win32" else "npx"
 
 

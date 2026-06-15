@@ -75,6 +75,7 @@ class PATHS:
     BROLL_CACHE = CONFIG_DIR / "broll_cache"
     BROLL_EMBED_CACHE = CONFIG_DIR / "broll_embed_cache"
     AUDIO_CACHE = CONFIG_DIR / "audio_cache"
+    GRAPHICS_CACHE = CONFIG_DIR / "graphics"
 
 
 class TRACKS:
