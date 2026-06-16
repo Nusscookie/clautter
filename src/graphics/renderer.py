@@ -5,8 +5,11 @@ For each GraphicPlacement:
   2. Installs the block via `npx hyperframes add`
   3. LLM edits block HTML with real transcript-derived values + aspect ratio fix
   4. Injects LLM-supplied params as data-param-* attributes
-  5. Renders to WebM (VP9+alpha) via `npx hyperframes render --format webm`
-     Falls back to MOV (ProRes 4444 alpha) if WebM render fails.
+  5. Renders to MOV (ProRes 4444+alpha) via `npx hyperframes render --format mov`
+     Falls back to WebM (VP9+alpha) if MOV render fails.
+     MOV is primary: DaVinci Resolve handles ProRes 4444 natively with full
+     alpha support; WebM decode in Resolve uses an unofficial fallback path
+     that produces pixelated/downscaled output.
   6. Returns the Path to the rendered file
 
 Workspace layout:
@@ -15,7 +18,7 @@ Workspace layout:
       <timestamp>_<block_name>/
         compositions/
           <block_name>.html
-        <block_name>_<start>s.webm  (or .mov fallback)
+        <block_name>_<start>s.mov  (or .webm fallback)
 """
 
 from __future__ import annotations
@@ -76,24 +79,45 @@ def _inject_params(html_path: Path, params: dict) -> None:
         log.warning("[renderer] param injection failed (non-fatal): %s", e)
 
 
+def _sanitize_selectors(html: str) -> str:
+    """Strip LLM-injected extra attribute conditions from composition selectors.
+
+    The LLM sometimes copies params into CSS selectors as extra
+    [data-composition-id="x" data-param-foo="y"] conditions. Those attrs are
+    injected onto the DOM *after* the LLM edit (see _inject_params), so such a
+    selector never matches and its rule (often the positioning block) is dead.
+    Collapse every [data-composition-id="x" ...] back to [data-composition-id="x"].
+    Only text inside [...] brackets is touched, so the DOM element's own
+    attribute list is left intact.
+    """
+    return re.sub(
+        r'\[data-composition-id="([^"]*)"[^\]]*\]',
+        r'[data-composition-id="\1"]',
+        html,
+    )
+
+
 def _llm_edit_html(
     html_path: Path,
     placement: GraphicPlacement,
     settings: Any,
     timeline_dims: tuple[int, int] | None = None,
+    provider: str | None = None,
+    user_instructions: str | None = None,
 ) -> None:
     """Ask LLM to rewrite block HTML with real values from placement.params.
 
     Reads the installed block HTML, asks LLM to replace hardcoded placeholder
-    text/numbers/data with actual transcript-derived values, and if timeline_dims
-    is provided and the block's native size differs, rewrite CSS to match aspect ratio.
+    text/numbers/data with actual transcript-derived values, apply any layout/
+    positioning changes from user_instructions, and if timeline_dims is provided
+    and the block's native size differs, rewrite CSS to match aspect ratio.
     On any failure logs a warning and leaves the original HTML intact.
     """
     try:
         from src.utils.llm_providers import api_key_for, resolve_provider
         import requests as _requests
 
-        chosen = resolve_provider(settings, None)
+        chosen = resolve_provider(settings, provider)
         if chosen is None:
             log.debug("[renderer] no LLM provider configured — skipping HTML edit for %s", placement.block)
             return
@@ -111,17 +135,33 @@ def _llm_edit_html(
                 "Preserve all animations and layout proportions — only scale to fit."
             )
 
+        user_block = ""
+        if user_instructions:
+            user_block = (
+                f"\n\nUSER INSTRUCTIONS (highest priority — follow these exactly):\n"
+                f"{user_instructions}\n"
+            )
+
         prompt = (
             f"You are editing a motion graphics HTML template for a talking-head video.\n"
             f"Block: {placement.block}\n"
             f"Params derived from transcript: {json.dumps(placement.params)}\n\n"
             f"BLOCK HTML:\n```html\n{html[:8000]}\n```\n\n"
-            "Task: Edit the HTML to replace hardcoded placeholder values — text strings, "
-            "numbers, data arrays, labels — with real values from the params above. "
-            "If params do not cover a field, leave the original value. "
-            "Only change content values. Do NOT change HTML structure, CSS layout, "
-            "animation timing, or JavaScript logic — EXCEPT when resizing for the timeline "
-            "dimensions below."
+            + user_block +
+            "\nTask: Edit the HTML to:\n"
+            "  1. Replace hardcoded placeholder text, numbers, data arrays, labels with real "
+            "values from the params above. If params do not cover a field, leave the original value.\n"
+            "  2. Apply any layout, positioning, or style changes from USER INSTRUCTIONS above.\n"
+            "     You MAY change: position (top/left/right/bottom), transform, flex/grid layout, "
+            "font-size, color, background, padding, margin, z-index, text-align.\n"
+            "     You MUST NOT change: animation durations (@keyframes timings, animation-duration, "
+            "transition values), JavaScript logic, or DOM structure (no adding/removing elements).\n"
+            "     CRITICAL — CSS SELECTORS: Do NOT modify existing CSS selectors. Only edit "
+            "property values inside existing rules. Never add extra attribute conditions "
+            "(e.g. data-param-*) to selectors — those attributes are injected separately and "
+            "will not be present at style-match time. Keep every selector identical to the original.\n"
+            "  3. If timeline dimensions are provided and block size does not match, scale CSS "
+            "width/height/font-size to fill the canvas."
             + dims_instruction +
             "\nReturn ONLY the complete modified HTML file. No explanations, no markdown fences, "
             "no preamble — raw HTML starting with <!doctype or <!-- only."
@@ -221,19 +261,47 @@ def _make_index_html(workspace: Path, block_name: str, block_html_rel: str, bloc
     return index_path
 
 
+def _resolve_ref_assets(params: dict, ref_folder: Path) -> dict:
+    """Replace bare filenames in params with absolute paths from ref_folder.
+
+    Only substitutes values that exactly match a file present in ref_folder.
+    Returns a new dict; does not mutate the original.
+    """
+    if not ref_folder or not ref_folder.is_dir():
+        return params
+    available = {f.name: f for f in ref_folder.iterdir() if f.is_file()}
+    resolved = {}
+    for k, v in params.items():
+        str_v = str(v)
+        if str_v in available:
+            resolved[k] = available[str_v].as_posix()
+            log.debug("[renderer] ref asset resolved: %s → %s", str_v, resolved[k])
+        else:
+            resolved[k] = v
+    return resolved
+
+
 def render_placement(
     placement: GraphicPlacement,
     project_name: str,
     block_meta: dict | None = None,
     settings: Any = None,
     timeline_dims: tuple[int, int] | None = None,
+    ref_folder: Path | None = None,
+    provider: str | None = None,
+    user_instructions: str | None = None,
 ) -> Path | None:
-    """Render one GraphicPlacement to WebM (VP9+alpha) with MOV fallback.
+    """Render one GraphicPlacement to MOV (ProRes 4444 alpha) with WebM fallback.
 
     Returns Path to rendered file, or None on failure.
-    block_meta:    catalog block dict (for dimensions/duration).
-    settings:      SettingsManager for LLM HTML editing.
-    timeline_dims: (width, height) of Resolve timeline for aspect ratio matching.
+    block_meta:         catalog block dict (for dimensions/duration).
+    settings:           SettingsManager for LLM HTML editing.
+    timeline_dims:      (width, height) of Resolve timeline for aspect ratio matching.
+    ref_folder:         optional user reference-assets directory; filenames in
+                        placement.params that match a file here are replaced with
+                        their absolute path before HTML injection.
+    provider:           LLM provider name to use for HTML editing (None = auto).
+    user_instructions:  free-text user guidance forwarded to the HTML-editing LLM.
     """
     workspace = _workspace_for(project_name, placement)
     log.info("[renderer] workspace: %s", workspace)
@@ -253,11 +321,32 @@ def render_placement(
 
     block_html_path = html_candidates[0]
 
-    # LLM edits HTML with real transcript-derived values + aspect ratio fix
+    # Resolve reference-asset filenames to absolute paths before injection
+    effective_params = (
+        _resolve_ref_assets(placement.params, ref_folder)
+        if ref_folder else placement.params
+    )
+    placement = GraphicPlacement(
+        block=placement.block,
+        start_sec=placement.start_sec,
+        duration_sec=placement.duration_sec,
+        params=effective_params,
+    )
+
+    # LLM edits HTML with real transcript-derived values + aspect ratio fix + user layout instructions
     if settings is not None:
-        _llm_edit_html(block_html_path, placement, settings, timeline_dims=timeline_dims)
+        _llm_edit_html(
+            block_html_path, placement, settings,
+            timeline_dims=timeline_dims,
+            provider=provider,
+            user_instructions=user_instructions,
+        )
 
     _inject_params(block_html_path, placement.params)
+    # _inject_params regex hits CSS selectors before DOM elements (style block comes first).
+    # Re-sanitize to strip any param attrs it re-added to composition selectors.
+    _html = block_html_path.read_text(encoding="utf-8")
+    block_html_path.write_text(_sanitize_selectors(_html), encoding="utf-8")
 
     # hyperframes render needs a host index.html — build one wrapping the block
     block_html_rel = block_html_path.relative_to(workspace).as_posix()
@@ -270,7 +359,7 @@ def render_placement(
 
 def _render_with_alpha(workspace: Path, block: str, safe_name: str, start_sec: int) -> Path | None:
     """Try WebM (VP9+alpha), fall back to MOV (ProRes 4444) on failure."""
-    for fmt, ext in (("webm", "webm"), ("mov", "mov")):
+    for fmt, ext in (("mov", "mov"), ("webm", "webm")):
         output_path = workspace / f"{safe_name}_{start_sec}s.{ext}"
         try:
             result = subprocess.run(
