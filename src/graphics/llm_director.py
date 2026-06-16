@@ -40,6 +40,7 @@ def _build_prompt(
     blocks_summary: str,
     timeline_dims: tuple[int, int] | None = None,
     user_instructions: str | None = None,
+    ref_assets: list[str] | None = None,
 ) -> str:
     seg_lines = "\n".join(
         f"  [{i+1}] {start:.1f}s — \"{text[:120]}\""
@@ -70,6 +71,19 @@ def _build_prompt(
     else:
         user_block = ""
 
+    if ref_assets:
+        asset_list = "\n".join(f"  {name}" for name in ref_assets)
+        ref_block = (
+            "\nREFERENCE ASSETS (user-supplied image files — prefer these for icons/logos/images):\n"
+            f"{asset_list}\n"
+            "When a block needs an icon, logo, profile picture, or image, reference one of "
+            "these files by its exact filename in the params dict "
+            "(e.g. \"icon\": \"profile_pic.png\", \"logo\": \"logo_white.svg\"). "
+            "Do NOT invent filenames — only use names from the list above.\n"
+        )
+    else:
+        ref_block = ""
+
     return (
         "You are an expert motion graphics editor enhancing a talking-head video.\n\n"
         f"TRANSCRIPT (full, first 3000 chars):\n\"{transcript_text[:3000]}\"\n\n"
@@ -82,6 +96,7 @@ def _build_prompt(
         "RENDERER NOTE: blocks tagged webgl, webgpu, gltf, shader, or "
         "liquid-glass-html-in-canvas require GPU rendering not available in this "
         "headless environment — they will fail to render. Avoid them.\n"
+        + ref_block
         + user_block +
         "\nDecide which motion graphics to add. Rules:\n"
         "  - Only use blocks from the list above — exact name, no invented blocks.\n"
@@ -264,6 +279,7 @@ def analyze(
     provider: str | None = None,
     timeline_dims: tuple[int, int] | None = None,
     user_instructions: str | None = None,
+    ref_assets: list[str] | None = None,
 ) -> tuple[list[GraphicPlacement], str]:
     """Ask LLM which Hyperframes blocks to place and when.
 
@@ -273,6 +289,7 @@ def analyze(
         settings:          SettingsManager for API keys.
         provider:          Preferred provider name or None (auto-select).
         user_instructions: Optional free-text guidance from the user.
+        ref_assets:        Filenames from the user's reference-assets folder.
 
     Returns:
         (placements, error_str). error_str is "" on success.
@@ -321,6 +338,7 @@ def analyze(
     prompt = _build_prompt(
         transcript_text, segments, total_duration_sec, block_summary(blocks),
         timeline_dims=timeline_dims, user_instructions=user_instructions,
+        ref_assets=ref_assets,
     )
 
     openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")

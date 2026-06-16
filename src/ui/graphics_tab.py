@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 import threading
+import tkinter.filedialog as _fd
+from pathlib import Path
 from typing import Any
 
 import customtkinter as ctk
 
-from src.constants import COLORS
+from src.constants import COLORS, SETTINGS_KEYS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -65,6 +67,40 @@ def build(parent: Any) -> None:
     w["instructions"].pack(fill="x")
     w["instructions"].insert("1.0", _PLACEHOLDER)
     w["instructions"].configure(text_color=COLORS.TEXT_SUBTLE)
+
+    # ── Reference assets folder ──
+    ref_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    ref_frame.pack(fill="x", padx=10, pady=(6, 0))
+    ref_frame.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(
+        ref_frame,
+        text="Reference Assets",
+        font=ctk.CTkFont(size=10),
+        text_color=COLORS.TEXT_MUTED,
+        anchor="w",
+    ).grid(row=0, column=0, columnspan=3, sticky="w")
+
+    w["ref_folder"] = ctk.CTkEntry(
+        ref_frame,
+        placeholder_text="Optional — folder with your icons / logos / images",
+        font=ctk.CTkFont(size=11),
+    )
+    w["ref_folder"].grid(row=1, column=0, sticky="ew", pady=(2, 0))
+
+    w["ref_clear"] = ctk.CTkButton(
+        ref_frame, text="✕", width=28, height=28,
+        fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+        text_color=COLORS.TEXT_MUTED, font=ctk.CTkFont(size=11),
+    )
+    w["ref_clear"].grid(row=1, column=1, padx=(6, 0), pady=(2, 0))
+
+    w["ref_browse"] = ctk.CTkButton(
+        ref_frame, text="Browse", width=70, height=28,
+        fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+        text_color=COLORS.TEXT_MUTED, font=ctk.CTkFont(size=11),
+    )
+    w["ref_browse"].grid(row=1, column=2, padx=(6, 0), pady=(2, 0))
 
     # ── Status ──
     w["status"] = ctk.CTkLabel(
@@ -140,6 +176,30 @@ def setup(frame: Any, app: Any) -> None:
             pass
 
     _refresh_providers()
+
+    # ── Ref folder — populate from settings + wire Browse ──
+    saved_ref = str(app.settings.get(SETTINGS_KEYS.GRAPHICS_REF_FOLDER, "") or "")
+    if saved_ref:
+        w["ref_folder"].insert(0, saved_ref)
+
+    def _on_ref_browse() -> None:
+        chosen = _fd.askdirectory(title="Select Reference Assets Folder")
+        if chosen:
+            path = Path(chosen).as_posix()
+            w["ref_folder"].delete(0, "end")
+            w["ref_folder"].insert(0, path)
+            app.settings.set(SETTINGS_KEYS.GRAPHICS_REF_FOLDER, path)
+
+    def _on_ref_entry_change(_e: Any = None) -> None:
+        app.settings.set(SETTINGS_KEYS.GRAPHICS_REF_FOLDER, w["ref_folder"].get().strip())
+
+    def _on_ref_clear() -> None:
+        w["ref_folder"].delete(0, "end")
+        app.settings.set(SETTINGS_KEYS.GRAPHICS_REF_FOLDER, "")
+
+    w["ref_browse"].configure(command=_on_ref_browse)
+    w["ref_clear"].configure(command=_on_ref_clear)
+    w["ref_folder"].bind("<FocusOut>", _on_ref_entry_change)
 
     # ── Instructions placeholder behaviour ──
     def _instr_text() -> str:

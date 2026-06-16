@@ -310,9 +310,9 @@ def render_placement(
         log.warning("[renderer] failed to add block %r", placement.block)
         return None
 
-    # Find the installed block HTML in compositions/
+    # Find the installed block HTML in compositions/ (may be nested under components/)
     compositions_dir = workspace / "compositions"
-    html_candidates = list(compositions_dir.glob("*.html")) if compositions_dir.exists() else []
+    html_candidates = list(compositions_dir.glob("**/*.html")) if compositions_dir.exists() else []
     if not html_candidates:
         html_candidates = list(workspace.glob("*.html"))
     if not html_candidates:

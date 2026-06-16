@@ -7,6 +7,7 @@ no app state, no settings access.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import customtkinter as ctk
@@ -86,6 +87,36 @@ def _numeric_row(
     if hint:
         ctk.CTkLabel(row, text=hint, font=ctk.CTkFont(size=10),
                      text_color=COLORS.TEXT_SUBTLE, anchor="w").grid(row=0, column=2, sticky="w")
+
+    return entry
+
+
+def _dir_picker_row(parent: Any, label: str, placeholder: str = "Browse…") -> ctk.CTkEntry:
+    """Directory path row with a Browse button that opens a folder dialog."""
+    import tkinter.filedialog as fd
+
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    row.pack(fill="x", padx=12, pady=(0, 6))
+    row.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11),
+                 text_color=COLORS.TEXT_MUTED, width=150, anchor="w").grid(row=0, column=0, sticky="w")
+
+    entry = ctk.CTkEntry(row, placeholder_text=placeholder)
+    entry.grid(row=0, column=1, sticky="ew", padx=(6, 6))
+
+    def _browse() -> None:
+        chosen = fd.askdirectory(title=f"Select {label}")
+        if chosen:
+            entry.delete(0, "end")
+            entry.insert(0, Path(chosen).as_posix())
+
+    ctk.CTkButton(
+        row, text="Browse", width=70, height=28,
+        fg_color=COLORS.BG_CARD, hover_color=COLORS.BG_HOVER,
+        text_color=COLORS.TEXT_MUTED, font=ctk.CTkFont(size=11),
+        command=_browse,
+    ).grid(row=0, column=2)
 
     return entry
 

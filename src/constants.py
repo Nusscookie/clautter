@@ -110,3 +110,6 @@ class SETTINGS_KEYS:
     SFX_SOURCE = "sfx_source"
     SFX_MOOD_MODE = "sfx_mood_mode"
     SFX_LLM_PROVIDER = "sfx_llm_provider"
+
+    # Motion Graphics
+    GRAPHICS_REF_FOLDER = "graphics_ref_folder"

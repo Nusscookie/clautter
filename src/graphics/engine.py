@@ -2,10 +2,11 @@
 
 Runs the full pipeline:
   1. Node.js check
-  2. Fetch Hyperframes catalog
-  3. LLM analyzes transcript → placement decisions
-  4. Render each placement to WebM/MOV with alpha
-  5. Import + place on Resolve timeline
+  2. Transcript guard
+  3. Fetch Hyperframes catalog
+  4. Scan reference-assets folder (optional)
+  5. LLM analyzes transcript → placement decisions
+  6. Render each placement to MOV/WebM with alpha + place on timeline
 
 All heavy work runs on a worker thread (caller's responsibility).
 Call run() from a threading.Thread; it accepts a progress_callback(step, total)
@@ -16,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from src.constants import SETTINGS_KEYS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -94,13 +96,31 @@ def run(
     except Exception as e:
         log.debug("[gfx_engine] could not read timeline dims: %s", e)
 
-    # ── 4. LLM analysis ───────────────────────────────────────────────
+    # ── 4. Reference assets ───────────────────────────────────────────
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif"}
+    ref_folder: Path | None = None
+    ref_assets: list[str] = []
+    ref_folder_str = str(app.settings.get(SETTINGS_KEYS.GRAPHICS_REF_FOLDER, "") or "").strip()
+    if ref_folder_str:
+        _rf = Path(ref_folder_str)
+        if _rf.is_dir():
+            ref_folder = _rf
+            ref_assets = sorted(
+                f.name for f in _rf.iterdir()
+                if f.is_file() and f.suffix.lower() in _IMAGE_EXTS
+            )
+            log.info("[gfx_engine] reference assets folder: %s (%d file(s))", _rf, len(ref_assets))
+        else:
+            log.warning("[gfx_engine] graphics_ref_folder not a directory: %r", ref_folder_str)
+
+    # ── 5. LLM analysis ───────────────────────────────────────────────
     status("Analyzing transcript with LLM…")
     from src.graphics.llm_director import analyze
     placements, err = analyze(
         app.transcript, blocks, app.settings,
         provider=provider, timeline_dims=timeline_dims,
         user_instructions=user_instructions,
+        ref_assets=ref_assets or None,
     )
     if err:
         return 0, err
@@ -111,7 +131,7 @@ def run(
     total = len(placements)
     progress(0, total)
 
-    # ── 5. Render + place each ────────────────────────────────────────
+    # ── 6. Render + place each ────────────────────────────────────────
     from src.graphics.renderer import render_placement
     from src.graphics.placer import place
 
@@ -123,6 +143,9 @@ def run(
             block_meta=block_by_name.get(p.block),
             settings=app.settings,
             timeline_dims=timeline_dims,
+            ref_folder=ref_folder,
+            provider=provider,
+            user_instructions=user_instructions,
         )
         if mp4 is None:
             log.warning("[gfx_engine] render failed for %r — skipping", p.block)
