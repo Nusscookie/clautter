@@ -27,6 +27,7 @@ def run(
     app: Any,
     provider: str | None = None,
     user_instructions: str | None = None,
+    creative_mode: bool = False,
     status_cb: Callable[[str], None] | None = None,
     progress_cb: Callable[[int, int], None] | None = None,
     overflow_resolver: Callable[[list, float], list | None] | None = None,
@@ -37,6 +38,7 @@ def run(
         app:               AIEditorApp instance (needs .transcript, .resolve, .timeline, .settings).
         provider:          LLM provider name or None (auto-select from available keys).
         user_instructions: Optional free-text guidance from the user, forwarded to the LLM.
+        creative_mode:     If True, skip the catalog and have the LLM generate custom HTML animations.
         status_cb:         Called with human-readable status strings during execution.
         progress_cb:       Called with (current_step, total_steps) for progress bar.
 
@@ -65,20 +67,24 @@ def run(
     if not app.transcript:
         return 0, "No transcript available. Generate one in the Subtitles tab first."
 
-    # ── 3. Catalog ────────────────────────────────────────────────────
-    status("Loading Hyperframes catalog…")
-    from src.graphics.catalog_client import list_blocks
-    blocks = list_blocks(force_refresh=False)
-    if not blocks:
-        return 0, (
-            "Could not load Hyperframes catalog. "
-            "Check your internet connection and Node.js installation."
-        )
-    # Pass the full catalog to the LLM — it decides suitability based on
-    # transcript + user instructions. (Only restriction is the GPU-renderer
-    # note baked into the LLM prompt; see llm_director._build_prompt.)
-    status(f"Catalog loaded: {len(blocks)} blocks available.")
-    block_by_name = {b["name"]: b for b in blocks if b.get("name")}
+    # ── 3. Catalog (skipped in creative mode) ────────────────────────
+    block_by_name: dict[str, dict] = {}
+    if creative_mode:
+        status("Creative mode — skipping catalog, LLM will build custom animations.")
+    else:
+        status("Loading Hyperframes catalog…")
+        from src.graphics.catalog_client import list_blocks
+        blocks = list_blocks(force_refresh=False)
+        if not blocks:
+            return 0, (
+                "Could not load Hyperframes catalog. "
+                "Check your internet connection and Node.js installation."
+            )
+        # Pass the full catalog to the LLM — it decides suitability based on
+        # transcript + user instructions. (Only restriction is the GPU-renderer
+        # note baked into the LLM prompt; see llm_director._build_prompt.)
+        status(f"Catalog loaded: {len(blocks)} blocks available.")
+        block_by_name = {b["name"]: b for b in blocks if b.get("name")}
 
     project_name = ""
     try:
@@ -127,14 +133,25 @@ def run(
             log.warning("[gfx_engine] graphics_ref_folder not a directory: %r", ref_folder_str)
 
     # ── 5. LLM analysis ───────────────────────────────────────────────
-    status("Analyzing transcript with LLM…")
-    from src.graphics.llm_director import analyze
-    placements, err = analyze(
-        app.transcript, blocks, app.settings,
-        provider=provider, timeline_dims=timeline_dims,
-        user_instructions=user_instructions,
-        ref_assets=ref_assets or None,
-    )
+    if creative_mode:
+        status("Generating custom animations with LLM…")
+        from src.graphics.creative_director import generate
+        placements, err = generate(
+            app.transcript, app.settings,
+            provider=provider, timeline_dims=timeline_dims,
+            user_instructions=user_instructions,
+            ref_assets=ref_assets or None,
+            project_name=project_name,
+        )
+    else:
+        status("Analyzing transcript with LLM…")
+        from src.graphics.llm_director import analyze
+        placements, err = analyze(
+            app.transcript, blocks, app.settings,
+            provider=provider, timeline_dims=timeline_dims,
+            user_instructions=user_instructions,
+            ref_assets=ref_assets or None,
+        )
     if err:
         return 0, err
     if not placements:
@@ -160,7 +177,8 @@ def run(
 
     placed_count = 0
     for i, p in enumerate(placements):
-        status(f"Rendering {p.block} ({i + 1}/{total})…")
+        label = p.params.get("_concept", p.block) if p.block == "_custom" else p.block
+        status(f"Rendering {label} ({i + 1}/{total})…")
         mp4 = render_placement(
             p, project_name,
             block_meta=block_by_name.get(p.block),
@@ -175,7 +193,7 @@ def run(
             progress(i + 1, total)
             continue
 
-        status(f"Placing {p.block} on timeline at {p.start_sec:.1f}s…")
+        status(f"Placing {label} on timeline at {p.start_sec:.1f}s…")
         if not app.resolve or not app.timeline:
             log.warning("[gfx_engine] no resolve/timeline — cannot place %r", p.block)
             progress(i + 1, total)

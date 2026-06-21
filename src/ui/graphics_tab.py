@@ -54,6 +54,17 @@ def build(parent: Any) -> None:
     )
     w["generate_btn"].grid(row=0, column=1, sticky="s")
 
+    # ── Creative Mode toggle ──
+    creative_row = ctk.CTkFrame(parent, fg_color="transparent")
+    creative_row.pack(fill="x", padx=10, pady=(2, 0))
+    w["creative_toggle"] = ctk.CTkSwitch(
+        creative_row,
+        text="Creative Mode — LLM builds custom animations from scratch (no catalog)",
+        font=ctk.CTkFont(size=11),
+        text_color=COLORS.TEXT_MUTED,
+    )
+    w["creative_toggle"].pack(anchor="w")
+
     # ── User instructions ──
     instr_frame = ctk.CTkFrame(parent, fg_color="transparent")
     instr_frame.pack(fill="x", padx=10, pady=(6, 0))
@@ -231,6 +242,8 @@ def setup(frame: Any, app: Any) -> None:
         raw_instr = _instr_text().strip()
         user_instructions = raw_instr if raw_instr and raw_instr != _PLACEHOLDER else None
 
+        creative_mode = bool(w["creative_toggle"].get())
+
         def _work() -> None:
             _event = threading.Event()
             _resolver_result: dict[str, Any] = {}
@@ -272,6 +285,7 @@ def setup(frame: Any, app: Any) -> None:
                     app,
                     provider=chosen_provider,
                     user_instructions=user_instructions,
+                    creative_mode=creative_mode,
                     status_cb=lambda msg: set_status(msg, COLORS.BRAND_PRIMARY),
                     progress_cb=set_progress,
                     overflow_resolver=_overflow_resolver,

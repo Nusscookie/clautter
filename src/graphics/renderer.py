@@ -309,6 +309,85 @@ def render_placement(
     provider:           LLM provider name to use for HTML editing (None = auto).
     user_instructions:  free-text user guidance forwarded to the HTML-editing LLM.
     """
+    # ── Creative mode: pre-built custom HTML, skip catalog steps ────────
+    if placement.block == "_custom":
+        html_path_str = placement.params.get("_html_path", "")
+        if not html_path_str or not Path(html_path_str).exists():
+            log.warning("[renderer] _custom placement missing _html_path: %r", html_path_str)
+            return None
+
+        block_html_path = Path(html_path_str)
+        workspace = block_html_path.parent
+        log.info("[renderer] creative mode workspace: %s", workspace)
+
+        # Copy ref assets into workspace so Hyperframes file server can find them.
+        if ref_folder and ref_folder.is_dir():
+            import shutil as _shutil
+            for asset in ref_folder.iterdir():
+                if asset.is_file():
+                    dest = workspace / asset.name
+                    if not dest.exists():
+                        try:
+                            _shutil.copy2(asset, dest)
+                            log.debug("[renderer] copied ref asset %s → workspace", asset.name)
+                        except Exception as _e:
+                            log.debug("[renderer] could not copy ref asset %s: %s", asset.name, _e)
+
+        # Ensure data-composition-id and data-duration are set on the <html> element.
+        # LLMs frequently omit these despite the prompt. Inject them if missing.
+        html_text = block_html_path.read_text(encoding="utf-8")
+        dur = placement.duration_sec if placement.duration_sec > 0 else 8.0
+        if 'data-composition-id' not in html_text:
+            html_text = re.sub(
+                r'<html([^>]*)>',
+                rf'<html\1 data-composition-id="anim" data-duration="{dur}">',
+                html_text, count=1, flags=re.IGNORECASE,
+            )
+            log.debug("[renderer] injected data-composition-id + data-duration onto <html>")
+        elif 'data-duration' not in html_text:
+            html_text = re.sub(
+                r'(data-composition-id="[^"]*")',
+                rf'\1 data-duration="{dur}"',
+                html_text, count=1,
+            )
+            log.debug("[renderer] injected data-duration onto existing composition element")
+
+        # Enforce correct body dimensions — LLMs sometimes output partial sizes
+        # (e.g. body { height: 300px }) which causes Hyperframes "Set maximum size exceeded".
+        # Inject/override width+height directly after the opening <body> style block.
+        if timeline_dims:
+            tl_w, tl_h = timeline_dims
+            # Replace explicit body width/height declarations if present
+            def _fix_body_dim(m: re.Match) -> str:
+                body_css = m.group(1)
+                body_css = re.sub(r'\bwidth\s*:\s*[^;]+;', f'width:{tl_w}px;', body_css)
+                body_css = re.sub(r'\bheight\s*:\s*[^;]+;', f'height:{tl_h}px;', body_css)
+                if 'width' not in body_css:
+                    body_css = f'width:{tl_w}px;' + body_css
+                if 'height' not in body_css:
+                    body_css = f'height:{tl_h}px;' + body_css
+                return f'body {{{body_css}}}'
+            new_text = re.sub(r'body\s*\{([^}]*)\}', _fix_body_dim, html_text, count=1)
+            if new_text != html_text:
+                html_text = new_text
+                log.debug("[renderer] enforced body dimensions %dx%d for _custom", tl_w, tl_h)
+
+        # Remove tl.play() — Hyperframes controls timeline playback; manual play() breaks capture.
+        html_text = re.sub(r'\btl\.play\(\)\s*;?\s*\n?', '', html_text)
+
+        block_html_path.write_text(html_text, encoding="utf-8")
+
+        # Use composition.html directly as index.html — Hyperframes renders
+        # a standalone page without needing a data-composition-src wrapper.
+        index_path = workspace / "index.html"
+        if block_html_path.name != "index.html":
+            import shutil as _shutil
+            _shutil.copy2(block_html_path, index_path)
+            log.debug("[renderer] copied composition.html → index.html")
+
+        safe_name = f"custom_{int(placement.start_sec)}s"
+        return _render_with_alpha(workspace, "_custom", safe_name, int(placement.start_sec))
+
     workspace = _workspace_for(project_name, placement)
     log.info("[renderer] workspace: %s", workspace)
 
