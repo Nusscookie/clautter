@@ -44,15 +44,27 @@ def _call_llm(
     chosen: str,
     max_tokens: int,
     temperature: float,
+    for_codegen: bool = False,
 ) -> str:
     import requests
     from src.utils.llm_providers import api_key_for
 
     key = api_key_for(settings, chosen)
 
+    openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
+    # Generating polished, deterministic animation code is too hard for gpt-4o-mini.
+    # Upgrade to gpt-4o for codegen, but only when the user left the cheap default —
+    # an explicit model choice is respected.
+    if for_codegen and openai_model == "gpt-4o-mini":
+        openai_model = "gpt-4o"
+
+    gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
+    if for_codegen and gemini_model == "gemini-2.0-flash":
+        gemini_model = "gemini-2.5-flash-preview-05-20"
+
     model_map = {
-        "OpenAI": str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"),
-        "Gemini": str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash"),
+        "OpenAI": openai_model,
+        "Gemini": gemini_model,
         "Minimax": str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"),
         "NVIDIA": str(settings.get("llm_nvidia_model", "") or ""),
     }
@@ -97,6 +109,47 @@ def _call_llm(
     return content
 
 
+def _build_design_prompt(
+    transcript_text: str,
+    timeline_dims: tuple[int, int] | None,
+    user_instructions: str | None,
+) -> str:
+    """Prompt for Call 0 — derive a shared design system (DESIGN.md-equivalent JSON)."""
+    dims_block = ""
+    if timeline_dims:
+        tl_w, tl_h = timeline_dims
+        orientation = "PORTRAIT" if tl_h > tl_w else "LANDSCAPE"
+        dims_block = f"\nTIMELINE: {tl_w}x{tl_h} px ({orientation}).\n"
+
+    user_block = ""
+    if user_instructions:
+        user_block = (
+            "\nUSER INSTRUCTIONS (highest priority — honor these in the design):\n"
+            f"{user_instructions}\n"
+        )
+
+    return (
+        "You are an art director defining a SHARED visual design system for a set of motion\n"
+        "graphics overlaid on a talking-head video. Every graphic will use this system so the\n"
+        "whole set looks like one cohesive production.\n\n"
+        f"TRANSCRIPT (first 2000 chars):\n\"{transcript_text[:2000]}\"\n"
+        + dims_block
+        + user_block
+        + "\nDefine the system. Choose a mood that fits the content (e.g. minimal Swiss, "
+        "high-energy social, editorial, technical/data).\n"
+        "\nRespond with ONLY a valid JSON object, nothing else:\n"
+        "{\n"
+        '  "mood": "short phrase, e.g. minimal editorial",\n'
+        '  "palette": {"bg": "#0b0b0d", "fg": "#ffffff", "accent": "#D97757", "muted": "#9aa0a6", "highlight": "#ffd166"},\n'
+        '  "font_family": "a web-safe CSS font stack",\n'
+        '  "type_scale": {"display": 96, "title": 56, "body": 32, "caption": 22},\n'
+        '  "motion_feel": "one of: smooth, snappy, bouncy, springy, dramatic, dreamy",\n'
+        '  "gsap_ease": "a concrete GSAP ease matching motion_feel, e.g. power3.out, back.out(1.7), elastic.out(1,0.4)",\n'
+        '  "safe_area_pct": 6\n'
+        "}"
+    )
+
+
 def _build_placement_prompt(
     transcript_text: str,
     segments: list[tuple[str, float]],
@@ -104,6 +157,7 @@ def _build_placement_prompt(
     timeline_dims: tuple[int, int] | None,
     user_instructions: str | None,
     ref_assets: list[str] | None,
+    design_system: dict | None = None,
 ) -> str:
     seg_lines = "\n".join(
         f"  [{i + 1}] {start:.1f}s — \"{text[:120]}\""
@@ -135,31 +189,44 @@ def _build_placement_prompt(
         tl_w, tl_h = timeline_dims
         dims_str = f", \"dimensions\": {{\"width\": {tl_w}, \"height\": {tl_h}}}"
 
+    design_block = ""
+    if design_system:
+        design_block = (
+            "\nSHARED DESIGN SYSTEM (every placement must obey this so the set is cohesive):\n"
+            + json.dumps(design_system, indent=2) + "\n"
+        )
+
     return (
         "You are a creative motion graphics director for a talking-head video.\n"
         "CREATIVE MODE: You will invent custom animations — do NOT reference any template library.\n\n"
         f"TRANSCRIPT (first 3000 chars):\n\"{transcript_text[:3000]}\"\n\n"
         f"TOTAL VIDEO DURATION: {total_duration_sec:.1f}s\n"
         + dims_block
+        + design_block
         + "\nTRANSCRIPT SEGMENTS (index, start_time_seconds, spoken text):\n"
         + seg_lines + "\n"
         + ref_block
         + user_block
-        + "\nDecide where to place custom motion graphics. Rules:\n"
+        + "\nStoryboard the placements. Rules:\n"
         "  - Place at most 3 graphics total. Prefer fewer, higher-quality placements.\n"
         "  - Do NOT overlap graphics in time.\n"
         "  - Do NOT place anything in the first 5 seconds.\n"
         "  - Each graphic must fit within the video duration.\n"
-        "  - For each placement, describe EXACTLY what to build in the `concept` field.\n"
-        "    Be specific: visual style, what text/data to show, animation type.\n"
-        "  - `screen_position`: where on canvas — center, bottom-left, top-right, bottom-center, etc.\n"
+        "  - `concept`: describe EXACTLY what to build — visual style, what text/data to show.\n"
+        "  - `technique`: the dominant animation approach — one of: per-word-typography, "
+        "line-draw-svg, counter, data-viz, kinetic-text, lower-third, callout. Pick what fits the beat.\n"
+        "  - `entrance` / `exit`: how the graphic comes in and leaves (e.g. \"slide up + fade\", "
+        "\"draw on\", \"scale pop\", \"wipe out\"). Every graphic needs a deliberate exit, not a hard cut.\n"
+        "  - `layout`: arrangement of elements (e.g. \"centered stack\", \"left-aligned lower third\").\n"
+        "  - `screen_position`: center, bottom-left, top-right, bottom-center, etc.\n"
         + (f"  - Use dimensions matching the timeline ({timeline_dims[0]}x{timeline_dims[1]}).\n"
            if timeline_dims else "  - Use 1920x1080 dimensions.\n")
         + "\nRespond with ONLY a valid JSON array, nothing else:\n"
         "[\n"
         f"  {{\"start_sec\": 12.5, \"duration_sec\": 8.0, "
-        f"\"concept\": \"detailed description of the animation\", "
-        f"\"screen_position\": \"center\"{dims_str}}},\n"
+        f"\"concept\": \"detailed description\", \"technique\": \"per-word-typography\", "
+        f"\"entrance\": \"slide up + fade\", \"exit\": \"fade + slide down\", "
+        f"\"layout\": \"centered stack\", \"screen_position\": \"center\"{dims_str}}},\n"
         "  ...\n"
         "]"
     )
@@ -173,6 +240,8 @@ def _build_html_prompt(
     height: int,
     user_instructions: str | None,
     ref_assets: list[str] | None,
+    design_system: dict | None = None,
+    beat: dict | None = None,
 ) -> str:
     user_block = ""
     if user_instructions:
@@ -188,35 +257,107 @@ def _build_html_prompt(
             "Only reference these filenames if a file is genuinely needed by the concept.\n"
         )
 
+    design_block = ""
+    if design_system:
+        design_block = (
+            "\nDESIGN SYSTEM (use these exact colors, fonts, type scale and ease — do not invent your own):\n"
+            + json.dumps(design_system, indent=2) + "\n"
+        )
+
+    beat_block = ""
+    if beat:
+        technique = beat.get("technique", "")
+        entrance = beat.get("entrance", "")
+        exit_ = beat.get("exit", "")
+        layout = beat.get("layout", "")
+        beat_block = (
+            "\nSTORYBOARD DIRECTION FOR THIS BEAT:\n"
+            f"  technique: {technique}\n"
+            f"  entrance: {entrance}\n"
+            f"  exit: {exit_}\n"
+            f"  layout: {layout}\n"
+            "  Implement exactly this technique. Apply the entrance at the start of the timeline\n"
+            "  and the exit at the end (do not leave the graphic frozen on screen at the end).\n"
+        )
+
     return (
-        "You are an expert web animator. Build a single self-contained HTML animation.\n\n"
+        "You are an expert web animator. Build a single self-contained HTML animation\n"
+        "for the Hyperframes deterministic frame renderer.\n\n"
         f"CONCEPT: {concept}\n"
         f"DURATION: {duration_sec} seconds\n"
         f"SCREEN POSITION: {screen_position}\n"
         f"CANVAS SIZE: {width}x{height}px\n"
+        + design_block
+        + beat_block
         + user_block
         + ref_block
-        + "\nRequirements:\n"
+        + "\nHOW HYPERFRAMES RENDERS (read carefully — this is why determinism matters):\n"
+        "  Hyperframes does NOT play your animation in real time. It seeks a paused GSAP\n"
+        "  timeline to t = frame/fps and screenshots each frame. The same frame must always\n"
+        "  produce identical pixels. Any animation NOT on the registered timeline is invisible\n"
+        "  or flickers.\n"
+        "\nStructure requirements:\n"
         "  - Valid HTML5 starting with <!doctype html>\n"
-        f"  - Root element must have: data-composition-id=\"anim\" data-duration=\"{duration_sec}\"\n"
-        f"  - Body CSS: width:{width}px; height:{height}px; margin:0; overflow:hidden; background:transparent\n"
-        f"  - For animations load GSAP from exactly: {_GSAP_CDN}\n"
+        f"  - Body CSS: width:{width}px; height:{height}px; margin:0; padding:0; overflow:hidden; background:transparent\n"
+        "  - CRITICAL: the FIRST child of <body> must be a <div> that is the composition root:\n"
+        f"      <div id=\"root\" data-composition-id=\"anim\" data-duration=\"{duration_sec}\" "
+        f"data-width=\"{width}\" data-height=\"{height}\" style=\"position:relative;width:100%;height:100%;\">\n"
+        "    Do NOT put data-composition-id on the <html> element — it must be on this div.\n"
+        "    All visual content goes inside this root div.\n"
+        f"  - Load GSAP from exactly: {_GSAP_CDN}\n"
         "  - GSAP timeline must be paused and registered:\n"
         "      const tl = gsap.timeline({ paused: true });\n"
         "      window.__timelines = window.__timelines || {};\n"
         "      window.__timelines[\"anim\"] = tl;\n"
-        "  - All CSS and JS must be inline — no external files except the GSAP CDN URL above\n"
+        "  - All CSS and JS inline — no external files except the GSAP CDN URL above\n"
         "  - DO NOT use <img> tags unless a reference asset filename is provided\n"
-        "  - Make the animation visually polished and relevant to the concept\n"
-        "  - DO NOT use WebGL, WebGPU, or canvas-based rendering — pure HTML/CSS/GSAP only\n"
+        "\nDETERMINISM CONTRACT (mandatory — violating this is the #1 cause of broken output):\n"
+        "  - ALL motion lives on the registered paused GSAP timeline. The seek IS the clock.\n"
+        "  - DO NOT call tl.play(). Never auto-play.\n"
+        "  - FORBIDDEN: Date.now(), performance.now(), requestAnimationFrame, setTimeout/setInterval\n"
+        "    for animation, and any wall-clock or real-time loop.\n"
+        "  - FORBIDDEN: unseeded Math.random(). If you need randomness, use a seeded PRNG so it is\n"
+        "    reproducible, e.g.:\n"
+        "      function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}\n"
+        "      const rand = mulberry32(12345);\n"
+        "  - FORBIDDEN: runtime network calls / fetch. Everything inline or via the GSAP CDN.\n"
+        "\nALLOWED techniques (use them to make it slick, not just CSS transforms):\n"
+        "  - Canvas 2D: allowed, but you MUST redraw inside a gsap timeline callback (onUpdate /\n"
+        "    a tweened proxy object), driven by timeline progress — NEVER a requestAnimationFrame loop.\n"
+        "  - SVG: allowed, including path drawing (stroke-dashoffset tweened on the timeline).\n"
+        "  - Per-word / per-character typography, staggered reveals, counters, simple data-viz.\n"
+        "  - FORBIDDEN: WebGL, WebGPU (capture reliability).\n"
+        "\nQuality bar: use the design system's colors/fonts/ease for everything; every element\n"
+        "gets a deliberate entrance and exit on the timeline; respect the design system's\n"
+        "safe-area padding; make it relevant to the concept and visually polished.\n"
         "\nOutput raw HTML only. No markdown fences, no explanation, no preamble.\n"
         "Start your response with <!doctype html> immediately."
     )
 
 
+def _strip_trailing_commas(s: str) -> str:
+    """Remove trailing commas before } or ] to fix common LLM JSON output."""
+    return re.sub(r",\s*([}\]])", r"\1", s)
+
+
+def _extract_json_object(text: str) -> dict:
+    """Extract the first JSON object from an LLM reply (for the design-system call)."""
+    stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    stripped = re.sub(r"```(?:json)?", "", stripped).strip()
+    stripped = _strip_trailing_commas(stripped)
+    start = stripped.find("{")
+    if start == -1:
+        raise ValueError(f"no JSON object in response: {text[:200]!r}")
+    obj, _ = json.JSONDecoder().raw_decode(stripped, start)
+    if not isinstance(obj, dict):
+        raise ValueError("JSON response is not an object")
+    return obj
+
+
 def _extract_placements_json(text: str) -> list[dict]:
     stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     stripped = re.sub(r"```(?:json)?", "", stripped).strip()
+    stripped = _strip_trailing_commas(stripped)
     start = stripped.find("[")
     if start == -1:
         raise ValueError(f"no JSON array in response: {text[:200]!r}")
@@ -226,11 +367,49 @@ def _extract_placements_json(text: str) -> list[dict]:
     return obj
 
 
-def _save_html(html: str, project_name: str, idx: int) -> Path:
+def _design_to_md(design: dict) -> str:
+    """Render the design-system JSON as a DESIGN.md for workspace provenance."""
+    pal = design.get("palette", {}) or {}
+    scale = design.get("type_scale", {}) or {}
+    lines = [
+        "# DESIGN.md — shared motion-graphics design system",
+        "",
+        f"- **Mood:** {design.get('mood', '')}",
+        f"- **Font family:** {design.get('font_family', '')}",
+        f"- **Motion feel:** {design.get('motion_feel', '')}",
+        f"- **GSAP ease:** {design.get('gsap_ease', '')}",
+        f"- **Safe-area:** {design.get('safe_area_pct', '')}%",
+        "",
+        "## Palette",
+        *(f"- `{k}`: {v}" for k, v in pal.items()),
+        "",
+        "## Type scale (px)",
+        *(f"- `{k}`: {v}" for k, v in scale.items()),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _save_workspace(
+    html: str, project_name: str, idx: int, design: dict | None
+) -> Path:
+    """Write a per-beat Hyperframes workspace and return the composition HTML path.
+
+    Layout:
+      <ts>_custom_<idx>/
+        DESIGN.md          (when a design system was derived — provenance/reuse)
+        composition.html   (the beat; rendered standalone by the renderer)
+    """
     safe = re.sub(r"[^\w\-]", "_", project_name or "unknown")
     ts = int(time.time())
     folder = _GRAPHICS_ROOT / safe / f"{ts}_custom_{idx}"
     folder.mkdir(parents=True, exist_ok=True)
+    if design:
+        try:
+            (folder / "DESIGN.md").write_text(_design_to_md(design), encoding="utf-8")
+            (folder / "design.json").write_text(json.dumps(design, indent=2), encoding="utf-8")
+        except Exception as e:
+            log.debug("[creative] could not persist design system: %s", e)
     html_path = folder / "composition.html"
     html_path.write_text(html, encoding="utf-8")
     return html_path
@@ -290,10 +469,25 @@ def generate(
     max_tokens_placement = int(settings.get("llm_max_tokens", 1500) or 1500)
     temperature = float(settings.get("llm_temperature", 0.1) or 0.1)
 
-    # ── Call 1: placement decisions ───────────────────────────────────
+    # ── Call 0: shared design system (cohesion across all placements) ──
+    design_system: dict | None = None
+    try:
+        design_reply = _call_llm(
+            _build_design_prompt(transcript_text, timeline_dims, user_instructions),
+            "You are an art director. Respond with ONLY a valid JSON object — no prose, no markdown.",
+            settings, chosen, 600, temperature,
+        )
+        design_system = _extract_json_object(design_reply)
+        log.info("[creative] design system: %s", json.dumps(design_system)[:300])
+    except Exception as e:
+        # Non-fatal — proceed without a shared system (each beat then self-directs).
+        log.warning("[creative] design-system call failed (continuing without): %s", e)
+
+    # ── Call 1: placement / storyboard decisions ──────────────────────
     placement_prompt = _build_placement_prompt(
         transcript_text, segments, total_duration_sec,
         timeline_dims, user_instructions, ref_assets,
+        design_system=design_system,
     )
     try:
         placement_reply = _call_llm(
@@ -329,15 +523,25 @@ def generate(
             log.debug("[creative] skipping malformed placement item %r: %s", item, e)
             continue
 
+        beat = {
+            "technique": str(item.get("technique", "")).strip(),
+            "entrance": str(item.get("entrance", "")).strip(),
+            "exit": str(item.get("exit", "")).strip(),
+            "layout": str(item.get("layout", "")).strip(),
+        }
+
         html_prompt = _build_html_prompt(
             concept, duration_sec, screen_position, w, h,
             user_instructions, ref_assets,
+            design_system=design_system,
+            beat=beat,
         )
         try:
             html_reply = _call_llm(
                 html_prompt,
                 "You are a code editor. Output raw HTML only. No markdown, no explanation.",
                 settings, chosen, 8192, 0.3,
+                for_codegen=True,
             )
             # Strip think tags and markdown fences
             html_reply = re.sub(r"<think>.*?</think>", "", html_reply, flags=re.DOTALL).strip()
@@ -348,8 +552,8 @@ def generate(
                 log.warning("[creative] HTML generation non-HTML for idx=%d (starts: %r) — skipping", idx, html_reply[:80])
                 continue
 
-            html_path = _save_html(html_reply, project_name, idx)
-            log.info("[creative] saved custom HTML for idx=%d → %s", idx, html_path)
+            html_path = _save_workspace(html_reply, project_name, idx, design_system)
+            log.info("[creative] saved custom workspace for idx=%d → %s", idx, html_path)
 
             placements.append(GraphicPlacement(
                 block="_custom",

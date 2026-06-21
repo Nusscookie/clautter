@@ -333,24 +333,52 @@ def render_placement(
                         except Exception as _e:
                             log.debug("[renderer] could not copy ref asset %s: %s", asset.name, _e)
 
-        # Ensure data-composition-id and data-duration are set on the <html> element.
-        # LLMs frequently omit these despite the prompt. Inject them if missing.
+        # Ensure data-composition-id and data-duration are on the ROOT WRAPPER DIV,
+        # NOT on <html>. Hyperframes lint requires a div (not the html element) as the
+        # composition root; placing these on <html> always fails the lint check.
         html_text = block_html_path.read_text(encoding="utf-8")
         dur = placement.duration_sec if placement.duration_sec > 0 else 8.0
+
+        # If LLM (wrongly) placed composition attrs on <html>, strip them from there
+        # and we'll re-inject on the body's first child div below.
+        html_text = re.sub(
+            r'(<html[^>]*?)\s+data-composition-id="[^"]*"',
+            r'\1', html_text, count=1, flags=re.IGNORECASE,
+        )
+        html_text = re.sub(
+            r'(<html[^>]*?)\s+data-duration="[^"]*"',
+            r'\1', html_text, count=1, flags=re.IGNORECASE,
+        )
+        html_text = re.sub(
+            r'(<html[^>]*?)\s+data-width="[^"]*"',
+            r'\1', html_text, count=1, flags=re.IGNORECASE,
+        )
+        html_text = re.sub(
+            r'(<html[^>]*?)\s+data-height="[^"]*"',
+            r'\1', html_text, count=1, flags=re.IGNORECASE,
+        )
+
         if 'data-composition-id' not in html_text:
+            # No wrapper div present — inject one wrapping the body contents.
             html_text = re.sub(
-                r'<html([^>]*)>',
-                rf'<html\1 data-composition-id="anim" data-duration="{dur}">',
+                r'(<body[^>]*>)',
+                rf'\1\n<div data-composition-id="anim" data-duration="{dur}" '
+                rf'style="position:relative;width:100%;height:100%;">',
                 html_text, count=1, flags=re.IGNORECASE,
             )
-            log.debug("[renderer] injected data-composition-id + data-duration onto <html>")
+            html_text = re.sub(
+                r'(</body>)',
+                r'</div>\n\1',
+                html_text, count=1, flags=re.IGNORECASE,
+            )
+            log.debug("[renderer] injected wrapper div with data-composition-id for _custom")
         elif 'data-duration' not in html_text:
             html_text = re.sub(
                 r'(data-composition-id="[^"]*")',
                 rf'\1 data-duration="{dur}"',
                 html_text, count=1,
             )
-            log.debug("[renderer] injected data-duration onto existing composition element")
+            log.debug("[renderer] injected data-duration onto existing wrapper div")
 
         # Enforce correct body dimensions — LLMs sometimes output partial sizes
         # (e.g. body { height: 300px }) which causes Hyperframes "Set maximum size exceeded".
@@ -384,6 +412,11 @@ def render_placement(
             import shutil as _shutil
             _shutil.copy2(block_html_path, index_path)
             log.debug("[renderer] copied composition.html → index.html")
+
+        # Validate the composition (lint + headless Chrome) and self-heal once
+        # before the expensive render. Catches determinism/structure bugs that
+        # would otherwise produce a silently-broken MOV.
+        _validate_and_heal(workspace, index_path, settings, provider)
 
         safe_name = f"custom_{int(placement.start_sec)}s"
         return _render_with_alpha(workspace, "_custom", safe_name, int(placement.start_sec))
@@ -476,6 +509,137 @@ def render_placement(
 
     safe_name = re.sub(r"[^\w\-]", "_", placement.block)
     return _render_with_alpha(workspace, placement.block, safe_name, int(placement.start_sec))
+
+
+def _run_hyperframes(args: list[str], workspace: Path, timeout: int = 90) -> tuple[bool, str]:
+    """Run an `npx hyperframes <args>` command in the workspace. Returns (ok, output)."""
+    try:
+        result = subprocess.run(
+            [_NPX, "--yes", "hyperframes", *args],
+            capture_output=True, text=True, timeout=timeout, cwd=str(workspace),
+        )
+        out = (result.stdout or "") + (result.stderr or "")
+        return result.returncode == 0, out
+    except subprocess.TimeoutExpired:
+        return False, f"hyperframes {args[0]} timed out"
+    except FileNotFoundError:
+        # npx/hyperframes not available — treat as "skip validation", don't block render.
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _llm_repair_html(html: str, error_text: str, settings: Any, provider: str | None) -> str | None:
+    """Ask the LLM to fix a composition that failed lint/validate. Returns fixed HTML or None."""
+    try:
+        from src.utils.llm_providers import api_key_for, resolve_provider
+        import requests as _requests
+
+        chosen = resolve_provider(settings, provider)
+        if chosen is None:
+            return None
+
+        prompt = (
+            "This Hyperframes HTML composition failed validation. Fix ONLY what the error reports.\n"
+            "Key rules:\n"
+            "  - data-composition-id MUST be on the first <div> inside <body>, NOT on <html>.\n"
+            "    Correct: <body><div id='root' data-composition-id='anim' data-duration='N' "
+            "data-width='W' data-height='H' style='position:relative;width:100%;height:100%;'>\n"
+            "  - Determinism: all motion on a paused GSAP timeline at window.__timelines, "
+            "no requestAnimationFrame / Date.now / setTimeout / unseeded Math.random, no tl.play().\n\n"
+            f"VALIDATION ERROR:\n{error_text[:1500]}\n\n"
+            f"HTML:\n```html\n{html[:8000]}\n```\n\n"
+            "Return ONLY the complete fixed HTML, raw, starting with <!doctype — no markdown, no prose."
+        )
+        system = "You are a code editor. Output raw HTML only. No markdown, no explanation."
+        key = api_key_for(settings, chosen)
+
+        if chosen == "Gemini":
+            gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+            resp = _requests.post(
+                f"{gemini_url}?key={key}",
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.1}},
+                timeout=90,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            model_map = {
+                "OpenAI": str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"),
+                "Minimax": str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"),
+                "NVIDIA": str(settings.get("llm_nvidia_model", "") or ""),
+            }
+            url_map = {
+                "OpenAI": "https://api.openai.com/v1/chat/completions",
+                "Minimax": "https://api.minimax.io/v1/chat/completions",
+                "NVIDIA": "https://integrate.api.nvidia.com/v1/chat/completions",
+            }
+            payload: dict = {
+                "model": model_map[chosen],
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": prompt}],
+                "max_tokens": 8192, "temperature": 0.1,
+            }
+            if chosen == "NVIDIA":
+                payload["chat_template_kwargs"] = {"thinking": False}
+            resp = _requests.post(
+                url_map[chosen],
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload, timeout=90,
+            )
+            resp.raise_for_status()
+            reply = resp.json()["choices"][0]["message"]["content"]
+
+        reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
+        reply = re.sub(r"^```(?:html)?\s*", "", reply, flags=re.IGNORECASE).strip()
+        reply = re.sub(r"\s*```$", "", reply).strip()
+        if not reply.startswith(("<!doctype", "<!DOCTYPE", "<!--", "<html", "<HTML", "<!")):
+            return None
+        return reply
+    except Exception as e:
+        log.warning("[renderer] _llm_repair_html failed (non-fatal): %s", e)
+        return None
+
+
+def _validate_and_heal(
+    workspace: Path, index_path: Path, settings: Any, provider: str | None
+) -> None:
+    """Run hyperframes lint + validate; on failure, attempt one LLM repair pass.
+
+    Non-fatal: if tooling is missing or repair fails, leaves the composition as-is
+    and lets the render proceed (it may still work / will fail loudly there).
+    """
+    for cmd in (["lint"], ["validate"]):
+        ok, out = _run_hyperframes(cmd, workspace)
+        if ok:
+            continue
+        # gsap_studio_edit_blocked is a Studio-IDE-only warning (⚠) about GSAP-targeted
+        # elements not being drag-editable in the GUI — it has no effect on CLI render.
+        # Hyperframes exits non-zero for warnings too, but we only need to heal real errors (✖).
+        # Skip the expensive LLM repair pass when the only issues are warnings.
+        _error_lines = [l for l in out.splitlines() if "✖" in l or "error" in l.lower()]
+        _warn_only_patterns = ("gsap_studio_edit_blocked",)
+        _has_real_errors = bool(_error_lines) and not all(
+            any(p in l for p in _warn_only_patterns) for l in _error_lines
+        )
+        if not _has_real_errors:
+            log.debug("[renderer] hyperframes %s: only warnings (no errors) — skipping heal, proceeding", cmd[0])
+            continue
+        log.warning("[renderer] hyperframes %s failed: %s", cmd[0], out[:300])
+        if settings is None:
+            return
+        html = index_path.read_text(encoding="utf-8")
+        fixed = _llm_repair_html(html, out, settings, provider)
+        if not fixed:
+            log.warning("[renderer] self-heal produced no fix for %s — rendering as-is", cmd[0])
+            return
+        index_path.write_text(fixed, encoding="utf-8")
+        log.info("[renderer] self-heal applied after %s failure; re-validating", cmd[0])
+        ok2, out2 = _run_hyperframes(cmd, workspace)
+        if not ok2:
+            log.warning("[renderer] still failing %s after heal: %s — rendering as-is", cmd[0], out2[:200])
+            return
 
 
 def _render_with_alpha(workspace: Path, block: str, safe_name: str, start_sec: int) -> Path | None:
