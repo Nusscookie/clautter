@@ -29,6 +29,7 @@ def run(
     user_instructions: str | None = None,
     status_cb: Callable[[str], None] | None = None,
     progress_cb: Callable[[int, int], None] | None = None,
+    overflow_resolver: Callable[[list, float], list | None] | None = None,
 ) -> tuple[int, str]:
     """Execute the full motion graphics pipeline.
 
@@ -96,6 +97,18 @@ def run(
     except Exception as e:
         log.debug("[gfx_engine] could not read timeline dims: %s", e)
 
+    timeline_duration_sec: float | None = None
+    try:
+        if app.timeline:
+            _fps_str = str(app.timeline.GetSetting("timelineFrameRate") or "")
+            _fps = float(_fps_str) if _fps_str else 25.0
+            _tl_start = app.timeline.GetStartFrame()
+            _tl_end   = app.timeline.GetEndFrame()
+            timeline_duration_sec = max(0.0, (_tl_end - _tl_start) / _fps)
+            log.info("[gfx_engine] timeline duration: %.2fs", timeline_duration_sec)
+    except Exception as e:
+        log.debug("[gfx_engine] could not read timeline duration: %s", e)
+
     # ── 4. Reference assets ───────────────────────────────────────────
     _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif"}
     ref_folder: Path | None = None
@@ -128,6 +141,16 @@ def run(
         return 0, "LLM returned no placements. Try a different provider or check the transcript."
 
     status(f"LLM selected {len(placements)} graphic(s). Rendering…")
+
+    # ── 5b. Overflow guard ────────────────────────────────────────────────
+    if timeline_duration_sec is not None and overflow_resolver is not None:
+        if any(p.start_sec + p.duration_sec > timeline_duration_sec for p in placements):
+            status("Some graphics overflow timeline — waiting for user choice…")
+            resolved = overflow_resolver(placements, timeline_duration_sec)
+            if resolved is None:
+                return 0, "Cancelled: motion graphics would overflow the timeline."
+            placements = resolved
+
     total = len(placements)
     progress(0, total)
 

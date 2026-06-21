@@ -230,7 +230,13 @@ def _llm_edit_html(
         log.warning("[renderer] _llm_edit_html failed for %s (non-fatal): %s", placement.block, e)
 
 
-def _make_index_html(workspace: Path, block_name: str, block_html_rel: str, block: dict) -> Path:
+def _make_index_html(
+    workspace: Path,
+    block_name: str,
+    block_html_rel: str,
+    block: dict,
+    duration_override: float | None = None,
+) -> Path:
     """Generate a host index.html that embeds the block composition.
 
     hyperframes render requires an index.html at the workspace root that uses
@@ -240,7 +246,7 @@ def _make_index_html(workspace: Path, block_name: str, block_html_rel: str, bloc
     dims = block.get("dimensions") or {}
     width = dims.get("width", 1920)
     height = dims.get("height", 1080)
-    duration = block.get("duration", 15)
+    duration = duration_override if duration_override is not None else block.get("duration", 15)
     index_path = workspace / "index.html"
     index_path.write_text(
         f"""<!doctype html>
@@ -346,11 +352,47 @@ def render_placement(
     # _inject_params regex hits CSS selectors before DOM elements (style block comes first).
     # Re-sanitize to strip any param attrs it re-added to composition selectors.
     _html = block_html_path.read_text(encoding="utf-8")
-    block_html_path.write_text(_sanitize_selectors(_html), encoding="utf-8")
+    _html = _sanitize_selectors(_html)
+
+    # Scale all data-duration attributes in the block HTML so Hyperframes renders
+    # at placement.duration_sec instead of the catalog default.
+    # Strategy: find the root composition element's data-duration to get original
+    # total, then scale every data-duration value by the same factor.
+    if placement.duration_sec > 0:
+        _root_dur_match = re.search(
+            r'data-composition-id="[^"]*"[\s\S]*?data-duration="([^"]+)"',
+            _html,
+        )
+        if _root_dur_match:
+            try:
+                _orig_dur = float(_root_dur_match.group(1))
+                if _orig_dur > 0:
+                    _scale = placement.duration_sec / _orig_dur
+                    def _scale_dur(m: re.Match) -> str:
+                        try:
+                            return f'{m.group(1)}{float(m.group(2)) * _scale}{m.group(3)}'
+                        except ValueError:
+                            return m.group(0)
+                    _html = re.sub(
+                        r'(data-duration=")([^"]+)(")',
+                        _scale_dur,
+                        _html,
+                    )
+                    log.debug(
+                        "[renderer] scaled block durations ×%.3f (%.2fs → %.2fs) for %s",
+                        _scale, _orig_dur, placement.duration_sec, placement.block,
+                    )
+            except (ValueError, ZeroDivisionError):
+                pass
+
+    block_html_path.write_text(_html, encoding="utf-8")
 
     # hyperframes render needs a host index.html — build one wrapping the block
     block_html_rel = block_html_path.relative_to(workspace).as_posix()
-    index_path = _make_index_html(workspace, placement.block, block_html_rel, block_meta or {})
+    index_path = _make_index_html(
+        workspace, placement.block, block_html_rel, block_meta or {},
+        duration_override=placement.duration_sec if placement.duration_sec > 0 else None,
+    )
     log.debug("[renderer] host index.html: %s", index_path)
 
     safe_name = re.sub(r"[^\w\-]", "_", placement.block)

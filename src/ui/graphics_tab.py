@@ -232,6 +232,40 @@ def setup(frame: Any, app: Any) -> None:
         user_instructions = raw_instr if raw_instr and raw_instr != _PLACEHOLDER else None
 
         def _work() -> None:
+            _event = threading.Event()
+            _resolver_result: dict[str, Any] = {}
+
+            def _overflow_resolver(placements: list, timeline_duration_sec: float) -> list | None:
+                def _show() -> None:
+                    from src.ui._graphics_overflow_dialog import (
+                        GraphicsOverflowDialog, apply_resolution,
+                    )
+                    root = frame
+                    while not isinstance(root, ctk.CTk):
+                        root = root.master
+                    overflowing = [
+                        p for p in placements
+                        if p.start_sec + p.duration_sec > timeline_duration_sec
+                    ]
+                    dlg = GraphicsOverflowDialog(
+                        root,
+                        overflowing=overflowing,
+                        timeline_duration_sec=timeline_duration_sec,
+                    )
+                    dlg.wait_window()
+                    choice = dlg.choice
+                    if choice is None:
+                        _resolver_result["placements"] = None
+                    else:
+                        _resolver_result["placements"] = apply_resolution(
+                            placements, timeline_duration_sec, choice,
+                        )
+                    _event.set()
+
+                frame.after(0, _show)
+                _event.wait()
+                return _resolver_result.get("placements")
+
             try:
                 from src.graphics.engine import run
                 placed, err = run(
@@ -240,6 +274,7 @@ def setup(frame: Any, app: Any) -> None:
                     user_instructions=user_instructions,
                     status_cb=lambda msg: set_status(msg, COLORS.BRAND_PRIMARY),
                     progress_cb=set_progress,
+                    overflow_resolver=_overflow_resolver,
                 )
                 if err:
                     set_status(f"Error: {err}", COLORS.ERROR)
