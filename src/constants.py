@@ -75,6 +75,7 @@ class PATHS:
     BROLL_CACHE = CONFIG_DIR / "broll_cache"
     BROLL_EMBED_CACHE = CONFIG_DIR / "broll_embed_cache"
     AUDIO_CACHE = CONFIG_DIR / "audio_cache"
+    AUDIO_ENHANCE_CACHE = CONFIG_DIR / "audio_enhance_cache"
     GRAPHICS_CACHE = CONFIG_DIR / "graphics"
 
 
@@ -84,6 +85,7 @@ class TRACKS:
     MUSIC = "Music"
     SFX = "SFX"
     BROLL = "B-Roll"
+    ENHANCED = "Enhanced"
 
 
 class SETTINGS_KEYS:
@@ -110,6 +112,12 @@ class SETTINGS_KEYS:
     SFX_SOURCE = "sfx_source"
     SFX_MOOD_MODE = "sfx_mood_mode"
     SFX_LLM_PROVIDER = "sfx_llm_provider"
+
+    # Enhance Audio
+    ENHANCE_ENGINES = "enhance_engines"
+    ENHANCE_STRENGTH = "enhance_strength"
+    ENHANCE_SCOPE = "enhance_scope"
+    AUPHONIC_API_KEY = "auphonic_api_key"
 
     # Motion Graphics
     GRAPHICS_REF_FOLDER = "graphics_ref_folder"

@@ -100,6 +100,7 @@ talks to it through a localhost proxy that looks identical to a real
 | Auto Zooms | `ui/zooms_tab.py` | `zooms/analyzer.py` + `applier.py` (+ `applier_fusion.py` Fusion keyframing) |
 | B-Roll | `ui/broll_tab.py` | `broll/scanner.py` + `matcher.py` + `placement_rules.py` (shared pacing predicates) + `autonomous.py` (+ `autonomous_collect.py`) + `llm_director.py` + `placer.py` (+ `placer_zoom.py`) |
 | Music & SFX | `ui/music_tab.py` | `music/audio_provider.py` + `mood_analyzer.py` + `sfx_engine.py` + `placer.py` |
+| Enhance Audio | `ui/enhance_audio_tab.py` (+ `_enhance_audio_build.py` / `_enhance_audio_workers.py`) | `enhance_audio/engines.py` + `processor.py` + `placer.py` + `dep_installer.py` |
 | Motion Graphics | `ui/graphics_tab.py` | `graphics/suggester.py` |
 
 ### Repo layout
@@ -122,6 +123,9 @@ src/
                 duration-cap, face-gap). Big modules split: autonomous(_collect),
                 llm_director, placer(_zoom).
   music/        Mood-matched music + auto SFX (providers, ducking, placer)
+  enhance_audio/ Audio cleanup engine registry (engines), pipeline (processor),
+                Resolve placement onto "Enhanced" track (placer), on-demand
+                pip install of optional heavy engines (dep_installer)
   graphics/     Motion-graphics suggester (BETA stub)
   settings/     JSON config manager (~/.clautter/config.json)
   utils/        rpc_server, rpc_client, resolve_api, logger

@@ -124,6 +124,12 @@ class ClautterSettings(BaseModel):
     # Music & SFX
     music_llm_provider: str = ""  # explicit Mood-Engine LLM provider, "" = auto
 
+    # Enhance Audio
+    enhance_engines: list[str] = Field(default_factory=lambda: ["vad_gate"])
+    enhance_strength: int = 50       # 0–100, mapped to per-engine attenuation/mix
+    enhance_scope: str = "selected"  # "selected" or "all"
+    auphonic_api_key: str = ""       # cloud "polish" — stubbed, wired in a later branch
+
     # LLM model config
     llm_openai_model: str = "gpt-4o-mini"
     llm_gemini_model: str = "gemini-2.0-flash"

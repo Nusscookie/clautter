@@ -42,3 +42,15 @@ opencv-python>=4.8.0   # Frame extraction + Haar cascade face detection for auto
 # librosa>=0.10.0
 
 scenedetect>=0.6.4     # B-roll boundary detection (autonomous mode) — no GPU, uses opencv
+
+# ── Enhance Audio ──────────────────────────────────────────────────────────
+# All engines install on demand (src/enhance_audio/dep_installer.py) behind an
+# info/confirm modal. Nothing here is auto-installed at plugin setup time.
+#
+#   deepfilternet>=0.5.6  # noise + reverb removal (ONNX, CPU-friendly)
+#                         # NOTE: deepfilterlib has no Python 3.12 Windows wheel yet.
+#                         # On Python 3.12+, Rust toolchain required (https://rustup.rs).
+#                         # On Python 3.10/3.11, pip installs directly.
+#   vad_gate              # reuses silero-vad above — no extra dep
+#   resemble-enhance      # speech restoration (~hundreds of MB, GPU-ideal)
+#   demucs                # voice/music source separation (~GB, GPU-ideal)

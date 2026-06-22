@@ -13,6 +13,7 @@ from src.utils.logger import get_logger
 from src.ui import (
     dashboard_tab, smartcuts_tab,
     subtitles_tab, zooms_tab, broll_tab, graphics_tab, music_tab,
+    enhance_audio_tab,
 )
 from src.ui.settings_window import open_settings
 from src.ui.console_window import ConsoleWindow
@@ -44,6 +45,7 @@ _TABS: list[tuple[str, Any]] = [
     ("Auto Zooms",      zooms_tab),
     ("B-Roll",          broll_tab),
     ("Music & SFX",     music_tab),
+    ("Enhance Audio",   enhance_audio_tab),
     ("Motion Graphics", graphics_tab),
 ]
 
