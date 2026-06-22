@@ -19,10 +19,6 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_OPENAI_URL  = "https://api.openai.com/v1/chat/completions"
-_GEMINI_URL  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-_MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
-_NVIDIA_URL  = "https://integrate.api.nvidia.com/v1/chat/completions"
 _LLM_TIMEOUT = 60
 _NEARBY_WINDOW_SEC = 3.0
 
@@ -281,21 +277,21 @@ def get_sfx_terms_llm(
     Falls back to hardcoded SFX_TERM_MAP entries on any failure.
     Returns {event_idx: search_term}.
     """
-    from src.utils.llm_providers import api_key_for, resolve_provider
+    from src.utils.llm_providers import call_llm, resolve_provider
 
     chosen = resolve_provider(settings, provider)
     if chosen is None:
         log.warning("[sfx_llm] no cloud API key — using hardcoded terms")
         return {}
 
-    openai_model  = str(settings.get("llm_openai_model",  "gpt-4o-mini") or "gpt-4o-mini")
-    gemini_model  = str(settings.get("llm_gemini_model",  "gemini-2.0-flash") or "gemini-2.0-flash")
-    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    nvidia_model  = str(settings.get("llm_nvidia_model", "") or "").strip()
-    max_tokens    = int(settings.get("llm_max_tokens", 500) or 500)
+    max_tokens = int(settings.get("llm_max_tokens", 500) or 500)
 
-    if chosen == "NVIDIA" and not nvidia_model:
+    if chosen == "NVIDIA" and not str(settings.get("llm_nvidia_model", "") or "").strip():
         log.warning("[sfx_llm] NVIDIA selected but no model id — using hardcoded terms")
+        return {}
+
+    if chosen == "Ollama" and not str(settings.get("llm_ollama_model", "") or "").strip():
+        log.warning("[sfx_llm] Ollama selected but no model name — using hardcoded terms")
         return {}
 
     prompt = (
@@ -310,60 +306,13 @@ def get_sfx_terms_llm(
         "No prose, no markdown."
     )
 
-    key = api_key_for(settings, chosen)
     try:
-        import requests as _req
-        if chosen == "OpenAI":
-            resp = _req.post(
-                _OPENAI_URL,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": openai_model,
-                      "messages": [{"role": "user", "content": prompt}],
-                      "max_tokens": max_tokens, "temperature": 0.2},
-                timeout=_LLM_TIMEOUT,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["choices"][0]["message"]["content"]
-        elif chosen == "Gemini":
-            url = _GEMINI_URL.replace("gemini-2.0-flash", gemini_model)
-            resp = _req.post(
-                f"{url}?key={key}",
-                headers={"Content-Type": "application/json"},
-                json={"contents": [{"parts": [{"text": prompt}]}],
-                      "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.2}},
-                timeout=_LLM_TIMEOUT,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        elif chosen == "NVIDIA":
-            resp = _req.post(
-                _NVIDIA_URL,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": nvidia_model,
-                      "messages": [
-                          {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
-                          {"role": "user", "content": prompt},
-                      ],
-                      "max_tokens": max_tokens, "temperature": 0.2,
-                      "chat_template_kwargs": {"thinking": False}},
-                timeout=_LLM_TIMEOUT,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["choices"][0]["message"]["content"]
-        else:  # MiniMax
-            resp = _req.post(
-                _MINIMAX_URL,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": minimax_model,
-                      "messages": [
-                          {"role": "system", "content": "Respond with ONLY valid JSON arrays — no prose."},
-                          {"role": "user", "content": prompt},
-                      ],
-                      "max_tokens": max_tokens, "temperature": 0.2},
-                timeout=_LLM_TIMEOUT,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["choices"][0]["message"]["content"]
+        reply = call_llm(
+            chosen, prompt, settings,
+            max_tokens=max_tokens,
+            temperature=0.2,
+            system="Respond with ONLY valid JSON arrays — no prose.",
+        )
 
         # Parse response
         reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()

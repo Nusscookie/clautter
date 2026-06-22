@@ -27,7 +27,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 # Priority order — first available wins when no explicit preference is given.
-PROVIDERS: list[str] = ["OpenAI", "Gemini", "Minimax", "NVIDIA", "Anthropic"]
+PROVIDERS: list[str] = ["OpenAI", "Gemini", "Minimax", "NVIDIA", "Ollama", "Anthropic"]
 
 _TIMEOUT = 90
 _ANTHROPIC_VERSION = "2023-06-01"
@@ -44,6 +44,7 @@ _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:g
 _MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
 _NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_OLLAMA_DEFAULT_URL = "http://localhost:11434/v1/chat/completions"
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +145,10 @@ _SPECS: dict[str, ProviderSpec] = {
         "NVIDIA", "nvidia_api_key", "llm_nvidia_model", "",
         _openai_compatible_url(_NVIDIA_URL, system_role=True, nvidia=True), _extract_openai,
     ),
+    "Ollama": ProviderSpec(
+        "Ollama", "ollama_base_url", "llm_ollama_model", "",
+        _openai_compatible_url(_OLLAMA_DEFAULT_URL, system_role=True), _extract_openai,
+    ),
     "Anthropic": ProviderSpec(
         "Anthropic", "anthropic_api_key", "llm_anthropic_model", "claude-sonnet-4-6",
         _build_anthropic, _extract_anthropic,
@@ -213,6 +218,10 @@ def call_llm(
     api_key = api_key_for(settings, provider)
     model = model or model_for(settings, provider)
     url, headers, payload = spec.build(prompt, api_key, model, max_tokens, temperature, system)
+
+    # Ollama: key_setting stores the base URL; resolve the actual endpoint from it.
+    if provider == "Ollama":
+        url = f"{api_key.rstrip('/')}/v1/chat/completions"
 
     resp = requests.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
     resp.raise_for_status()

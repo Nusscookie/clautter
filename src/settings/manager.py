@@ -65,6 +65,7 @@ class ClautterSettings(BaseModel):
     minimax_api_key: str = ""
     nvidia_api_key: str = ""
     anthropic_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434"
     pixabay_api_key: str = ""
     pexels_api_key: str = ""
 
@@ -128,6 +129,7 @@ class ClautterSettings(BaseModel):
     llm_gemini_model: str = "gemini-2.0-flash"
     llm_minimax_model: str = "MiniMax-Text-01"
     llm_nvidia_model: str = ""  # free-text NVIDIA model id (e.g. moonshotai/kimi-k2.6)
+    llm_ollama_model: str = ""  # free-text Ollama model id (e.g. llama3.2, mistral)
     llm_anthropic_model: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.1

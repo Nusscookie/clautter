@@ -17,10 +17,6 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-_MINIMAX_URL = "https://api.minimax.io/v1/chat/completions"
-_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 _TIMEOUT = 90
 
 
@@ -181,96 +177,6 @@ def _parse_placements(raw: list[dict], valid_block_names: set[str]) -> list[Grap
     return results
 
 
-def _call_openai(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
-    import requests
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You are an expert motion graphics editor. Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose."},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    resp = requests.post(
-        _OPENAI_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _call_gemini(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
-    import requests
-    url = _GEMINI_URL.replace("gemini-2.0-flash", model)
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
-    }
-    resp = requests.post(
-        f"{url}?key={api_key}",
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-
-def _call_minimax(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
-    import requests
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You are an expert motion graphics editor. Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose."},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    resp = requests.post(
-        _MINIMAX_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    content = data["choices"][0]["message"]["content"]
-    if not content or not content.strip():
-        finish = data["choices"][0].get("finish_reason", "unknown")
-        raise ValueError(f"Minimax returned empty content (finish_reason={finish!r})")
-    return content
-
-
-def _call_nvidia(prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
-    import requests
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You are an expert motion graphics editor. Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose."},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "chat_template_kwargs": {"thinking": False},
-    }
-    resp = requests.post(
-        _NVIDIA_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    content = data["choices"][0]["message"]["content"]
-    if not content or not content.strip():
-        finish = data["choices"][0].get("finish_reason", "unknown")
-        raise ValueError(f"NVIDIA returned empty content (finish_reason={finish!r})")
-    return content
-
 
 def analyze(
     transcript_words: list[dict],
@@ -299,15 +205,18 @@ def analyze(
     if not blocks:
         return [], "No Hyperframes blocks found. Check Node.js and network access."
 
-    from src.utils.llm_providers import api_key_for, resolve_provider
+    from src.utils.llm_providers import api_key_for, call_llm, resolve_provider
     from src.graphics.catalog_client import block_summary
 
     chosen = resolve_provider(settings, provider)
     if chosen is None:
-        return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, or NVIDIA key in Settings (⚙)."
+        return [], "No cloud API key set. Add OpenAI, Gemini, Minimax, NVIDIA, or Ollama key in Settings (⚙)."
 
     if chosen == "NVIDIA" and not str(settings.get("llm_nvidia_model", "") or "").strip():
         return [], "Set an NVIDIA model ID in Settings (⚙ → LLM Models)."
+
+    if chosen == "Ollama" and not str(settings.get("llm_ollama_model", "") or "").strip():
+        return [], "Set an Ollama model name in Settings (⚙ → LLM Models)."
 
     transcript_text = " ".join(
         w["word"] for w in transcript_words if w.get("type") == "word"
@@ -341,23 +250,20 @@ def analyze(
         ref_assets=ref_assets,
     )
 
-    openai_model = str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini")
-    gemini_model = str(settings.get("llm_gemini_model", "gemini-2.0-flash") or "gemini-2.0-flash")
-    minimax_model = str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01")
-    nvidia_model = str(settings.get("llm_nvidia_model", "") or "").strip()
     max_tokens = int(settings.get("llm_max_tokens", 1500) or 1500)
     temperature = float(settings.get("llm_temperature", 0.1) or 0.1)
+    _GFX_SYSTEM = (
+        "You are an expert motion graphics editor. "
+        "Respond with ONLY valid JSON arrays — no explanations, no markdown, no prose."
+    )
 
-    key = api_key_for(settings, chosen)
     try:
-        if chosen == "OpenAI":
-            reply = _call_openai(prompt, key, openai_model, max_tokens, temperature)
-        elif chosen == "Gemini":
-            reply = _call_gemini(prompt, key, gemini_model, max_tokens, temperature)
-        elif chosen == "NVIDIA":
-            reply = _call_nvidia(prompt, key, nvidia_model, max_tokens, temperature)
-        else:
-            reply = _call_minimax(prompt, key, minimax_model, max_tokens, temperature)
+        reply = call_llm(
+            chosen, prompt, settings,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=_GFX_SYSTEM,
+        )
 
         log.debug("[gfx_director] %s reply (first 500 chars): %s", chosen, reply[:500])
         if not reply or not reply.strip():

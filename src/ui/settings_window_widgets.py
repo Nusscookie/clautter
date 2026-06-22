@@ -16,7 +16,7 @@ from src.constants import COLORS
 
 
 def _key_row(
-    parent: Any, label: str, placeholder: str | None = None
+    parent: Any, label: str, placeholder: str | None = None, *, secret: bool = True
 ) -> tuple[ctk.CTkEntry, ctk.CTkLabel]:
     row = ctk.CTkFrame(parent, fg_color="transparent")
     row.pack(fill="x", padx=12, pady=(0, 4))
@@ -25,7 +25,7 @@ def _key_row(
     ctk.CTkLabel(row, text=f"{label}:", font=ctk.CTkFont(size=11),
                  text_color=COLORS.TEXT_MUTED, width=130, anchor="w").grid(row=0, column=0, sticky="w")
 
-    entry = ctk.CTkEntry(row, show="*",
+    entry = ctk.CTkEntry(row, show="*" if secret else "",
                          placeholder_text=placeholder or f"Paste {label} API key")
     entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
