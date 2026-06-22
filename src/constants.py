@@ -88,6 +88,12 @@ class TRACKS:
     ENHANCED = "Enhanced"
 
 
+class POOL_FOLDERS:
+    """Media Pool subfolder names Clautter creates for imported assets."""
+
+    ENHANCED_AUDIO = "Enhanced Audio"
+
+
 class SETTINGS_KEYS:
     """String keys passed to ``app.settings.get(...)`` / ``.set(...)``.
 

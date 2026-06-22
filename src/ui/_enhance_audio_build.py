@@ -32,33 +32,50 @@ def build(parent: Any) -> None:
                  font=ctk.CTkFont(size=10, weight="bold"),
                  text_color=COLORS.TEXT_DIM).pack(anchor="w", padx=10, pady=(8, 4))
 
-    # ── Engine checkboxes ────────────────────────────────────────────
-    # All engines optional. VAD gating defaults on (silero-vad already installed).
-    # Others default off — modal explains install requirements on first use.
+    # ── Engine checkboxes + per-engine strength sliders ──────────────
     w["engine_vars"] = {}
+    w["strength_sliders"] = {}
+    w["strength_lbls"] = {}
+
     eng_frame = ctk.CTkFrame(card, fg_color="transparent")
     eng_frame.pack(fill="x", padx=10, pady=2)
+
     for spec in engines.all_engines():
+        blocked = not engines.is_available(spec)
         var = ctk.IntVar(value=1 if spec.id == "vad_gate" else 0)
         w["engine_vars"][spec.id] = var
-        cb = ctk.CTkCheckBox(eng_frame, text=spec.label, variable=var)
-        cb.pack(anchor="w", pady=2)
+
+        label = f"{spec.label}  [not available on Windows]" if blocked else spec.label
+        cb = ctk.CTkCheckBox(
+            eng_frame,
+            text=label,
+            variable=var,
+            state="disabled" if blocked else "normal",
+            text_color=COLORS.TEXT_SUBTLE if blocked else None,
+        )
+        cb.pack(anchor="w", pady=(4, 0))
         w[f"engine_cb_{spec.id}"] = cb
 
-    # ── Strength slider ──────────────────────────────────────────────
-    str_row = ctk.CTkFrame(card, fg_color="transparent")
-    str_row.pack(fill="x", padx=10, pady=(6, 2))
-    str_row.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(str_row, text="Strength").grid(row=0, column=0, sticky="w", padx=(0, 12))
-    w["strength_slider"] = ctk.CTkSlider(str_row, from_=0, to=100, number_of_steps=100)
-    w["strength_slider"].set(50)
-    w["strength_slider"].grid(row=0, column=1, sticky="ew", padx=(0, 8))
-    w["strength_lbl"] = ctk.CTkLabel(str_row, text="50%", text_color=COLORS.BRAND_PRIMARY, width=44)
-    w["strength_lbl"].grid(row=0, column=2)
+        if spec.has_strength and not blocked:
+            str_row = ctk.CTkFrame(eng_frame, fg_color="transparent")
+            str_row.pack(fill="x", pady=(2, 4), padx=(24, 0))
+            str_row.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(
+                str_row, text="Attenuation strength",
+                font=ctk.CTkFont(size=11),
+                text_color=COLORS.TEXT_DIM,
+            ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+            sl = ctk.CTkSlider(str_row, from_=0, to=100, number_of_steps=100)
+            sl.set(50)
+            sl.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+            lbl = ctk.CTkLabel(str_row, text="50%", text_color=COLORS.BRAND_PRIMARY, width=44)
+            lbl.grid(row=0, column=2)
+            w["strength_sliders"][spec.id] = sl
+            w["strength_lbls"][spec.id] = lbl
 
     # ── Scope toggle ─────────────────────────────────────────────────
     scope_row = ctk.CTkFrame(card, fg_color="transparent")
-    scope_row.pack(fill="x", padx=10, pady=2)
+    scope_row.pack(fill="x", padx=10, pady=(8, 2))
     scope_row.grid_columnconfigure(1, weight=1)
     ctk.CTkLabel(scope_row, text="Apply To").grid(row=0, column=0, sticky="w", padx=(0, 12))
     w["scope"] = ctk.CTkSegmentedButton(scope_row, values=["Selected Clip", "All Clips"])

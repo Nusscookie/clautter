@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.constants import TRACKS
+from src.constants import POOL_FOLDERS, TRACKS
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -86,6 +86,25 @@ def _find_in_pool(media_pool: Any, filename: str) -> Any | None:
     return None
 
 
+def _get_or_create_pool_folder(media_pool: Any, folder_name: str) -> Any | None:
+    """Return the named subfolder under root, creating it if absent."""
+    try:
+        root = media_pool.GetRootFolder()
+        for sub in (root.GetSubFolderList() or []):
+            try:
+                if (sub.GetName() or "").strip() == folder_name:
+                    return sub
+            except Exception:
+                continue
+        new_folder = media_pool.AddSubFolder(root, folder_name)
+        if new_folder:
+            log.info("[audio_placer] created Media Pool folder '%s'", folder_name)
+        return new_folder
+    except Exception as e:
+        log.warning("[audio_placer] could not create pool folder '%s': %s", folder_name, e)
+        return None
+
+
 def _fps_from_timeline(timeline: Any) -> float:
     try:
         raw = timeline.GetSetting("timelineFrameRate") or "25"
@@ -104,6 +123,7 @@ def place_audio_clip(
     position_sec: float,
     duration_sec: float = 0.0,
     track_name: str = TRACKS.MUSIC,
+    pool_folder: str | None = None,
 ) -> AudioPlacerResult:
     """Place an MP3/WAV on the named audio track at position_sec.
 
@@ -113,6 +133,8 @@ def place_audio_clip(
         position_sec: Start position on the timeline (seconds).
         duration_sec: How much of the clip to use; 0 = full clip.
         track_name:   Audio track name to place on ("Music" or "SFX").
+        pool_folder:  If set, import the clip into this named Media Pool
+                      subfolder (created if absent) instead of root.
 
     Returns:
         AudioPlacerResult with placed=True on success.
@@ -139,6 +161,18 @@ def place_audio_clip(
     except Exception as e:
         return AudioPlacerResult(clip_path, position_sec, False, f"Resolve API chain failed: {e}")
 
+    # Switch to the target subfolder before importing so the clip lands there.
+    _prev_folder: Any | None = None
+    if pool_folder:
+        try:
+            _prev_folder = media_pool.GetCurrentFolder()
+            target_folder = _get_or_create_pool_folder(media_pool, pool_folder)
+            if target_folder:
+                media_pool.SetCurrentFolder(target_folder)
+        except Exception as e:
+            log.debug("[audio_placer] folder switch failed (non-fatal): %s", e)
+            _prev_folder = None
+
     try:
         items = media_pool.ImportMedia([clip_path])
         if not items:
@@ -152,6 +186,12 @@ def place_audio_clip(
             mpi = items[0]
     except Exception as e:
         return AudioPlacerResult(clip_path, position_sec, False, f"ImportMedia failed: {e}")
+    finally:
+        if _prev_folder is not None:
+            try:
+                media_pool.SetCurrentFolder(_prev_folder)
+            except Exception:
+                pass
 
     fps = _fps_from_timeline(timeline)
     try:

@@ -25,25 +25,38 @@ def _cache_dir() -> Path:
     return PATHS.AUDIO_ENHANCE_CACHE
 
 
-def _out_name(in_path: str, engine_ids: list[str], strength: float) -> str:
-    """Deterministic output filename keyed on source + chain + strength."""
-    key = f"{in_path}|{'+'.join(engine_ids)}|{strength:.2f}"
+def _out_name(in_path: str, engine_ids: list[str], engine_strengths: dict[str, float]) -> str:
+    """Deterministic output filename keyed on source + chain + per-engine strengths."""
+    strength_str = "+".join(f"{eid}:{engine_strengths.get(eid, 0.5):.2f}" for eid in engine_ids)
+    key = f"{in_path}|{'+'.join(engine_ids)}|{strength_str}"
     digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
     stem = Path(in_path).stem
     return f"{stem}_enhanced_{digest}.wav"
 
 
+def _purge_old_cache(stem: str, keep: Path) -> None:
+    """Delete all prior enhanced outputs for this source stem, except `keep`."""
+    cache = _cache_dir()
+    for old in cache.glob(f"{stem}_enhanced_*.wav"):
+        if old != keep:
+            try:
+                old.unlink()
+                log.debug("[enhance] purged stale cache: %s", old.name)
+            except OSError:
+                pass
+
+
 def enhance_clip(
     in_path: str,
     engine_ids: list[str],
-    strength: float = 0.5,
+    engine_strengths: dict[str, float] | None = None,
 ) -> str:
     """Run the engine chain on a clip's source media; return the cleaned WAV path.
 
     Args:
-        in_path:    Absolute path to the source media (audio or video).
-        engine_ids: Engine ids to run, resolved to canonical chain order.
-        strength:   0.0–1.0 enhancement strength, passed to each engine.
+        in_path:          Absolute path to the source media (audio or video).
+        engine_ids:       Engine ids to run, resolved to canonical chain order.
+        engine_strengths: Per-engine strength (0.0–1.0). Missing keys default to 0.5.
 
     Returns:
         Path to the cleaned WAV in the enhance cache.
@@ -53,6 +66,9 @@ def enhance_clip(
         ValueError:        no valid engines selected.
         RuntimeError:      an engine failed (re-raised with engine id).
     """
+    if engine_strengths is None:
+        engine_strengths = {}
+
     if not os.path.exists(in_path):
         raise FileNotFoundError(f"Source media not found: {in_path}")
 
@@ -60,7 +76,12 @@ def enhance_clip(
     if not specs:
         raise ValueError(f"No valid engines in {engine_ids!r}")
 
-    out_path = _cache_dir() / _out_name(in_path, [s.id for s in specs], strength)
+    stem = Path(in_path).stem
+    out_path = _cache_dir() / _out_name(in_path, [s.id for s in specs], engine_strengths)
+
+    # Purge stale outputs for this source before returning a cache hit or writing.
+    _purge_old_cache(stem, keep=out_path)
+
     if out_path.exists():
         log.info("[enhance] cache hit: %s", out_path)
         return str(out_path)
@@ -80,6 +101,7 @@ def enhance_clip(
             is_last = i == len(specs) - 1
             stage_out = out_path if is_last else work_dir / f".work_{out_path.stem}_{spec.id}.wav"
             log.info("[enhance] stage %d/%d: %s", i + 1, len(specs), spec.id)
+            strength = engine_strengths.get(spec.id, 0.5)
             try:
                 spec.run(str(current), str(stage_out), strength)
             except Exception as e:

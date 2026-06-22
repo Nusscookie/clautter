@@ -22,7 +22,7 @@ def worker_thread(
     app: Any,
     state: dict[str, Any],
     engine_ids: list[str],
-    strength: float,
+    engine_strengths: dict[str, float],
     scope: str,
     install_pkgs: list[str],
     set_status: Callable[..., None],
@@ -57,7 +57,7 @@ def worker_thread(
             set_status(msg, COLORS.TEXT_MUTED)
 
         results, summary = placer.enhance_timeline(
-            app, engine_ids=engine_ids, strength=strength, scope=scope,
+            app, engine_ids=engine_ids, engine_strengths=engine_strengths, scope=scope,
             mute_original=True, progress=_progress,
         )
 

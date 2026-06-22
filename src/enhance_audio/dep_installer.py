@@ -47,6 +47,29 @@ def _env_with_cargo() -> dict[str, str]:
     return env
 
 
+def _run_pip(cmd: list[str], env: dict[str, str], emit: Callable[[str], None]) -> bool:
+    """Run a pip command, stream output to emit, return True on success."""
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+    except Exception as e:
+        emit(f"Failed to launch pip: {e}")
+        return False
+
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.rstrip()
+        if line:
+            emit(line)
+    return proc.wait() == 0
+
+
 def install(pip_pkg: str, log_cb: LogCb | None = None) -> bool:
     """Run ``python -m pip install <pip_pkg>`` in this interpreter.
 
@@ -57,11 +80,29 @@ def install(pip_pkg: str, log_cb: LogCb | None = None) -> bool:
     compiles against whatever numpy is present at build time. If we built against
     numpy 2.x (which is what Clautter requires), we must override that pin so pip
     doesn't downgrade numpy and cause a runtime ABI mismatch.
+
+    resemble-enhance special-case: it depends on deepspeed==0.12.4 which tries
+    to pre-compile CUDA ops at build time (DS_BUILD_OPS=1 by default) and asserts
+    torch is installed before pip even resolves requirements. Fix: install torch
+    first, then set DS_BUILD_OPS=0 so deepspeed skips compilation and installs
+    as a pure-Python package.
     """
     def _emit(line: str) -> None:
         log.info("[pip] %s", line)
         if log_cb:
             log_cb(line)
+
+    env = _env_with_cargo()
+
+    if pip_pkg == "resemble-enhance":
+        import platform as _platform
+        if _platform.system() == "Windows":
+            _emit(
+                "resemble-enhance cannot be installed on Windows: its deepspeed dependency "
+                "fails to build due to a symlink permission error (WinError 5) in setup.py "
+                "and has no Windows wheels. Use Linux or macOS."
+            )
+            return False
 
     cmd = [sys.executable, "-m", "pip", "install", pip_pkg]
     if pip_pkg == "deepfilternet":
@@ -71,27 +112,9 @@ def install(pip_pkg: str, log_cb: LogCb | None = None) -> bool:
         cmd += ["numpy>=2.0"]
 
     _emit(f"Installing {pip_pkg} … (this can take a while)")
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env=_env_with_cargo(),
-        )
-    except Exception as e:
-        _emit(f"Failed to launch pip: {e}")
-        return False
-
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        line = line.rstrip()
-        if line:
-            _emit(line)
-    code = proc.wait()
-    if code == 0:
+    ok = _run_pip(cmd, env, _emit)
+    if ok:
         _emit(f"Installed {pip_pkg}.")
-        return True
-    _emit(f"pip install {pip_pkg} failed (exit {code}).")
-    return False
+    else:
+        _emit(f"pip install {pip_pkg} failed.")
+    return ok

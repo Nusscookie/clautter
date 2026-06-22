@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from src.constants import TRACKS
+from src.constants import POOL_FOLDERS, TRACKS
 from src.enhance_audio import processor
 from src.music.placer import place_audio_clip
 from src.utils.logger import get_logger
@@ -137,7 +137,7 @@ def _extract_trimmed_wav(clip: Any, fps: float, tmp_dir: str) -> str | None:
 def enhance_timeline(
     app: Any,
     engine_ids: list[str],
-    strength: float,
+    engine_strengths: dict[str, float],
     scope: str = "selected",
     mute_original: bool = True,
     progress: ProgressCb | None = None,
@@ -152,12 +152,13 @@ def enhance_timeline(
     After all clips are placed, audio track 1 is muted (not disabled).
 
     Args:
-        app:           ClautterApp — needs .resolve / .project / .timeline.
-        engine_ids:    Engines to chain (resolved to canonical order).
-        strength:      0.0–1.0.
-        scope:         "selected" or "all".
-        mute_original: Mute audio track 1 after placing enhanced clips.
-        progress:      (done, total, msg) callback.
+        app:              ClautterApp — needs .resolve / .project / .timeline.
+        engine_ids:       Engines to chain (resolved to canonical order).
+        engine_strengths: Per-engine strength values (0.0–1.0). Engines not in
+                          the dict get 0.5.
+        scope:            "selected" or "all".
+        mute_original:    Mute audio track 1 after placing enhanced clips.
+        progress:         (done, total, msg) callback.
 
     Returns:
         (results, summary_message).
@@ -204,7 +205,7 @@ def enhance_timeline(
 
             # Step 2: run enhancement chain on the trimmed segment
             try:
-                out_wav = processor.enhance_clip(trimmed_wav, engine_ids, strength)
+                out_wav = processor.enhance_clip(trimmed_wav, engine_ids, engine_strengths)
             except Exception as e:
                 log.error("[enhance_placer] enhance failed for %s: %s", name, e)
                 results.append(EnhanceResult(name, False, str(e)))
@@ -220,6 +221,7 @@ def enhance_timeline(
             res = place_audio_clip(
                 app, out_wav, position_sec, duration_sec=0.0,
                 track_name=TRACKS.ENHANCED,
+                pool_folder=POOL_FOLDERS.ENHANCED_AUDIO,
             )
             results.append(EnhanceResult(name, res.placed, res.reason))
 

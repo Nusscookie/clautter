@@ -43,13 +43,16 @@ def setup(frame: Any, app: Any) -> None:
                 w["progress"].pack_forget()
         _ui(_do)
 
-    # ── Strength slider ──────────────────────────────────────────────
-    def on_strength(val: float) -> None:
-        pct = int(val)
-        w["strength_lbl"].configure(text=f"{pct}%")
-        app.settings.set("enhance_strength", pct)
+    # ── Per-engine strength sliders ──────────────────────────────────
+    def _make_strength_cb(eid: str) -> Any:
+        def on_strength(val: float) -> None:
+            pct = int(val)
+            w["strength_lbls"][eid].configure(text=f"{pct}%")
+            app.settings.set(f"enhance_strength_{eid}", pct)
+        return on_strength
 
-    w["strength_slider"].configure(command=on_strength)
+    for eid, sl in w["strength_sliders"].items():
+        sl.configure(command=_make_strength_cb(eid))
 
     # ── Scope toggle ─────────────────────────────────────────────────
     def on_scope(value: str) -> None:
@@ -66,11 +69,11 @@ def setup(frame: Any, app: Any) -> None:
         w[f"engine_cb_{eid}"].configure(command=_save_engines)
 
     # ── Hydrate settings ─────────────────────────────────────────────
-    saved_strength = max(0, min(100, int(app.settings.get("enhance_strength", 50) or 50)))
-    _ui(lambda: (
-        w["strength_slider"].set(saved_strength),
-        w["strength_lbl"].configure(text=f"{saved_strength}%"),
-    ))
+    for eid, sl in w["strength_sliders"].items():
+        saved_pct = max(0, min(100, int(app.settings.get(f"enhance_strength_{eid}", 50) or 50)))
+        _ui(lambda s=sl, lbl=w["strength_lbls"][eid], p=saved_pct: (
+            s.set(p), lbl.configure(text=f"{p}%")
+        ))
 
     saved_scope = str(app.settings.get("enhance_scope", "selected") or "selected")
     _ui(lambda: w["scope"].set("All Clips" if saved_scope == "all" else "Selected Clip"))
@@ -78,7 +81,7 @@ def setup(frame: Any, app: Any) -> None:
     saved_engines = app.settings.get("enhance_engines", None)
     if isinstance(saved_engines, list):
         _ui(lambda: [
-            var.set(1 if eid in saved_engines else 0)
+            var.set(1 if eid in saved_engines and engines.is_available(engines.get_engine(eid)) else 0)
             for eid, var in w["engine_vars"].items()
         ])
 
@@ -87,7 +90,10 @@ def setup(frame: Any, app: Any) -> None:
         if _state["running"]:
             return
 
-        engine_ids = [eid for eid, var in w["engine_vars"].items() if var.get()]
+        engine_ids = [
+            eid for eid, var in w["engine_vars"].items()
+            if var.get() and engines.is_available(engines.get_engine(eid))
+        ]
         if not engine_ids:
             set_status("Select at least one engine.", COLORS.ERROR)
             return
@@ -104,7 +110,12 @@ def setup(frame: Any, app: Any) -> None:
             return
 
         install_pkgs = [pkg for _label, pkg, _note in need_install]
-        strength = int(w["strength_slider"].get()) / 100.0
+        # Collect per-engine strengths; engines without a slider get 0.5 default.
+        engine_strengths = {
+            eid: int(w["strength_sliders"][eid].get()) / 100.0
+            if eid in w["strength_sliders"] else 0.5
+            for eid in engine_ids
+        }
         scope = "all" if w["scope"].get() == "All Clips" else "selected"
 
         _save_engines()
@@ -115,7 +126,7 @@ def setup(frame: Any, app: Any) -> None:
             target=worker_thread,
             kwargs=dict(
                 frame=frame, app=app, state=_state,
-                engine_ids=engine_ids, strength=strength, scope=scope,
+                engine_ids=engine_ids, engine_strengths=engine_strengths, scope=scope,
                 install_pkgs=install_pkgs,
                 set_status=set_status, set_progress=set_progress, _ui=_ui, w=w,
             ),

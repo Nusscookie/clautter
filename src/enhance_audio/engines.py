@@ -12,6 +12,7 @@ the registry preserves insertion order so the UI can list them deterministically
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -48,6 +49,14 @@ class EngineSpec:
         """Top-level module name to probe for is_installed()."""
         return _IMPORT_NAME.get(self.id, self.id)
 
+    @property
+    def has_strength(self) -> bool:
+        """True if this engine has a meaningful strength parameter."""
+        return self.id in _HAS_STRENGTH
+
+
+# Engines that expose a meaningful strength parameter in their run function.
+_HAS_STRENGTH: set[str] = {"vad_gate"}
 
 # Engine id → top-level import module (for the installed-check).
 _IMPORT_NAME: dict[str, str] = {
@@ -113,13 +122,28 @@ def _run_resemble(in_wav: str, out_wav: str, strength: float) -> None:
 
 def _run_demucs(in_wav: str, out_wav: str, strength: float) -> None:
     """Source separation — keep the vocals stem, drop music/background."""
+    import torch  # type: ignore
     import torchaudio  # type: ignore
-    import demucs.api  # type: ignore
+    from demucs.pretrained import get_model  # type: ignore
+    from demucs.apply import apply_model  # type: ignore
+    from demucs.audio import convert_audio  # type: ignore
 
-    separator = demucs.api.Separator(model="htdemucs")
-    _origin, stems = separator.separate_audio_file(in_wav)
-    vocals = stems["vocals"]
-    torchaudio.save(out_wav, vocals.cpu(), separator.samplerate)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = get_model("htdemucs")
+    model.to(device)
+    model.eval()
+
+    wav, sr = torchaudio.load(in_wav)
+    wav = convert_audio(wav, sr, model.samplerate, model.audio_channels)
+    wav = wav.unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        sources = apply_model(model, wav, device=device)[0]  # (sources, channels, samples)
+
+    source_names = model.sources if hasattr(model, "sources") else model.models[0].sources
+    vocals_idx = source_names.index("vocals")
+    vocals = sources[vocals_idx].cpu()
+    torchaudio.save(out_wav, vocals, model.samplerate)
     log.info("[enhance] demucs wrote %s (vocals stem)", out_wav)
 
 
@@ -130,11 +154,11 @@ _REGISTRY: dict[str, EngineSpec] = {
     for spec in (
         EngineSpec(
             id="deepfilternet",
-            label="DeepFilterNet — noise & reverb removal",
+            label="Noise & reverb removal",
             is_core=False,
             pip_pkg="deepfilternet",
             install_note=(
-                "DeepFilterNet requires deepfilterlib (Rust-compiled extension).\n\n"
+                "Requires deepfilterlib (Rust-compiled extension).\n\n"
                 "• Python 3.10 / 3.11: installs directly with pip — no Rust needed.\n"
                 "• Python 3.12+: no pre-built wheel exists yet. You must first install "
                 "the Rust toolchain (https://rustup.rs), then re-run the install.\n\n"
@@ -144,32 +168,37 @@ _REGISTRY: dict[str, EngineSpec] = {
         ),
         EngineSpec(
             id="vad_gate",
-            label="VAD gating — attenuate non-speech in signal (keeps clips on timeline)",
+            label="Attenuate non-speech gaps  (not for pre-cut timelines — see ⓘ)",
             is_core=False,
             pip_pkg="",
             install_note=(
-                "Uses silero-vad, which is already installed as part of Clautter.\n\n"
-                "Attenuates audio frames where no speech is detected — ducks background "
-                "noise between words. Does NOT remove silence clips from the timeline "
-                "(that is what Smart Cuts does)."
+                "Uses silero-vad, already installed with Clautter.\n\n"
+                "Ducks audio between words where no speech is detected — useful for "
+                "reducing background noise without cutting the timeline.\n\n"
+                "⚠  NOT for timelines already cut with Smart Cuts:\n"
+                "Smart Cuts removes silence clips entirely. If you already ran Smart Cuts, "
+                "the gaps are gone and this engine has nothing to attenuate. "
+                "Use this engine INSTEAD of Smart Cuts when you want to keep a continuous "
+                "take on the timeline but reduce noise in the quiet parts."
             ),
             run=_run_vad_gate,
         ),
         EngineSpec(
             id="resemble",
-            label="Resemble Enhance — speech restoration",
+            label="Speech restoration (Linux/macOS only)",
             is_core=False,
             pip_pkg="resemble-enhance",
             install_note=(
-                "Installs resemble-enhance (~several hundred MB including model weights).\n\n"
-                "CPU-heavy — expect slow processing without a CUDA GPU. "
-                "Restores speech clarity and removes noise with a neural model."
+                "NOT AVAILABLE ON WINDOWS\n\n"
+                "Requires deepspeed, which fails to build on Windows due to "
+                "a symlink permission error in its setup.py. There are no Windows wheels.\n\n"
+                "Linux/macOS only. CPU-heavy — GPU recommended."
             ),
             run=_run_resemble,
         ),
         EngineSpec(
             id="demucs",
-            label="Demucs — isolate voice from music/background",
+            label="Isolate voice from music/background",
             is_core=False,
             pip_pkg="demucs",
             install_note=(
@@ -181,6 +210,17 @@ _REGISTRY: dict[str, EngineSpec] = {
         ),
     )
 }
+
+
+# pip packages that cannot be installed on specific platforms.
+_PLATFORM_BLOCKED: dict[str, set[str]] = {
+    "resemble-enhance": {"win32"},
+}
+
+
+def is_available(spec: EngineSpec) -> bool:
+    """False if the engine's pip package is blocked on the current platform."""
+    return sys.platform not in _PLATFORM_BLOCKED.get(spec.pip_pkg, set())
 
 
 def all_engines() -> list[EngineSpec]:
