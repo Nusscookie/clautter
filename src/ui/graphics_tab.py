@@ -147,7 +147,7 @@ def build(parent: Any) -> None:
         text=(
             "1. LLM analyzes your transcript and picks Hyperframes templates (data charts,\n"
             "   callouts, lower thirds, etc.) that match the content.\n"
-            "2. Each template is rendered to MP4 via the Hyperframes CLI (requires Node.js).\n"
+            "2. Each template is rendered to MOV (alpha channel) via the Hyperframes CLI (requires Node.js).\n"
             "3. Rendered clips are imported into Resolve and placed on the Motion Graphics track."
         ),
         font=ctk.CTkFont(size=11),

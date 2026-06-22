@@ -31,9 +31,9 @@ makes the call, and applies the edit.
 | **Auto Zooms** | ✅ Full | Face Detection (OpenCV) or RMS peaks → zoom cuts with Fusion ease-in/out. |
 | **B-Roll** | ✅ Full | Manual: folder scan + keyword match + online search (Pixabay/Pexels). Autonomous: one-click end-to-end pipeline. The **LLM mode** button is a provider picker — `Off` plus one segment per cloud LLM you have a key for (OpenAI / Gemini / Minimax / NVIDIA / Anthropic); pick one to let the LLM choose clips and positions. |
 | **Music & SFX** | ✅ Full | Mood-matched background music (Jamendo / local folder), keyword or LLM mood engine, single-track or per-segment placement. Auto-placed sound effects (Freesound / Pixabay) keyed off cuts, zooms, and B-roll. Volume, fades, and ducking baked in via pydub. |
-| **Motion Graphics** | 🔧 Beta | Rule-based graphic suggestions. AI generation planned for V2. |
+| **Motion Graphics** | 🔧 Beta | LLM-driven Hyperframes pipeline: describe the look, pick a style, let the LLM choose and customize templates. Templates are rendered to MOV (alpha channel) via the Hyperframes CLI (requires Node.js) and placed on the Motion Graphics track in Resolve. Supports Ollama and all cloud LLM providers. |
 
-Clautter supports OpenAI, Gemini, Minimax, Anthropic, and **NVIDIA**. NVIDIA grants free access to many open-source models via an OpenAI-compatible API, so you can run the cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models.
+Clautter supports OpenAI, Gemini, Minimax, Anthropic, **NVIDIA**, and **Ollama**. NVIDIA grants free access to many open-source models via an OpenAI-compatible API, so you can run the cloud-LLM features without paying — paste an NVIDIA key in Settings → LLM Keys and the model id (e.g. `moonshotai/kimi-k2.6`) in Settings → LLM Models. For local inference, point Ollama to a running instance in Settings → LLM.
 
 ---
 
@@ -73,7 +73,7 @@ Primary accent: `#D97757` (terracotta orange, from the app icon).
 
 ## Dependencies
 
-`customtkinter`, `pydantic`, `faster-whisper`, `silero-vad`, `torchaudio`, `soundfile`, `onnxruntime`, `spacy`, `yake`, `keybert`, `joblib`, `sentence-transformers`, `opencv-python`, `scenedetect`, `pydub`, `requests`, `numpy`, `Pillow` — plus `ffmpeg` (system).
+`customtkinter`, `pydantic`, `faster-whisper`, `silero-vad`, `torchaudio`, `soundfile`, `onnxruntime`, `spacy`, `yake`, `keybert`, `joblib`, `sentence-transformers`, `opencv-python`, `scenedetect`, `pydub`, `requests`, `numpy`, `Pillow` — plus `ffmpeg` (system) and **Node.js** (system, required for Motion Graphics rendering).
 
 Install: `py -3.12 -m pip install -r requirements.txt`
 
