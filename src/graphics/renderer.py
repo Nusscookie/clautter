@@ -114,8 +114,7 @@ def _llm_edit_html(
     On any failure logs a warning and leaves the original HTML intact.
     """
     try:
-        from src.utils.llm_providers import api_key_for, resolve_provider
-        import requests as _requests
+        from src.utils.llm_providers import resolve_provider, call_llm
 
         chosen = resolve_provider(settings, provider)
         if chosen is None:
@@ -146,6 +145,9 @@ def _llm_edit_html(
             f"You are editing a motion graphics HTML template for a talking-head video.\n"
             f"Block: {placement.block}\n"
             f"Params derived from transcript: {json.dumps(placement.params)}\n\n"
+            "NOTE: Any param value that looks like a filename (e.g. 'logo.png', 'icon.svg') is a "
+            "local asset copied into the same directory as this HTML file. Reference it with a "
+            "bare filename only (e.g. src=\"logo.png\", NOT an absolute path).\n\n"
             f"BLOCK HTML:\n```html\n{html[:8000]}\n```\n\n"
             + user_block +
             "\nTask: Edit the HTML to:\n"
@@ -167,50 +169,13 @@ def _llm_edit_html(
             "no preamble — raw HTML starting with <!doctype or <!-- only."
         )
 
-        key = api_key_for(settings, chosen)
-        openai_url = "https://api.openai.com/v1/chat/completions"
-        gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-        minimax_url = "https://api.minimax.io/v1/chat/completions"
-        nvidia_url = "https://integrate.api.nvidia.com/v1/chat/completions"
-        timeout = 90
-
         system = "You are a code editor. Output raw HTML only. No markdown, no explanation."
-
-        if chosen == "Gemini":
-            resp = _requests.post(
-                f"{gemini_url}?key={key}",
-                json={"contents": [{"parts": [{"text": prompt}]}],
-                      "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.1}},
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            model_map = {
-                "OpenAI": str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"),
-                "Minimax": str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"),
-                "NVIDIA": str(settings.get("llm_nvidia_model", "") or ""),
-            }
-            url_map = {"OpenAI": openai_url, "Minimax": minimax_url, "NVIDIA": nvidia_url}
-            payload = {
-                "model": model_map[chosen],
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": 8192,
-                "temperature": 0.1,
-            }
-            if chosen == "NVIDIA":
-                payload["chat_template_kwargs"] = {"thinking": False}
-            resp = _requests.post(
-                url_map[chosen],
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json=payload,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["choices"][0]["message"]["content"]
+        reply = call_llm(
+            chosen, prompt, settings,
+            max_tokens=8192,
+            temperature=0.1,
+            system=system,
+        )
 
         # Strip think tags (Minimax/reasoning models) then markdown fences
         reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
@@ -444,6 +409,28 @@ def render_placement(
         _resolve_ref_assets(placement.params, ref_folder)
         if ref_folder else placement.params
     )
+
+    # Copy ref assets into workspace so Hyperframes' local file server can serve them.
+    # Then remap absolute paths back to bare filenames (relative to workspace root).
+    if ref_folder and ref_folder.is_dir():
+        import shutil as _shutil
+        remapped: dict = {}
+        for k, v in effective_params.items():
+            str_v = str(v)
+            src_path = Path(str_v)
+            if src_path.is_absolute() and src_path.is_file():
+                dest = workspace / src_path.name
+                if not dest.exists():
+                    try:
+                        _shutil.copy2(src_path, dest)
+                        log.debug("[renderer] copied ref asset %s → workspace", src_path.name)
+                    except Exception as _ce:
+                        log.debug("[renderer] could not copy ref asset %s: %s", src_path.name, _ce)
+                remapped[k] = src_path.name
+            else:
+                remapped[k] = v
+        effective_params = remapped
+
     placement = GraphicPlacement(
         block=placement.block,
         start_sec=placement.start_sec,
@@ -532,8 +519,7 @@ def _run_hyperframes(args: list[str], workspace: Path, timeout: int = 90) -> tup
 def _llm_repair_html(html: str, error_text: str, settings: Any, provider: str | None) -> str | None:
     """Ask the LLM to fix a composition that failed lint/validate. Returns fixed HTML or None."""
     try:
-        from src.utils.llm_providers import api_key_for, resolve_provider
-        import requests as _requests
+        from src.utils.llm_providers import resolve_provider, call_llm
 
         chosen = resolve_provider(settings, provider)
         if chosen is None:
@@ -552,44 +538,12 @@ def _llm_repair_html(html: str, error_text: str, settings: Any, provider: str | 
             "Return ONLY the complete fixed HTML, raw, starting with <!doctype — no markdown, no prose."
         )
         system = "You are a code editor. Output raw HTML only. No markdown, no explanation."
-        key = api_key_for(settings, chosen)
-
-        if chosen == "Gemini":
-            gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-            resp = _requests.post(
-                f"{gemini_url}?key={key}",
-                json={"contents": [{"parts": [{"text": prompt}]}],
-                      "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.1}},
-                timeout=90,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            model_map = {
-                "OpenAI": str(settings.get("llm_openai_model", "gpt-4o-mini") or "gpt-4o-mini"),
-                "Minimax": str(settings.get("llm_minimax_model", "MiniMax-Text-01") or "MiniMax-Text-01"),
-                "NVIDIA": str(settings.get("llm_nvidia_model", "") or ""),
-            }
-            url_map = {
-                "OpenAI": "https://api.openai.com/v1/chat/completions",
-                "Minimax": "https://api.minimax.io/v1/chat/completions",
-                "NVIDIA": "https://integrate.api.nvidia.com/v1/chat/completions",
-            }
-            payload: dict = {
-                "model": model_map[chosen],
-                "messages": [{"role": "system", "content": system},
-                             {"role": "user", "content": prompt}],
-                "max_tokens": 8192, "temperature": 0.1,
-            }
-            if chosen == "NVIDIA":
-                payload["chat_template_kwargs"] = {"thinking": False}
-            resp = _requests.post(
-                url_map[chosen],
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json=payload, timeout=90,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["choices"][0]["message"]["content"]
+        reply = call_llm(
+            chosen, prompt, settings,
+            max_tokens=8192,
+            temperature=0.1,
+            system=system,
+        )
 
         reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         reply = re.sub(r"^```(?:html)?\s*", "", reply, flags=re.IGNORECASE).strip()
